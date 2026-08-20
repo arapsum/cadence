@@ -10,19 +10,35 @@ use gpui_component::{
 
 const TITLE_BAR_HEIGHT: gpui::Pixels = px(34.);
 
+/// Cadence's custom title bar and native-style window controls.
 #[derive(IntoElement)]
-pub(crate) struct CadenceTitleBar {
+pub struct CadenceTitleBar {
     title: SharedString,
 }
 
 impl CadenceTitleBar {
-    pub(crate) fn new(title: impl Into<SharedString>) -> Self {
+    /// Creates a title bar with the supplied window title.
+    ///
+    /// # Parameters
+    ///
+    /// - `title`: Text shown in the title bar.
+    ///
+    /// # Returns
+    ///
+    /// A title bar configured with `title`.
+    pub fn new(title: impl Into<SharedString>) -> Self {
         Self {
             title: title.into(),
         }
     }
 
-    pub(crate) fn window_options() -> WindowOptions {
+    /// Returns the default `gpui_component` window options.
+    ///
+    /// # Returns
+    ///
+    /// Window options configured for the custom title bar controls.
+    #[must_use]
+    pub fn window_options() -> WindowOptions {
         gpui_component::TitleBar::window_options()
     }
 }
@@ -32,7 +48,7 @@ struct DragState {
 }
 
 impl Render for DragState {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, _: &mut Context<'_, Self>) -> impl IntoElement {
         div()
     }
 }
@@ -46,7 +62,7 @@ enum ControlKind {
 }
 
 impl ControlKind {
-    fn id(self) -> &'static str {
+    const fn id(self) -> &'static str {
         match self {
             Self::Minimize => "window-minimize",
             Self::Restore => "window-restore",
@@ -55,7 +71,7 @@ impl ControlKind {
         }
     }
 
-    fn icon(self) -> IconName {
+    const fn icon(self) -> IconName {
         match self {
             Self::Minimize => IconName::WindowMinimize,
             Self::Restore => IconName::WindowRestore,
@@ -64,7 +80,7 @@ impl ControlKind {
         }
     }
 
-    fn control_area(self) -> WindowControlArea {
+    const fn control_area(self) -> WindowControlArea {
         match self {
             Self::Minimize => WindowControlArea::Min,
             Self::Restore | Self::Maximize => WindowControlArea::Max,
@@ -72,7 +88,7 @@ impl ControlKind {
         }
     }
 
-    fn is_close(self) -> bool {
+    const fn is_close(self) -> bool {
         matches!(self, Self::Close)
     }
 }
@@ -83,7 +99,7 @@ struct WindowControl {
 }
 
 impl WindowControl {
-    fn new(kind: ControlKind) -> Self {
+    const fn new(kind: ControlKind) -> Self {
         Self { kind }
     }
 }
@@ -199,7 +215,7 @@ impl RenderOnce for CadenceTitleBar {
             .bg(cx.theme().title_bar)
             .window_control_area(WindowControlArea::Drag)
             .when(cfg!(target_os = "macos"), |this| this.pl(px(80.)))
-            .when(!cfg!(target_os = "macos"), |this| this.pl_3())
+            .when(!cfg!(target_os = "macos"), left_padding)
             .when(cfg!(target_os = "linux") && supports_maximize, |this| {
                 this.on_double_click(|_, window, _| window.zoom_window())
             })
@@ -208,7 +224,7 @@ impl RenderOnce for CadenceTitleBar {
             })
             .when(cfg!(target_os = "linux") && supports_window_menu, |this| {
                 this.on_mouse_down(MouseButton::Right, |event, window, _| {
-                    window.show_window_menu(event.position)
+                    window.show_window_menu(event.position);
                 })
             })
             .on_mouse_down_out(window.listener_for(&drag_state, |state, _, _, _| {
@@ -244,4 +260,8 @@ impl RenderOnce for CadenceTitleBar {
             )
             .child(WindowControls)
     }
+}
+
+fn left_padding<T: gpui_component::StyledExt>(style: T) -> T {
+    style.pl_3()
 }

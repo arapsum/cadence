@@ -14,10 +14,10 @@ use super::{
     },
 };
 
-pub(crate) fn render(
+pub(super) fn render(
     view: &mut CadenceView,
-    window: &mut Window,
-    cx: &mut Context<CadenceView>,
+    window: &Window,
+    cx: &Context<'_, CadenceView>,
 ) -> impl IntoElement {
     let viewport_width = window.viewport_size().width.as_f32();
     let available_width = (viewport_width - 48.0 - TIME_GUTTER_WIDTH).max(0.0);
@@ -85,14 +85,14 @@ fn render_header(
     plane_width: f32,
     column_width: f32,
     scroll_offset: gpui::Point<gpui::Pixels>,
-    cx: &mut Context<CadenceView>,
+    cx: &Context<'_, CadenceView>,
 ) -> gpui::AnyElement {
     let Some(snapshot) = &view.snapshot else {
         return div().into_any_element();
     };
     let (today, _) = local_date_time(view.now, &view.settings);
-    let days = (0..7).filter_map(|offset| {
-        let span = jiff::Span::new().try_days(offset as i64).ok()?;
+    let days = (0_u8..7).filter_map(|offset| {
+        let span = jiff::Span::new().try_days(i64::from(offset)).ok()?;
         snapshot.range.start().checked_add(span).ok()
     });
     let cells = days.map(|date| {
@@ -160,11 +160,11 @@ fn render_header(
 fn render_time_gutter(
     view: &CadenceView,
     scroll_offset: gpui::Point<gpui::Pixels>,
-    cx: &mut Context<CadenceView>,
+    cx: &Context<'_, CadenceView>,
 ) -> gpui::AnyElement {
-    let labels = (0..=24).map(|hour| {
-        let y = hour as f32 * 60.0 * PIXELS_PER_MINUTE;
-        let time = Time::constant((hour % 24) as i8, 0, 0, 0);
+    let labels = (0_u8..=24).map(|hour| {
+        let y = f32::from(hour) * 60.0 * PIXELS_PER_MINUTE;
+        let time = Time::constant(i8::try_from(hour % 24).expect("hour fits in i8"), 0, 0, 0);
         div()
             .absolute()
             .top(px((y - 8.0).max(0.0)))

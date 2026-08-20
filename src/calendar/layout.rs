@@ -7,6 +7,12 @@ use crate::domain::{DateRange, Event, EventId};
 const MINUTES_PER_DAY: f32 = 24.0 * 60.0;
 
 /// Rendering constants for the week plane.
+///
+/// # Fields
+///
+/// - `pixels_per_minute`: Vertical scale of the calendar plane.
+/// - `minimum_event_height`: Minimum visual height assigned to an event.
+/// - `minimum_occupancy_minutes`: Minimum collision occupancy for an event.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LayoutMetrics {
     pixels_per_minute: f32,
@@ -15,6 +21,25 @@ pub struct LayoutMetrics {
 }
 
 impl LayoutMetrics {
+    /// Creates validated rendering metrics for a calendar plane.
+    ///
+    /// # Parameters
+    ///
+    /// - `pixels_per_minute`: Vertical scale of the calendar plane.
+    /// - `minimum_event_height`: Minimum visual height assigned to an event.
+    /// - `minimum_occupancy_minutes`: Minimum collision occupancy for an event.
+    ///
+    /// # Returns
+    ///
+    /// Rendering metrics containing the supplied positive finite values.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when:
+    ///
+    /// - `pixels_per_minute` is not finite and greater than zero.
+    /// - `minimum_event_height` is not finite and greater than zero.
+    /// - `minimum_occupancy_minutes` is not finite and greater than zero.
     pub fn new(
         pixels_per_minute: f32,
         minimum_event_height: f32,
@@ -37,15 +62,21 @@ impl LayoutMetrics {
         })
     }
 
-    pub fn pixels_per_minute(self) -> f32 {
+    /// Returns the vertical scale of the calendar plane.
+    #[must_use]
+    pub const fn pixels_per_minute(self) -> f32 {
         self.pixels_per_minute
     }
 
-    pub fn minimum_event_height(self) -> f32 {
+    /// Returns the minimum visual event height.
+    #[must_use]
+    pub const fn minimum_event_height(self) -> f32 {
         self.minimum_event_height
     }
 
-    pub fn minimum_occupancy_minutes(self) -> f32 {
+    /// Returns the minimum collision occupancy in minutes.
+    #[must_use]
+    pub const fn minimum_occupancy_minutes(self) -> f32 {
         self.minimum_occupancy_minutes
     }
 }
@@ -60,6 +91,7 @@ impl Default for LayoutMetrics {
     }
 }
 
+/// Describes why calendar layout could not be produced.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum LayoutError {
     InvalidMetric(&'static str),
@@ -67,6 +99,16 @@ pub enum LayoutError {
 }
 
 /// The screen-space placement of one event in a day column.
+///
+/// # Fields
+///
+/// - `event_id`: Identifier of the positioned event.
+/// - `day_offset`: Zero-based day offset from the layout range start.
+/// - `top`: Vertical offset in pixels.
+/// - `height`: Visual event height in pixels.
+/// - `lane`: Zero-based overlap lane.
+/// - `lane_span`: Number of lanes occupied by the event.
+/// - `lane_count`: Total lanes in the event's overlap cluster.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PositionedEvent {
     event_id: EventId,
@@ -79,31 +121,45 @@ pub struct PositionedEvent {
 }
 
 impl PositionedEvent {
-    pub fn event_id(self) -> EventId {
+    /// Returns the positioned event identifier.
+    #[must_use]
+    pub const fn event_id(self) -> EventId {
         self.event_id
     }
 
-    pub fn day_offset(self) -> u8 {
+    /// Returns the zero-based day offset.
+    #[must_use]
+    pub const fn day_offset(self) -> u8 {
         self.day_offset
     }
 
-    pub fn top(self) -> f32 {
+    /// Returns the vertical offset in pixels.
+    #[must_use]
+    pub const fn top(self) -> f32 {
         self.top
     }
 
-    pub fn height(self) -> f32 {
+    /// Returns the visual event height in pixels.
+    #[must_use]
+    pub const fn height(self) -> f32 {
         self.height
     }
 
-    pub fn lane(self) -> u16 {
+    /// Returns the event's zero-based overlap lane.
+    #[must_use]
+    pub const fn lane(self) -> u16 {
         self.lane
     }
 
-    pub fn lane_span(self) -> u16 {
+    /// Returns the number of lanes occupied by the event.
+    #[must_use]
+    pub const fn lane_span(self) -> u16 {
         self.lane_span
     }
 
-    pub fn lane_count(self) -> u16 {
+    /// Returns the total number of lanes in the overlap cluster.
+    #[must_use]
+    pub const fn lane_count(self) -> u16 {
         self.lane_count
     }
 }
@@ -127,6 +183,28 @@ struct Placement {
 /// Events are kept in their true time positions, while a minimum occupancy is
 /// used for collision detection so very short adjacent events remain clickable
 /// and visually distinct. Events outside the requested range are ignored.
+///
+/// # Parameters
+///
+/// - `events`: Events to position.
+/// - `range`: Seven-day date range represented by the calendar plane.
+/// - `metrics`: Rendering metrics used to convert time into pixels.
+///
+/// # Returns
+///
+/// Screen-space placements sorted by day, vertical position, and event ID.
+///
+/// # Errors
+///
+/// Returns an error when:
+///
+/// - The rendering metrics are invalid.
+/// - Date arithmetic cannot map an event into the requested week.
+///
+/// # Panics
+///
+/// Panics when the number of overlap lanes, the requested day offset, or an
+/// event lane exceeds its supported integer range.
 pub fn layout_week(
     events: &[Event],
     range: DateRange,
@@ -202,7 +280,7 @@ pub fn layout_week(
                 placements.push(Placement { event, lane });
             }
 
-            let lane_count = lanes.len() as u16;
+            let lane_count = u16::try_from(lanes.len()).expect("week lanes fit in u16");
             for placement in placements {
                 let mut lane_span = 1u16;
                 for lane_events in lanes.iter().skip(placement.lane + 1) {
@@ -219,13 +297,13 @@ pub fn layout_week(
                 let height = ((placement.event.actual_end - placement.event.start)
                     * metrics.pixels_per_minute)
                     .max(metrics.minimum_event_height)
-                    .min(MINUTES_PER_DAY * metrics.pixels_per_minute - top);
+                    .min(MINUTES_PER_DAY.mul_add(metrics.pixels_per_minute, -top));
                 result.push(PositionedEvent {
                     event_id: placement.event.event_id,
-                    day_offset: day_offset as u8,
+                    day_offset: u8::try_from(day_offset).expect("week day fits in u8"),
                     top,
                     height,
-                    lane: placement.lane as u16,
+                    lane: u16::try_from(placement.lane).expect("event lane fits in u16"),
                     lane_span,
                     lane_count,
                 });
@@ -256,10 +334,12 @@ fn day_offset(start: Date, date: Date) -> Result<usize, LayoutError> {
 }
 
 fn time_to_minutes(time: Time) -> f32 {
-    time.hour() as f32 * 60.0
-        + time.minute() as f32
-        + time.second() as f32 / 60.0
-        + time.subsec_nanosecond() as f32 / 60_000_000_000.0
+    let hours = f32::from(time.hour());
+    let minutes = f32::from(time.minute());
+    let seconds = f32::from(time.second());
+    #[allow(clippy::cast_precision_loss)]
+    let subsecond = time.subsec_nanosecond() as f32 / 60_000_000_000.0;
+    hours.mul_add(60.0, minutes + seconds / 60.0 + subsecond)
 }
 
 fn overlaps(left: WorkingEvent, right: WorkingEvent) -> bool {

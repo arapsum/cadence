@@ -13,6 +13,13 @@ use crate::domain::{
 
 use super::TimetableRepository;
 
+/// In-memory implementation of the timetable repository contract.
+///
+/// # Fields
+///
+/// - `events`: Events keyed by stable identifier.
+/// - `categories`: Categories keyed by stable identifier.
+/// - `settings`: Current application settings.
 #[derive(Debug, Clone, Default)]
 pub struct InMemoryRepository {
     events: HashMap<EventId, Event>,
@@ -21,6 +28,16 @@ pub struct InMemoryRepository {
 }
 
 impl InMemoryRepository {
+    /// Creates an empty in-memory repository.
+    ///
+    /// # Parameters
+    ///
+    /// - `settings`: Initial application settings.
+    ///
+    /// # Returns
+    ///
+    /// An empty repository configured with `settings`.
+    #[must_use]
     pub fn new(settings: Settings) -> Self {
         Self {
             events: HashMap::new(),
@@ -29,10 +46,22 @@ impl InMemoryRepository {
         }
     }
 
+    /// Creates an empty repository with default settings.
+    ///
+    /// # Returns
+    ///
+    /// An empty repository configured with `Settings::default()`.
+    #[must_use]
     pub fn with_defaults() -> Self {
         Self::new(Settings::default())
     }
 
+    /// Reports whether the repository has no events or categories.
+    ///
+    /// # Returns
+    ///
+    /// `true` when both the event and category stores are empty.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.events.is_empty() && self.categories.is_empty()
     }
@@ -150,7 +179,55 @@ struct SampleSlot {
     title: &'static str,
 }
 
+const ROUTINE: usize = 0;
+const FOCUS: usize = 1;
+const BREAK: usize = 2;
+const CAREER: usize = 3;
+const INTERVIEW: usize = 4;
+const PLANNING: usize = 5;
+
+const fn slot(
+    start_hour: i8,
+    start_minute: i8,
+    end_hour: i8,
+    end_minute: i8,
+    category_index: usize,
+    title: &'static str,
+) -> SampleSlot {
+    SampleSlot {
+        start_hour,
+        start_minute,
+        end_hour,
+        end_minute,
+        category_index,
+        title,
+    }
+}
+
 /// Populate a repository with the weekday blocks from the planning screenshot.
+///
+/// # Parameters
+///
+/// - `repository`: Repository to populate.
+/// - `date`: Date used to locate the sample week.
+/// - `timestamp`: Creation timestamp assigned to sample events.
+///
+/// # Returns
+///
+/// The Sunday date that starts the populated sample week.
+///
+/// # Errors
+///
+/// Returns an error when:
+///
+/// - Date arithmetic cannot produce the requested week.
+/// - A sample category or event is invalid.
+/// - The repository rejects a sample category or event.
+///
+/// # Panics
+///
+/// Panics when a built-in sample category index cannot fit in the supported
+/// `u16` range.
 pub fn seed_sample_week(
     repository: &mut InMemoryRepository,
     date: Date,
@@ -171,7 +248,9 @@ pub fn seed_sample_week(
         .iter()
         .enumerate()
         .map(|(index, (name, color))| {
-            let id = CategoryId::from_uuid(Uuid::from_u128(index as u128 + 1));
+            let id = CategoryId::from_uuid(Uuid::from_u128(
+                u128::from(u16::try_from(index).expect("category index fits in u16")) + 1,
+            ));
             let category = Category::new(id, *name, *color, true)
                 .map_err(|error| RepositoryError::InvalidEntity(error.to_string()))?;
             repository.create_category(category)?;
@@ -204,296 +283,96 @@ pub fn seed_sample_week(
 }
 
 fn sample_schedule(day_offset: u8) -> Vec<SampleSlot> {
-    const ROUTINE: usize = 0;
-    const FOCUS: usize = 1;
-    const BREAK: usize = 2;
-    const CAREER: usize = 3;
-    const INTERVIEW: usize = 4;
-    const PLANNING: usize = 5;
-
-    let common = |focus_title: &'static str,
-                  technical_title: &'static str,
-                  interview_title: &'static str,
-                  afternoon_title: &'static str,
-                  closing_title: &'static str| {
-        vec![
-            SampleSlot {
-                start_hour: 7,
-                start_minute: 30,
-                end_hour: 8,
-                end_minute: 0,
-                category_index: ROUTINE,
-                title: "Breakfast + plan",
-            },
-            SampleSlot {
-                start_hour: 8,
-                start_minute: 0,
-                end_hour: 10,
-                end_minute: 0,
-                category_index: FOCUS,
-                title: "Thesis",
-            },
-            SampleSlot {
-                start_hour: 10,
-                start_minute: 0,
-                end_hour: 10,
-                end_minute: 20,
-                category_index: BREAK,
-                title: "Break",
-            },
-            SampleSlot {
-                start_hour: 10,
-                start_minute: 20,
-                end_hour: 11,
-                end_minute: 50,
-                category_index: FOCUS,
-                title: technical_title,
-            },
-            SampleSlot {
-                start_hour: 11,
-                start_minute: 50,
-                end_hour: 12,
-                end_minute: 30,
-                category_index: CAREER,
-                title: "Job discovery",
-            },
-            SampleSlot {
-                start_hour: 12,
-                start_minute: 30,
-                end_hour: 13,
-                end_minute: 30,
-                category_index: ROUTINE,
-                title: "Lunch",
-            },
-            SampleSlot {
-                start_hour: 13,
-                start_minute: 30,
-                end_hour: 14,
-                end_minute: 45,
-                category_index: CAREER,
-                title: afternoon_title,
-            },
-            SampleSlot {
-                start_hour: 14,
-                start_minute: 45,
-                end_hour: 15,
-                end_minute: 0,
-                category_index: BREAK,
-                title: "Break",
-            },
-            SampleSlot {
-                start_hour: 15,
-                start_minute: 0,
-                end_hour: 16,
-                end_minute: 15,
-                category_index: INTERVIEW,
-                title: interview_title,
-            },
-            SampleSlot {
-                start_hour: 16,
-                start_minute: 15,
-                end_hour: 16,
-                end_minute: 30,
-                category_index: BREAK,
-                title: "Break",
-            },
-            SampleSlot {
-                start_hour: 16,
-                start_minute: 30,
-                end_hour: 18,
-                end_minute: 0,
-                category_index: CAREER,
-                title: focus_title,
-            },
-            SampleSlot {
-                start_hour: 18,
-                start_minute: 0,
-                end_hour: 18,
-                end_minute: 20,
-                category_index: PLANNING,
-                title: closing_title,
-            },
-            SampleSlot {
-                start_hour: 18,
-                start_minute: 30,
-                end_hour: 21,
-                end_minute: 30,
-                category_index: ROUTINE,
-                title: "Personal time",
-            },
-        ]
-    };
-
     match day_offset {
-        0 => vec![
-            SampleSlot {
-                start_hour: 7,
-                start_minute: 30,
-                end_hour: 8,
-                end_minute: 0,
-                category_index: ROUTINE,
-                title: "Rest",
-            },
-            SampleSlot {
-                start_hour: 18,
-                start_minute: 0,
-                end_hour: 18,
-                end_minute: 20,
-                category_index: PLANNING,
-                title: "Weekly planning",
-            },
-            SampleSlot {
-                start_hour: 18,
-                start_minute: 30,
-                end_hour: 21,
-                end_minute: 30,
-                category_index: ROUTINE,
-                title: "Rest",
-            },
-        ],
-        1 => common(
+        0 => sunday_schedule(),
+        1 => common_schedule(
             "Portfolio",
             "System Design",
             "Behavioural + technical interview prep",
             "Applications",
             "Shutdown + plan",
         ),
-        2 => common(
+        2 => common_schedule(
             "Portfolio",
             "Coding / DSA",
             "DSA interview prep",
             "Applications",
             "Shutdown + plan",
         ),
-        3 => common(
+        3 => common_schedule(
             "Portfolio",
             "System Design",
             "Backend / database interview prep",
             "Applications",
             "Shutdown + plan",
         ),
-        4 => common(
+        4 => common_schedule(
             "Portfolio",
             "Coding / DSA",
             "DSA + live coding",
             "Applications",
             "Shutdown + plan",
         ),
-        5 => common(
+        5 => common_schedule(
             "Portfolio / GitHub cleanup",
             "System Design + review",
             "Mock interview + weekly review",
             "Applications + follow-ups",
             "Weekly review",
         ),
-        6 => vec![
-            SampleSlot {
-                start_hour: 7,
-                start_minute: 30,
-                end_hour: 8,
-                end_minute: 0,
-                category_index: ROUTINE,
-                title: "Slow start",
-            },
-            SampleSlot {
-                start_hour: 8,
-                start_minute: 0,
-                end_hour: 10,
-                end_minute: 0,
-                category_index: FOCUS,
-                title: "Thesis / weekly catch-up",
-            },
-            SampleSlot {
-                start_hour: 10,
-                start_minute: 0,
-                end_hour: 10,
-                end_minute: 20,
-                category_index: BREAK,
-                title: "Break",
-            },
-            SampleSlot {
-                start_hour: 10,
-                start_minute: 20,
-                end_hour: 11,
-                end_minute: 50,
-                category_index: FOCUS,
-                title: "Coding / project build",
-            },
-            SampleSlot {
-                start_hour: 11,
-                start_minute: 50,
-                end_hour: 12,
-                end_minute: 30,
-                category_index: CAREER,
-                title: "Job search review",
-            },
-            SampleSlot {
-                start_hour: 12,
-                start_minute: 30,
-                end_hour: 13,
-                end_minute: 30,
-                category_index: ROUTINE,
-                title: "Lunch",
-            },
-            SampleSlot {
-                start_hour: 13,
-                start_minute: 30,
-                end_hour: 14,
-                end_minute: 45,
-                category_index: CAREER,
-                title: "Optional applications",
-            },
-            SampleSlot {
-                start_hour: 14,
-                start_minute: 45,
-                end_hour: 15,
-                end_minute: 0,
-                category_index: BREAK,
-                title: "Break",
-            },
-            SampleSlot {
-                start_hour: 15,
-                start_minute: 0,
-                end_hour: 16,
-                end_minute: 15,
-                category_index: INTERVIEW,
-                title: "Interview weak spots",
-            },
-            SampleSlot {
-                start_hour: 16,
-                start_minute: 15,
-                end_hour: 16,
-                end_minute: 30,
-                category_index: BREAK,
-                title: "Break",
-            },
-            SampleSlot {
-                start_hour: 16,
-                start_minute: 30,
-                end_hour: 18,
-                end_minute: 0,
-                category_index: CAREER,
-                title: "Long project session",
-            },
-            SampleSlot {
-                start_hour: 18,
-                start_minute: 0,
-                end_hour: 18,
-                end_minute: 20,
-                category_index: PLANNING,
-                title: "Finish / commit",
-            },
-            SampleSlot {
-                start_hour: 18,
-                start_minute: 30,
-                end_hour: 21,
-                end_minute: 30,
-                category_index: ROUTINE,
-                title: "Personal time",
-            },
-        ],
-        _ => unreachable!(),
+        6 => saturday_schedule(),
+        _ => unreachable!("sample schedule only supports seven days"),
     }
+}
+
+fn common_schedule(
+    focus_title: &'static str,
+    technical_title: &'static str,
+    interview_title: &'static str,
+    afternoon_title: &'static str,
+    closing_title: &'static str,
+) -> Vec<SampleSlot> {
+    vec![
+        slot(7, 30, 8, 0, ROUTINE, "Breakfast + plan"),
+        slot(8, 0, 10, 0, FOCUS, "Thesis"),
+        slot(10, 0, 10, 20, BREAK, "Break"),
+        slot(10, 20, 11, 50, FOCUS, technical_title),
+        slot(11, 50, 12, 30, CAREER, "Job discovery"),
+        slot(12, 30, 13, 30, ROUTINE, "Lunch"),
+        slot(13, 30, 14, 45, CAREER, afternoon_title),
+        slot(14, 45, 15, 0, BREAK, "Break"),
+        slot(15, 0, 16, 15, INTERVIEW, interview_title),
+        slot(16, 15, 16, 30, BREAK, "Break"),
+        slot(16, 30, 18, 0, CAREER, focus_title),
+        slot(18, 0, 18, 20, PLANNING, closing_title),
+        slot(18, 30, 21, 30, ROUTINE, "Personal time"),
+    ]
+}
+
+fn sunday_schedule() -> Vec<SampleSlot> {
+    vec![
+        slot(7, 30, 8, 0, ROUTINE, "Rest"),
+        slot(18, 0, 18, 20, PLANNING, "Weekly planning"),
+        slot(18, 30, 21, 30, ROUTINE, "Rest"),
+    ]
+}
+
+fn saturday_schedule() -> Vec<SampleSlot> {
+    vec![
+        slot(7, 30, 8, 0, ROUTINE, "Slow start"),
+        slot(8, 0, 10, 0, FOCUS, "Thesis / weekly catch-up"),
+        slot(10, 0, 10, 20, BREAK, "Break"),
+        slot(10, 20, 11, 50, FOCUS, "Coding / project build"),
+        slot(11, 50, 12, 30, CAREER, "Job search review"),
+        slot(12, 30, 13, 30, ROUTINE, "Lunch"),
+        slot(13, 30, 14, 45, CAREER, "Optional applications"),
+        slot(14, 45, 15, 0, BREAK, "Break"),
+        slot(15, 0, 16, 15, INTERVIEW, "Interview weak spots"),
+        slot(16, 15, 16, 30, BREAK, "Break"),
+        slot(16, 30, 18, 0, CAREER, "Long project session"),
+        slot(18, 0, 18, 20, PLANNING, "Finish / commit"),
+        slot(18, 30, 21, 30, ROUTINE, "Personal time"),
+    ]
 }
 
 fn add_days(date: Date, days: u8) -> Result<Date, jiff::Error> {

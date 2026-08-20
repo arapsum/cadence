@@ -14,14 +14,36 @@ use super::{CategoryId, ValidationError};
 pub struct EventId(Uuid);
 
 impl EventId {
+    /// Creates a new time-ordered event identifier.
+    ///
+    /// # Returns
+    ///
+    /// A new event identifier.
+    #[must_use]
     pub fn new() -> Self {
         Self(Uuid::now_v7())
     }
 
+    /// Wraps an existing `Uuid` as an event identifier.
+    ///
+    /// # Parameters
+    ///
+    /// - `id`: UUID value to wrap.
+    ///
+    /// # Returns
+    ///
+    /// An event identifier backed by `id`.
+    #[must_use]
     pub const fn from_uuid(id: Uuid) -> Self {
         Self(id)
     }
 
+    /// Returns the underlying `Uuid` value.
+    ///
+    /// # Returns
+    ///
+    /// The UUID stored by this identifier.
+    #[must_use]
     pub const fn as_uuid(self) -> Uuid {
         self.0
     }
@@ -53,6 +75,16 @@ impl fmt::Display for EventId {
     }
 }
 
+/// Editable values used to create or revise an event.
+///
+/// # Fields
+///
+/// - `title`: User-facing event title.
+/// - `date`: Civil date on which the event occurs.
+/// - `start_time`: Inclusive event start time.
+/// - `end_time`: Exclusive event end time.
+/// - `category_id`: Category assigned to the event.
+/// - `notes`: Optional supporting notes.
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
 pub struct EventDraft {
     pub title: String,
@@ -64,6 +96,20 @@ pub struct EventDraft {
 }
 
 impl EventDraft {
+    /// Creates an event draft from its editable values.
+    ///
+    /// # Parameters
+    ///
+    /// - `title`: User-facing event title.
+    /// - `date`: Civil date on which the event occurs.
+    /// - `start_time`: Inclusive event start time.
+    /// - `end_time`: Exclusive event end time.
+    /// - `category_id`: Category assigned to the event.
+    /// - `notes`: Optional supporting notes.
+    ///
+    /// # Returns
+    ///
+    /// An event draft containing the supplied values.
     pub fn new(
         title: impl Into<String>,
         date: Date,
@@ -83,6 +129,19 @@ impl EventDraft {
     }
 }
 
+/// A validated timetable event with immutable creation metadata.
+///
+/// # Fields
+///
+/// - `id`: Stable identifier for the event.
+/// - `category_id`: Category assigned to the event.
+/// - `title`: Trimmed user-facing event title.
+/// - `date`: Civil date on which the event occurs.
+/// - `start_time`: Inclusive event start time.
+/// - `end_time`: Exclusive event end time.
+/// - `notes`: Optional trimmed supporting notes.
+/// - `created_at`: Timestamp at which the event was created.
+/// - `updated_at`: Timestamp at which the event was last revised.
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Event {
     id: EventId,
@@ -97,81 +156,156 @@ pub struct Event {
 }
 
 impl Event {
+    /// Creates a validated event from an editable draft.
+    ///
+    /// # Parameters
+    ///
+    /// - `id`: Stable identifier for the event.
+    /// - `draft`: Editable event values to validate and store.
+    /// - `timestamp`: Creation timestamp for the event.
+    ///
+    /// # Returns
+    ///
+    /// A validated event with normalized text values.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when:
+    ///
+    /// - The title is empty after trimming.
+    /// - The end time is not later than the start time.
     pub fn new(
         id: EventId,
         draft: EventDraft,
         timestamp: Timestamp,
     ) -> Result<Self, ValidationError> {
-        let (title, notes) = normalize_text(draft.title, draft.notes);
-        validate(&title, draft.start_time, draft.end_time)?;
+        let EventDraft {
+            title: draft_title,
+            date,
+            start_time,
+            end_time,
+            category_id,
+            notes: draft_notes,
+        } = draft;
+        let (title, notes) = normalize_text(&draft_title, draft_notes.as_deref());
+        validate(&title, start_time, end_time)?;
 
         Ok(Self {
             id,
-            category_id: draft.category_id,
+            category_id,
             title,
-            date: draft.date,
-            start_time: draft.start_time,
-            end_time: draft.end_time,
+            date,
+            start_time,
+            end_time,
             notes,
             created_at: timestamp,
             updated_at: timestamp,
         })
     }
 
+    /// Applies revised editable values to an existing event.
+    ///
+    /// # Parameters
+    ///
+    /// - `draft`: Editable event values to validate and store.
+    /// - `timestamp`: Revision timestamp for the event.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the revised values are validated and stored.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when:
+    ///
+    /// - The title is empty after trimming.
+    /// - The end time is not later than the start time.
     pub fn revise(
         &mut self,
         draft: EventDraft,
         timestamp: Timestamp,
     ) -> Result<(), ValidationError> {
-        let (title, notes) = normalize_text(draft.title, draft.notes);
-        validate(&title, draft.start_time, draft.end_time)?;
+        let EventDraft {
+            title: draft_title,
+            date,
+            start_time,
+            end_time,
+            category_id,
+            notes: draft_notes,
+        } = draft;
+        let (title, notes) = normalize_text(&draft_title, draft_notes.as_deref());
+        validate(&title, start_time, end_time)?;
 
-        self.category_id = draft.category_id;
+        self.category_id = category_id;
         self.title = title;
-        self.date = draft.date;
-        self.start_time = draft.start_time;
-        self.end_time = draft.end_time;
+        self.date = date;
+        self.start_time = start_time;
+        self.end_time = end_time;
         self.notes = notes;
         self.updated_at = timestamp;
         Ok(())
     }
 
-    pub fn id(&self) -> EventId {
+    /// Returns the event identifier.
+    #[must_use]
+    pub const fn id(&self) -> EventId {
         self.id
     }
 
-    pub fn category_id(&self) -> CategoryId {
+    /// Returns the category identifier.
+    #[must_use]
+    pub const fn category_id(&self) -> CategoryId {
         self.category_id
     }
 
+    /// Returns the trimmed event title.
+    #[must_use]
     pub fn title(&self) -> &str {
         &self.title
     }
 
-    pub fn date(&self) -> Date {
+    /// Returns the event date.
+    #[must_use]
+    pub const fn date(&self) -> Date {
         self.date
     }
 
-    pub fn start_time(&self) -> Time {
+    /// Returns the inclusive event start time.
+    #[must_use]
+    pub const fn start_time(&self) -> Time {
         self.start_time
     }
 
-    pub fn end_time(&self) -> Time {
+    /// Returns the exclusive event end time.
+    #[must_use]
+    pub const fn end_time(&self) -> Time {
         self.end_time
     }
 
+    /// Returns the optional trimmed event notes.
+    #[must_use]
     pub fn notes(&self) -> Option<&str> {
         self.notes.as_deref()
     }
 
-    pub fn created_at(&self) -> Timestamp {
+    /// Returns the event creation timestamp.
+    #[must_use]
+    pub const fn created_at(&self) -> Timestamp {
         self.created_at
     }
 
-    pub fn updated_at(&self) -> Timestamp {
+    /// Returns the timestamp of the latest revision.
+    #[must_use]
+    pub const fn updated_at(&self) -> Timestamp {
         self.updated_at
     }
 
+    /// Returns the event values as an editable draft.
+    ///
+    /// # Returns
+    ///
+    /// A draft containing the event's current editable values.
+    #[must_use]
     pub fn draft(&self) -> EventDraft {
         EventDraft {
             title: self.title.clone(),
@@ -184,10 +318,11 @@ impl Event {
     }
 }
 
-fn normalize_text(title: String, notes: Option<String>) -> (String, Option<String>) {
+fn normalize_text(title: &str, notes: Option<&str>) -> (String, Option<String>) {
     let title = title.trim().to_owned();
     let notes = notes
-        .map(|notes| notes.trim().to_owned())
+        .map(str::trim)
+        .map(str::to_owned)
         .filter(|notes| !notes.is_empty());
     (title, notes)
 }

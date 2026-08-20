@@ -10,14 +10,36 @@ use super::ValidationError;
 pub struct CategoryId(Uuid);
 
 impl CategoryId {
+    /// Creates a new time-ordered category identifier.
+    ///
+    /// # Returns
+    ///
+    /// A new category identifier.
+    #[must_use]
     pub fn new() -> Self {
         Self(Uuid::now_v7())
     }
 
+    /// Wraps an existing `Uuid` as a category identifier.
+    ///
+    /// # Parameters
+    ///
+    /// - `id`: UUID value to wrap.
+    ///
+    /// # Returns
+    ///
+    /// A category identifier backed by `id`.
+    #[must_use]
     pub const fn from_uuid(id: Uuid) -> Self {
         Self(id)
     }
 
+    /// Returns the underlying `Uuid` value.
+    ///
+    /// # Returns
+    ///
+    /// The UUID stored by this identifier.
+    #[must_use]
     pub const fn as_uuid(self) -> Uuid {
         self.0
     }
@@ -60,6 +82,14 @@ pub enum CategoryColor {
     Blue,
 }
 
+/// A named category used to organize timetable events.
+///
+/// # Fields
+///
+/// - `id`: Stable identifier for the category.
+/// - `name`: User-facing category name.
+/// - `color_token`: Semantic color token used by calendar surfaces.
+/// - `is_visible`: Whether events in this category are shown.
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Category {
     id: CategoryId,
@@ -69,6 +99,24 @@ pub struct Category {
 }
 
 impl Category {
+    /// Creates a validated category.
+    ///
+    /// # Parameters
+    ///
+    /// - `id`: Stable identifier for the category.
+    /// - `name`: User-facing category name.
+    /// - `color_token`: Semantic color token used by calendar surfaces.
+    /// - `is_visible`: Whether events in this category are shown.
+    ///
+    /// # Returns
+    ///
+    /// A category with trimmed text values.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when:
+    ///
+    /// - `name` is empty after trimming.
     pub fn new(
         id: CategoryId,
         name: impl Into<String>,
@@ -88,23 +136,36 @@ impl Category {
         })
     }
 
-    pub fn id(&self) -> CategoryId {
+    /// Returns the category identifier.
+    #[must_use]
+    pub const fn id(&self) -> CategoryId {
         self.id
     }
 
+    /// Returns the user-facing category name.
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    pub fn color_token(&self) -> CategoryColor {
+    /// Returns the semantic color token.
+    #[must_use]
+    pub const fn color_token(&self) -> CategoryColor {
         self.color_token
     }
 
-    pub fn is_visible(&self) -> bool {
+    /// Returns whether the category is visible.
+    #[must_use]
+    pub const fn is_visible(&self) -> bool {
         self.is_visible
     }
 
-    pub fn set_visible(&mut self, is_visible: bool) {
+    /// Changes whether the category is visible.
+    ///
+    /// # Parameters
+    ///
+    /// - `is_visible`: New visibility state.
+    pub const fn set_visible(&mut self, is_visible: bool) {
         self.is_visible = is_visible;
     }
 }

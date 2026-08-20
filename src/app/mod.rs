@@ -1,17 +1,22 @@
-mod event_card;
-mod grid;
-mod presentation;
-mod state;
-mod style;
-mod toolbar;
-mod view;
-mod week;
+pub(super) mod event_card;
+pub(super) mod grid;
+pub(super) mod presentation;
+pub(super) mod state;
+pub(super) mod style;
+pub(super) mod toolbar;
+pub(super) mod view;
+pub(super) mod week;
 
 use gpui::{App, AppContext as _, WindowBounds, WindowDecorations, WindowOptions, px, size};
 use gpui_component::Root;
 
 use crate::components::title_bar::CadenceTitleBar;
 
+/// Starts the desktop `gpui` application.
+///
+/// # Panics
+///
+/// Panics when the Cadence window cannot be opened.
 pub fn run() {
     let app = gpui_platform::application().with_assets(gpui_component_assets::Assets);
 

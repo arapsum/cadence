@@ -8,22 +8,22 @@ use crate::{
 
 use super::{state::CadenceView, style::category_palette};
 
-pub(crate) fn render(
+pub(super) fn render(
     view: &CadenceView,
     event: &Event,
     category: &Category,
     position: PositionedEvent,
     column_width: f32,
-    cx: &mut Context<CadenceView>,
+    cx: &Context<'_, CadenceView>,
 ) -> gpui::AnyElement {
     let selected = view.state.selected_event() == Some(event.id());
     let dark = cx.theme().mode.is_dark();
     let (background, foreground, border) = category_palette(category.color_token(), dark);
-    let lane_count = position.lane_count().max(1) as f32;
-    let width = column_width * position.lane_span() as f32 / lane_count - 8.0;
-    let left = position.day_offset() as f32 * column_width
-        + column_width * position.lane() as f32 / lane_count
-        + 4.0;
+    let lane_count = f32::from(position.lane_count().max(1));
+    let width = column_width * f32::from(position.lane_span()) / lane_count - 8.0;
+    let day_offset = f32::from(position.day_offset());
+    let lane = f32::from(position.lane());
+    let left = day_offset.mul_add(column_width, column_width * lane / lane_count + 4.0);
     let event_id = event.id();
     let title = event.title().to_owned();
     let category_name = category.name().to_owned();
@@ -32,19 +32,21 @@ pub(crate) fn render(
         format_time(event.start_time(), view.settings.clock_format()),
         format_time(event.end_time(), view.settings.clock_format())
     );
-    let tooltip_text = match event.notes() {
-        Some(notes) => format!("{title}\n{category_name} · {event_time}\n{notes}"),
-        None => format!("{title}\n{category_name} · {event_time}"),
-    };
+    let tooltip_text = event.notes().map_or_else(
+        || format!("{title}\n{category_name} · {event_time}"),
+        |notes| format!("{title}\n{category_name} · {event_time}\n{notes}"),
+    );
+    let element_key = u64::from_le_bytes(
+        event_id.as_uuid().as_bytes()[..8]
+            .try_into()
+            .expect("UUID has at least eight bytes"),
+    );
     let compact = position.height() < 42.0;
     let tall = position.height() >= 68.0;
     let roomy = position.height() >= 96.0;
     let view = cx.entity().downgrade();
     div()
-        .id(ElementId::NamedInteger(
-            "event-card".into(),
-            event_id.as_uuid().as_u128() as u64,
-        ))
+        .id(ElementId::NamedInteger("event-card".into(), element_key))
         .absolute()
         .top(px(position.top() + 4.0))
         .left(px(left))
@@ -61,7 +63,7 @@ pub(crate) fn render(
         } else {
             border
         })
-        .when(selected, |this| this.border_2())
+        .when(selected, gpui::Styled::border_2)
         .bg(background)
         .text_color(foreground)
         .overflow_hidden()
@@ -103,7 +105,7 @@ pub(crate) fn render(
                     .text_sm()
                     .font_medium()
                     .when(roomy, |this| this.line_clamp(2))
-                    .when(!roomy, |this| this.truncate())
+                    .when(!roomy, gpui::Styled::truncate)
                     .child(title.clone()),
             )
             .child(div().text_xs().opacity(0.78).child(event_time.clone()))

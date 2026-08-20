@@ -6,7 +6,7 @@ use crate::components::title_bar::CadenceTitleBar;
 use super::{state::CadenceView, toolbar, week};
 
 impl Render for CadenceView {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let error = self.error.clone();
         div()
             .v_flex()

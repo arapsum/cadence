@@ -19,29 +19,30 @@ use super::{
     toolbar::FilterOption,
 };
 
-pub(crate) struct CadenceView {
-    pub(crate) repository: InMemoryRepository,
-    pub(crate) settings: Settings,
-    pub(crate) state: CalendarState,
-    pub(crate) category_filter: Entity<SelectState<Vec<FilterOption>>>,
-    pub(crate) scroll_handle: ScrollHandle,
-    pub(crate) snapshot: Option<WeekSnapshot>,
-    pub(crate) now: Timestamp,
-    pub(crate) scroll_initialized: bool,
-    pub(crate) error: Option<String>,
-    pub(crate) _subscriptions: Vec<Subscription>,
+pub(super) struct CadenceView {
+    pub(super) repository: InMemoryRepository,
+    pub(super) settings: Settings,
+    pub(super) state: CalendarState,
+    pub(super) category_filter: Entity<SelectState<Vec<FilterOption>>>,
+    pub(super) scroll_handle: ScrollHandle,
+    pub(super) snapshot: Option<WeekSnapshot>,
+    pub(super) now: Timestamp,
+    pub(super) scroll_initialized: bool,
+    pub(super) error: Option<String>,
+    pub(super) subscriptions: Vec<Subscription>,
 }
 
 impl CadenceView {
-    pub(crate) fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub(super) fn new(window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
         let settings = Settings::default();
         let now = Timestamp::now();
         let (today, _) = local_date_time(now, &settings);
         let mut repository = InMemoryRepository::new(settings.clone());
-        let mut error = None;
-        if let Err(seed_error) = seed_sample_week(&mut repository, today, now) {
-            error = Some(format!("Could not load sample week: {seed_error}"));
-        }
+        let error = if let Err(seed_error) = seed_sample_week(&mut repository, today, now) {
+            Some(format!("Could not load sample week: {seed_error}"))
+        } else {
+            None
+        };
 
         let categories = repository.categories().unwrap_or_default();
         let filter_options = std::iter::once(FilterOption::all())
@@ -71,12 +72,12 @@ impl CadenceView {
             now,
             scroll_initialized: false,
             error,
-            _subscriptions: Vec::new(),
+            subscriptions: Vec::new(),
         };
         this.refresh_snapshot();
 
         let category_filter_entity = this.category_filter.clone();
-        this._subscriptions.push(cx.subscribe(
+        this.subscriptions.push(cx.subscribe(
             &category_filter_entity,
             |this, _, event: &SelectEvent<Vec<FilterOption>>, cx| {
                 if let SelectEvent::Confirm(Some(filter)) = event {
@@ -110,7 +111,7 @@ impl CadenceView {
         this
     }
 
-    pub(crate) fn refresh_snapshot(&mut self) {
+    pub(super) fn refresh_snapshot(&mut self) {
         let range =
             match DateRange::week(self.state.selected_date(), self.settings.week_starts_on()) {
                 Ok(range) => range,
@@ -158,7 +159,7 @@ impl CadenceView {
         self.error = None;
     }
 
-    pub(crate) fn go_to_today(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn go_to_today(&mut self, cx: &mut Context<'_, Self>) {
         let (today, _) = local_date_time(Timestamp::now(), &self.settings);
         self.state.go_to_today(today);
         self.scroll_initialized = false;
@@ -166,7 +167,7 @@ impl CadenceView {
         cx.notify();
     }
 
-    pub(crate) fn shift_week(&mut self, next: bool, cx: &mut Context<Self>) {
+    pub(super) fn shift_week(&mut self, next: bool, cx: &mut Context<'_, Self>) {
         let result = if next {
             self.state.next_week()
         } else {
@@ -181,17 +182,17 @@ impl CadenceView {
         cx.notify();
     }
 
-    pub(crate) fn clear_selection(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn clear_selection(&mut self, cx: &mut Context<'_, Self>) {
         self.state.clear_selection();
         cx.notify();
     }
 
-    pub(crate) fn select_event(&mut self, event_id: EventId, cx: &mut Context<Self>) {
+    pub(super) fn select_event(&mut self, event_id: EventId, cx: &mut Context<'_, Self>) {
         self.state.select_event(event_id);
         cx.notify();
     }
 
-    pub(crate) fn week_range_label(&self) -> String {
+    pub(super) fn week_range_label(&self) -> String {
         let Some(snapshot) = &self.snapshot else {
             return "No week loaded".to_owned();
         };
@@ -199,33 +200,36 @@ impl CadenceView {
             .range
             .end()
             .yesterday()
-            .unwrap_or(snapshot.range.start());
+            .unwrap_or_else(|_| snapshot.range.start());
         let start = snapshot.range.start().strftime("%b %-d");
         let end = last_day.strftime("%b %-d, %Y");
         format!("{start} – {end}")
     }
 
-    pub(crate) fn initial_scroll_offset(&self, column_width: f32) -> (f32, f32) {
+    pub(super) fn initial_scroll_offset(&self, column_width: f32) -> (f32, f32) {
         let Some(snapshot) = &self.snapshot else {
             return (0.0, 0.0);
         };
         let (today, current_time) = local_date_time(self.now, &self.settings);
         let target_minutes = if snapshot.range.contains(today) {
-            (current_time.hour() as f32 * 60.0 + current_time.minute() as f32 - 90.0).max(0.0)
+            f32::from(current_time.hour())
+                .mul_add(60.0, f32::from(current_time.minute()) - 90.0)
+                .max(0.0)
         } else {
             snapshot
                 .events
                 .iter()
                 .map(|event| {
-                    event.start_time().hour() as f32 * 60.0 + event.start_time().minute() as f32
+                    f32::from(event.start_time().hour())
+                        .mul_add(60.0, f32::from(event.start_time().minute()))
                 })
-                .min_by(|left, right| left.total_cmp(right))
-                .map(|minutes| (minutes - 60.0).max(0.0))
-                .unwrap_or(5.0 * 60.0)
+                .min_by(f32::total_cmp)
+                .map_or(5.0 * 60.0, |minutes| (minutes - 60.0).max(0.0))
         };
-        let horizontal = day_index(snapshot.range, self.state.selected_date())
-            .map(|day| (day as f32 * column_width - column_width * 2.0).max(0.0))
-            .unwrap_or(0.0);
+        let horizontal = day_index(snapshot.range, self.state.selected_date()).map_or(0.0, |day| {
+            let day = f32::from(u16::try_from(day).expect("week day fits in u16"));
+            ((day - 2.0) * column_width).max(0.0)
+        });
         (horizontal, target_minutes * PIXELS_PER_MINUTE)
     }
 }
