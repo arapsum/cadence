@@ -10,23 +10,32 @@ use super::{
     presentation::{day_index, local_date_time},
     state::CadenceView,
     style::{PIXELS_PER_MINUTE, PLANE_HEIGHT},
+    surface::SurfaceMode,
 };
 
 pub(super) fn render_plane(
     view: &CadenceView,
     plane_width: f32,
     column_width: f32,
+    column_count: usize,
+    mode: SurfaceMode,
     cx: &Context<'_, CadenceView>,
 ) -> impl IntoElement {
-    let mut children = render_grid_lines(plane_width, column_width, cx);
-    children.extend(render_empty_slots(view, column_width, cx));
+    let mut children = render_grid_lines(plane_width, column_width, column_count, cx);
+    children.extend(render_empty_slots(view, column_width, column_count, cx));
     if let Some(current_line) = render_current_line(view, column_width, cx) {
         children.push(current_line);
     }
-    children.extend(render_event_cards(view, column_width, plane_width, cx));
+    children.extend(render_event_cards(
+        view,
+        column_width,
+        plane_width,
+        mode,
+        cx,
+    ));
 
     div()
-        .id("week-plane")
+        .id("calendar-plane")
         .relative()
         .w(px(plane_width))
         .h(px(PLANE_HEIGHT))
@@ -43,6 +52,7 @@ pub(super) fn render_plane(
 fn render_grid_lines(
     plane_width: f32,
     column_width: f32,
+    column_count: usize,
     cx: &Context<'_, CadenceView>,
 ) -> Vec<gpui::AnyElement> {
     let horizontal_lines = (0_u16..=48).map(|line| {
@@ -59,12 +69,14 @@ fn render_grid_lines(
                 .opacity(if line % 2 == 0 { 0.7 } else { 0.35 }))
             .into_any_element()
     });
-    let vertical_lines = (0_u8..=7).map(|line| {
+    let vertical_lines = (0..=column_count).map(|line| {
+        let is_edge = line == 0 || line == column_count;
+        let line = f32::from(u16::try_from(line).expect("surface column count fits in u16"));
         div()
             .absolute()
             .top(px(0.0))
-            .left(px(f32::from(line) * column_width))
-            .w(px(if line == 0 || line == 7 { 1.0 } else { 0.5 }))
+            .left(px(line * column_width))
+            .w(px(if is_edge { 1.0 } else { 0.5 }))
             .h(px(PLANE_HEIGHT))
             .bg(cx.theme().border.opacity(0.65))
             .into_any_element()
@@ -109,6 +121,7 @@ fn render_current_line(
 fn render_empty_slots(
     view: &CadenceView,
     column_width: f32,
+    column_count: usize,
     cx: &Context<'_, CadenceView>,
 ) -> Vec<gpui::AnyElement> {
     let empty_border = cx.theme().border.opacity(0.65);
@@ -116,10 +129,10 @@ fn render_empty_slots(
     view.snapshot
         .as_ref()
         .map(|snapshot| {
-            (0_u8..7)
+            (0..column_count)
                 .flat_map(|day| {
                     (6_u8..22).filter_map(move |hour| {
-                        let day_number = usize::from(day);
+                        let day_number = day;
                         let hour = i32::from(hour);
                         let has_event = snapshot.events.iter().any(|event| {
                             let start_minutes = i32::from(event.start_time().hour()) * 60
@@ -136,7 +149,10 @@ fn render_empty_slots(
                         let top = (f32::from(u16::try_from(hour).expect("hour fits in u16"))
                             * 60.0)
                             .mul_add(PIXELS_PER_MINUTE, 4.0);
-                        let left = f32::from(day).mul_add(column_width, 4.0);
+                        let day = f32::from(
+                            u16::try_from(day).expect("surface column count fits in u16"),
+                        );
+                        let left = day.mul_add(column_width, 4.0);
                         Some(
                             div()
                                 .absolute()
@@ -165,6 +181,7 @@ fn render_event_cards(
     view: &CadenceView,
     column_width: f32,
     plane_width: f32,
+    mode: SurfaceMode,
     cx: &Context<'_, CadenceView>,
 ) -> Vec<gpui::AnyElement> {
     let Some(snapshot) = &view.snapshot else {
@@ -190,6 +207,7 @@ fn render_event_cards(
                 category,
                 *position,
                 column_width,
+                mode,
                 cx,
             ))
         })
@@ -197,8 +215,14 @@ fn render_event_cards(
 
     if snapshot.events.is_empty() {
         let message = match view.state.category_filter() {
-            CategoryFilter::All => "Nothing scheduled this week",
-            CategoryFilter::Only(_) => "No events in this category this week",
+            CategoryFilter::All => match mode {
+                SurfaceMode::Day => "Nothing scheduled this day",
+                SurfaceMode::Week => "Nothing scheduled this week",
+            },
+            CategoryFilter::Only(_) => match mode {
+                SurfaceMode::Day => "No events in this category today",
+                SurfaceMode::Week => "No events in this category this week",
+            },
         };
         cards.push(
             div()

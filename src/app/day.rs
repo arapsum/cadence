@@ -7,5 +7,5 @@ pub(super) fn render(
     window: &Window,
     cx: &Context<'_, CadenceView>,
 ) -> impl IntoElement {
-    surface::render(view, window, surface::SurfaceMode::Week, cx)
+    surface::render(view, window, surface::SurfaceMode::Day, cx)
 }

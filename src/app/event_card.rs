@@ -1,4 +1,6 @@
-use gpui::{Context, ElementId, IntoElement, StatefulInteractiveElement as _, div, prelude::*, px};
+use gpui::{
+    Context, ElementId, Hsla, IntoElement, StatefulInteractiveElement as _, div, prelude::*, px,
+};
 use gpui_component::{ActiveTheme as _, StyledExt as _, tooltip::Tooltip};
 
 use crate::{
@@ -6,7 +8,7 @@ use crate::{
     domain::{Category, Event, format_time},
 };
 
-use super::{state::CadenceView, style::category_palette};
+use super::{state::CadenceView, style::category_palette, surface::SurfaceMode};
 
 pub(super) fn render(
     view: &CadenceView,
@@ -14,6 +16,7 @@ pub(super) fn render(
     category: &Category,
     position: PositionedEvent,
     column_width: f32,
+    mode: SurfaceMode,
     cx: &Context<'_, CadenceView>,
 ) -> gpui::AnyElement {
     let selected = view.state.selected_event() == Some(event.id());
@@ -41,9 +44,13 @@ pub(super) fn render(
             .try_into()
             .expect("UUID has at least eight bytes"),
     );
+    let event_date = event.date();
     let compact = position.height() < 42.0;
     let tall = position.height() >= 68.0;
     let roomy = position.height() >= 96.0;
+    let show_notes = matches!(mode, SurfaceMode::Day) && position.height() >= 112.0;
+    let notes = event.notes().filter(|_| show_notes).map(str::to_owned);
+    let details = render_details(title, &event_time, compact, tall, roomy, notes);
     let view = cx.entity().downgrade();
     div()
         .id(ElementId::NamedInteger("event-card".into(), element_key))
@@ -74,31 +81,47 @@ pub(super) fn render(
         .tooltip(move |window, cx| Tooltip::new(tooltip_text.clone()).build(window, cx))
         .on_click(move |_, _, app| {
             app.stop_propagation();
-            view.update(app, |this, cx| this.select_event(event_id, cx))
+            view.update(app, |this, cx| this.select_event(event_id, event_date, cx))
                 .ok();
         })
+        .child(render_category_header(category_name, foreground))
+        .child(details)
+        .into_any_element()
+}
+
+fn render_category_header(category_name: String, foreground: Hsla) -> gpui::AnyElement {
+    div()
+        .flex()
+        .items_center()
+        .justify_between()
+        .text_xs()
+        .font_medium()
         .child(
             div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .text_xs()
-                .font_medium()
-                .child(
-                    div()
-                        .rounded_full()
-                        .px_1()
-                        .bg(foreground.opacity(0.16))
-                        .child(category_name),
-                )
-                .child(
-                    div()
-                        .w(px(4.0))
-                        .h(px(4.0))
-                        .rounded_full()
-                        .bg(foreground.opacity(0.65)),
-                ),
+                .rounded_full()
+                .px_1()
+                .bg(foreground.opacity(0.16))
+                .child(category_name),
         )
+        .child(
+            div()
+                .w(px(4.0))
+                .h(px(4.0))
+                .rounded_full()
+                .bg(foreground.opacity(0.65)),
+        )
+        .into_any_element()
+}
+
+fn render_details(
+    title: String,
+    event_time: &str,
+    compact: bool,
+    tall: bool,
+    roomy: bool,
+    notes: Option<String>,
+) -> gpui::AnyElement {
+    div()
         .when(tall, |this| {
             this.child(
                 div()
@@ -108,7 +131,10 @@ pub(super) fn render(
                     .when(!roomy, gpui::Styled::truncate)
                     .child(title.clone()),
             )
-            .child(div().text_xs().opacity(0.78).child(event_time.clone()))
+            .child(div().text_xs().opacity(0.78).child(event_time.to_owned()))
+        })
+        .when_some(notes, |this, notes| {
+            this.child(div().text_xs().opacity(0.72).line_clamp(2).child(notes))
         })
         .when(!compact && !tall, |this| {
             this.child(div().text_xs().font_medium().truncate().child(title))

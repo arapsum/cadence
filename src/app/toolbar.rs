@@ -3,9 +3,10 @@ use gpui_component::{
     ActiveTheme as _, IconName, StyledExt as _, Theme, ThemeMode,
     button::{Button, ButtonVariants as _},
     select::{Select, SelectItem},
+    tab::{Tab, TabBar},
 };
 
-use crate::calendar::CategoryFilter;
+use crate::calendar::{CalendarViewMode, CategoryFilter};
 use crate::domain::CategoryColor;
 
 use super::{state::CadenceView, style::category_dot};
@@ -75,11 +76,29 @@ pub(super) fn render(
         .appearance(false)
         .placeholder("Filter categories")
         .into_any_element();
+    let mode_control = TabBar::new("calendar-view-mode")
+        .segmented()
+        .selected_index(match view.state.view_mode() {
+            CalendarViewMode::Day => 0,
+            CalendarViewMode::Week => 1,
+        })
+        .on_click(cx.listener(|this, index: &usize, _, cx| {
+            let mode = if *index == 0 {
+                CalendarViewMode::Day
+            } else {
+                CalendarViewMode::Week
+            };
+            this.set_view_mode(mode, cx);
+        }))
+        .child(Tab::new().label("Day"))
+        .child(Tab::new().label("Week"))
+        .into_any_element();
     let navigation = render_navigation(view, compact, cx);
     let today_button = Button::new("today")
         .outline()
         .label("Today")
-        .on_click(cx.listener(|this, _, _, cx| this.go_to_today(cx)));
+        .on_click(cx.listener(|this, _, _, cx| this.go_to_today(cx)))
+        .into_any_element();
     let theme_button = Button::new("toggle-theme")
         .ghost()
         .icon(theme_icon)
@@ -91,52 +110,98 @@ pub(super) fn render(
                 ThemeMode::Dark
             };
             Theme::change(mode, Some(window), cx);
-        });
+        })
+        .into_any_element();
 
     if compact {
-        div()
-            .v_flex()
-            .gap_3()
-            .p_4()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(title)
-                    .child(theme_button),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .gap_3()
-                    .child(filter)
-                    .child(today_button)
-                    .child(navigation),
-            )
-            .into_any_element()
+        render_compact(
+            title,
+            theme_button,
+            mode_control,
+            filter,
+            today_button,
+            navigation,
+        )
     } else {
-        div()
-            .flex()
-            .items_center()
-            .justify_between()
-            .gap_4()
-            .p_4()
-            .child(title)
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_3()
-                    .child(filter)
-                    .child(today_button)
-                    .child(navigation)
-                    .child(theme_button),
-            )
-            .into_any_element()
+        render_wide(
+            title,
+            theme_button,
+            mode_control,
+            filter,
+            today_button,
+            navigation,
+        )
     }
+}
+
+fn render_compact(
+    title: gpui::AnyElement,
+    theme_button: gpui::AnyElement,
+    mode_control: gpui::AnyElement,
+    filter: gpui::AnyElement,
+    today_button: gpui::AnyElement,
+    navigation: gpui::AnyElement,
+) -> gpui::AnyElement {
+    div()
+        .v_flex()
+        .gap_3()
+        .p_4()
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(title)
+                .child(theme_button),
+        )
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap_3()
+                .child(mode_control)
+                .child(filter),
+        )
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap_3()
+                .child(today_button)
+                .child(navigation),
+        )
+        .into_any_element()
+}
+
+fn render_wide(
+    title: gpui::AnyElement,
+    theme_button: gpui::AnyElement,
+    mode_control: gpui::AnyElement,
+    filter: gpui::AnyElement,
+    today_button: gpui::AnyElement,
+    navigation: gpui::AnyElement,
+) -> gpui::AnyElement {
+    div()
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap_4()
+        .p_4()
+        .child(title)
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap_3()
+                .child(mode_control)
+                .child(filter)
+                .child(today_button)
+                .child(navigation)
+                .child(theme_button),
+        )
+        .into_any_element()
 }
 
 fn render_navigation(
@@ -151,10 +216,11 @@ fn render_navigation(
         .border_1()
         .border_color(cx.theme().border)
         .child(
-            Button::new("previous-week")
+            Button::new("previous-period")
                 .ghost()
                 .icon(IconName::ChevronLeft)
-                .on_click(cx.listener(|this, _, _, cx| this.shift_week(false, cx))),
+                .tooltip("Previous period (Alt+Left)")
+                .on_click(cx.listener(|this, _, _, cx| this.shift_period(false, cx))),
         )
         .child(
             div()
@@ -166,13 +232,14 @@ fn render_navigation(
                 .border_l_1()
                 .border_r_1()
                 .border_color(cx.theme().border)
-                .child(view.week_range_label()),
+                .child(view.range_label()),
         )
         .child(
-            Button::new("next-week")
+            Button::new("next-period")
                 .ghost()
                 .icon(IconName::ChevronRight)
-                .on_click(cx.listener(|this, _, _, cx| this.shift_week(true, cx))),
+                .tooltip("Next period (Alt+Right)")
+                .on_click(cx.listener(|this, _, _, cx| this.shift_period(true, cx))),
         )
         .into_any_element()
 }

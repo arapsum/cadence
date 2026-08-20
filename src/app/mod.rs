@@ -1,8 +1,11 @@
+pub(super) mod actions;
+pub(super) mod day;
 pub(super) mod event_card;
 pub(super) mod grid;
 pub(super) mod presentation;
 pub(super) mod state;
 pub(super) mod style;
+pub(super) mod surface;
 pub(super) mod toolbar;
 pub(super) mod view;
 pub(super) mod week;
@@ -24,6 +27,7 @@ pub fn run() {
 
     app.run(|cx: &mut App| {
         gpui_component::init(cx);
+        actions::bind(cx);
 
         let window_options = WindowOptions {
             window_bounds: Some(WindowBounds::centered(size(px(1180.), px(760.)), cx)),
