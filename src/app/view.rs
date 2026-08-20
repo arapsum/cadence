@@ -1,5 +1,5 @@
 use gpui::{Context, IntoElement, Render, Window, div, prelude::*};
-use gpui_component::{ActiveTheme as _, StyledExt as _};
+use gpui_component::{ActiveTheme as _, Root, StyledExt as _};
 
 use crate::calendar::CalendarViewMode;
 use crate::components::title_bar::CadenceTitleBar;
@@ -9,6 +9,9 @@ use super::{actions, day, state::CadenceView, toolbar, week};
 impl Render for CadenceView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let error = self.error.clone();
+        let sheet_layer = Root::render_sheet_layer(window, cx);
+        let dialog_layer = Root::render_dialog_layer(window, cx);
+        let notification_layer = Root::render_notification_layer(window, cx);
         div()
             .key_context(actions::CALENDAR_CONTEXT)
             .on_action(cx.listener(|this, _: &actions::ShowDay, _, cx| {
@@ -25,6 +28,12 @@ impl Render for CadenceView {
             }))
             .on_action(cx.listener(|this, _: &actions::GoToToday, _, cx| {
                 this.go_to_today(cx);
+            }))
+            .on_action(cx.listener(|this, _: &actions::NewEvent, window, cx| {
+                this.new_event(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &actions::UndoDelete, window, cx| {
+                this.undo_delete(window, cx);
             }))
             .v_flex()
             .size_full()
@@ -49,5 +58,8 @@ impl Render for CadenceView {
                 CalendarViewMode::Day => day::render(self, window, cx).into_any_element(),
                 CalendarViewMode::Week => week::render(self, window, cx).into_any_element(),
             })
+            .children(sheet_layer)
+            .children(dialog_layer)
+            .children(notification_layer)
     }
 }

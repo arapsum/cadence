@@ -13,7 +13,15 @@ macro_rules! cadence_actions {
     };
 }
 
-cadence_actions!(ShowDay, ShowWeek, PreviousPeriod, NextPeriod, GoToToday);
+cadence_actions!(
+    ShowDay,
+    ShowWeek,
+    PreviousPeriod,
+    NextPeriod,
+    GoToToday,
+    NewEvent,
+    UndoDelete
+);
 
 pub(super) fn bind(cx: &mut App) {
     cx.bind_keys([
@@ -25,5 +33,9 @@ pub(super) fn bind(cx: &mut App) {
         KeyBinding::new("alt-right", NextPeriod, Some(CALENDAR_CONTEXT)),
         KeyBinding::new("cmd-t", GoToToday, Some(CALENDAR_CONTEXT)),
         KeyBinding::new("ctrl-t", GoToToday, Some(CALENDAR_CONTEXT)),
+        KeyBinding::new("cmd-n", NewEvent, Some(CALENDAR_CONTEXT)),
+        KeyBinding::new("ctrl-n", NewEvent, Some(CALENDAR_CONTEXT)),
+        KeyBinding::new("cmd-z", UndoDelete, Some(CALENDAR_CONTEXT)),
+        KeyBinding::new("ctrl-z", UndoDelete, Some(CALENDAR_CONTEXT)),
     ]);
 }

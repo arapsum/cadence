@@ -99,6 +99,16 @@ pub(super) fn render(
         .label("Today")
         .on_click(cx.listener(|this, _, _, cx| this.go_to_today(cx)))
         .into_any_element();
+    let new_event_button = Button::new("new-event")
+        .debug_selector(|| "new-event".into())
+        .primary()
+        .label("New event")
+        .tooltip("New event (Ctrl/Cmd+N)")
+        .on_click(cx.listener(|this, _, window, cx| {
+            cx.stop_propagation();
+            this.new_event(window, cx);
+        }))
+        .into_any_element();
     let theme_button = Button::new("toggle-theme")
         .ghost()
         .icon(theme_icon)
@@ -120,6 +130,7 @@ pub(super) fn render(
             mode_control,
             filter,
             today_button,
+            new_event_button,
             navigation,
         )
     } else {
@@ -129,6 +140,7 @@ pub(super) fn render(
             mode_control,
             filter,
             today_button,
+            new_event_button,
             navigation,
         )
     }
@@ -140,6 +152,7 @@ fn render_compact(
     mode_control: gpui::AnyElement,
     filter: gpui::AnyElement,
     today_button: gpui::AnyElement,
+    new_event_button: gpui::AnyElement,
     navigation: gpui::AnyElement,
 ) -> gpui::AnyElement {
     div()
@@ -170,6 +183,7 @@ fn render_compact(
                 .justify_between()
                 .gap_3()
                 .child(today_button)
+                .child(new_event_button)
                 .child(navigation),
         )
         .into_any_element()
@@ -181,6 +195,7 @@ fn render_wide(
     mode_control: gpui::AnyElement,
     filter: gpui::AnyElement,
     today_button: gpui::AnyElement,
+    new_event_button: gpui::AnyElement,
     navigation: gpui::AnyElement,
 ) -> gpui::AnyElement {
     div()
@@ -198,6 +213,7 @@ fn render_wide(
                 .child(mode_control)
                 .child(filter)
                 .child(today_button)
+                .child(new_event_button)
                 .child(navigation)
                 .child(theme_button),
         )

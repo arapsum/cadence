@@ -1,5 +1,6 @@
 use gpui::{
-    Context, ElementId, Hsla, IntoElement, StatefulInteractiveElement as _, div, prelude::*, px,
+    Context, ElementId, Hsla, IntoElement, KeyDownEvent, StatefulInteractiveElement as _, div,
+    prelude::*, px,
 };
 use gpui_component::{ActiveTheme as _, StyledExt as _, tooltip::Tooltip};
 
@@ -52,6 +53,7 @@ pub(super) fn render(
     let notes = event.notes().filter(|_| show_notes).map(str::to_owned);
     let details = render_details(title, &event_time, compact, tall, roomy, notes);
     let view = cx.entity().downgrade();
+    let key_view = view.clone();
     div()
         .id(ElementId::NamedInteger("event-card".into(), element_key))
         .absolute()
@@ -79,10 +81,33 @@ pub(super) fn render(
         .focus(|this| this.border_color(cx.theme().foreground))
         .hover(|this| this.opacity(0.92))
         .tooltip(move |window, cx| Tooltip::new(tooltip_text.clone()).build(window, cx))
-        .on_click(move |_, _, app| {
+        .on_key_down(
+            move |event: &KeyDownEvent, window, app| match event.keystroke.key.as_str() {
+                "enter" | "return" => {
+                    app.stop_propagation();
+                    key_view
+                        .update(app, |view, cx| {
+                            view.inspect_event(event_id, event_date, window, cx);
+                        })
+                        .ok();
+                }
+                "left" | "up" => {
+                    app.stop_propagation();
+                    window.focus_prev(app);
+                }
+                "right" | "down" => {
+                    app.stop_propagation();
+                    window.focus_next(app);
+                }
+                _ => {}
+            },
+        )
+        .on_click(move |_, window, app| {
             app.stop_propagation();
-            view.update(app, |this, cx| this.select_event(event_id, event_date, cx))
-                .ok();
+            view.update(app, |this, cx| {
+                this.inspect_event(event_id, event_date, window, cx);
+            })
+            .ok();
         })
         .child(render_category_header(category_name, foreground))
         .child(details)

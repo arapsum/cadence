@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
-use gpui::{Context, IntoElement, div, prelude::*, px};
+use gpui::{App, Context, IntoElement, KeyDownEvent, div, prelude::*, px};
 use gpui_component::ActiveTheme as _;
 
 use crate::{calendar::CategoryFilter, domain::time_to_offset};
+use jiff::civil::Time;
 
 use super::{
     event_card,
@@ -131,7 +132,19 @@ fn render_empty_slots(
         .map(|snapshot| {
             (0..column_count)
                 .flat_map(|day| {
+                    let day_date = snapshot
+                        .range
+                        .start()
+                        .checked_add(jiff::SignedDuration::from_hours(
+                            24 * i64::try_from(day).expect("slot day fits in i64"),
+                        ))
+                        .ok();
                     (6_u8..22).filter_map(move |hour| {
+                        let day_date = day_date?;
+                        let slot_key = u64::try_from(day)
+                            .expect("slot day fits in u64")
+                            .saturating_mul(32)
+                            .saturating_add(u64::from(hour));
                         let day_number = day;
                         let hour = i32::from(hour);
                         let has_event = snapshot.events.iter().any(|event| {
@@ -146,6 +159,14 @@ fn render_empty_slots(
                         if has_event {
                             return None;
                         }
+                        let view = cx.entity().downgrade();
+                        let key_view = view.clone();
+                        let slot_time = Time::constant(
+                            i8::try_from(hour).expect("slot hour fits in i8"),
+                            0,
+                            0,
+                            0,
+                        );
                         let top = (f32::from(u16::try_from(hour).expect("hour fits in u16"))
                             * 60.0)
                             .mul_add(PIXELS_PER_MINUTE, 4.0);
@@ -155,6 +176,7 @@ fn render_empty_slots(
                         let left = day.mul_add(column_width, 4.0);
                         Some(
                             div()
+                                .id(("empty-slot", slot_key))
                                 .absolute()
                                 .top(px(top))
                                 .left(px(left))
@@ -167,6 +189,28 @@ fn render_empty_slots(
                                 .border_dashed()
                                 .border_color(empty_border)
                                 .text_color(empty_foreground)
+                                .cursor_pointer()
+                                .tab_index(0)
+                                .on_key_down(move |event: &KeyDownEvent, window, app| {
+                                    if move_focus(event, window, app) {
+                                        return;
+                                    }
+                                    if matches!(event.keystroke.key.as_str(), "enter" | "return") {
+                                        app.stop_propagation();
+                                        key_view
+                                            .update(app, |view, cx| {
+                                                view.new_event_at(day_date, slot_time, window, cx);
+                                            })
+                                            .ok();
+                                    }
+                                })
+                                .on_click(move |_, window, app| {
+                                    app.stop_propagation();
+                                    view.update(app, |view, cx| {
+                                        view.new_event_at(day_date, slot_time, window, cx);
+                                    })
+                                    .ok();
+                                })
                                 .child("+")
                                 .into_any_element(),
                         )
@@ -175,6 +219,22 @@ fn render_empty_slots(
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn move_focus(event: &KeyDownEvent, window: &mut gpui::Window, app: &mut App) -> bool {
+    match event.keystroke.key.as_str() {
+        "left" | "up" => {
+            app.stop_propagation();
+            window.focus_prev(app);
+            true
+        }
+        "right" | "down" => {
+            app.stop_propagation();
+            window.focus_next(app);
+            true
+        }
+        _ => false,
+    }
 }
 
 fn render_event_cards(
