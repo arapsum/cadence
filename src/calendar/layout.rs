@@ -1,0 +1,267 @@
+use std::cmp::Ordering;
+
+use jiff::civil::{Date, Time};
+
+use crate::domain::{DateRange, Event, EventId};
+
+const MINUTES_PER_DAY: f32 = 24.0 * 60.0;
+
+/// Rendering constants for the week plane.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LayoutMetrics {
+    pixels_per_minute: f32,
+    minimum_event_height: f32,
+    minimum_occupancy_minutes: f32,
+}
+
+impl LayoutMetrics {
+    pub fn new(
+        pixels_per_minute: f32,
+        minimum_event_height: f32,
+        minimum_occupancy_minutes: f32,
+    ) -> Result<Self, LayoutError> {
+        if !pixels_per_minute.is_finite() || pixels_per_minute <= 0.0 {
+            return Err(LayoutError::InvalidMetric("pixels per minute"));
+        }
+        if !minimum_event_height.is_finite() || minimum_event_height <= 0.0 {
+            return Err(LayoutError::InvalidMetric("minimum event height"));
+        }
+        if !minimum_occupancy_minutes.is_finite() || minimum_occupancy_minutes <= 0.0 {
+            return Err(LayoutError::InvalidMetric("minimum occupancy minutes"));
+        }
+
+        Ok(Self {
+            pixels_per_minute,
+            minimum_event_height,
+            minimum_occupancy_minutes,
+        })
+    }
+
+    pub fn pixels_per_minute(self) -> f32 {
+        self.pixels_per_minute
+    }
+
+    pub fn minimum_event_height(self) -> f32 {
+        self.minimum_event_height
+    }
+
+    pub fn minimum_occupancy_minutes(self) -> f32 {
+        self.minimum_occupancy_minutes
+    }
+}
+
+impl Default for LayoutMetrics {
+    fn default() -> Self {
+        Self {
+            pixels_per_minute: 1.5,
+            minimum_event_height: 22.0,
+            minimum_occupancy_minutes: 15.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum LayoutError {
+    InvalidMetric(&'static str),
+    DateArithmetic,
+}
+
+/// The screen-space placement of one event in a day column.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PositionedEvent {
+    event_id: EventId,
+    day_offset: u8,
+    top: f32,
+    height: f32,
+    lane: u16,
+    lane_span: u16,
+    lane_count: u16,
+}
+
+impl PositionedEvent {
+    pub fn event_id(self) -> EventId {
+        self.event_id
+    }
+
+    pub fn day_offset(self) -> u8 {
+        self.day_offset
+    }
+
+    pub fn top(self) -> f32 {
+        self.top
+    }
+
+    pub fn height(self) -> f32 {
+        self.height
+    }
+
+    pub fn lane(self) -> u16 {
+        self.lane
+    }
+
+    pub fn lane_span(self) -> u16 {
+        self.lane_span
+    }
+
+    pub fn lane_count(self) -> u16 {
+        self.lane_count
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct WorkingEvent {
+    event_id: EventId,
+    start: f32,
+    actual_end: f32,
+    occupied_end: f32,
+}
+
+#[derive(Debug, Clone)]
+struct Placement {
+    event: WorkingEvent,
+    lane: usize,
+}
+
+/// Lay out all events in a seven-day range using end-exclusive overlap lanes.
+///
+/// Events are kept in their true time positions, while a minimum occupancy is
+/// used for collision detection so very short adjacent events remain clickable
+/// and visually distinct. Events outside the requested range are ignored.
+pub fn layout_week(
+    events: &[Event],
+    range: DateRange,
+    metrics: LayoutMetrics,
+) -> Result<Vec<PositionedEvent>, LayoutError> {
+    // Revalidate values in case a future constructor or deserializer bypasses it.
+    LayoutMetrics::new(
+        metrics.pixels_per_minute,
+        metrics.minimum_event_height,
+        metrics.minimum_occupancy_minutes,
+    )?;
+
+    let mut by_day = vec![Vec::<WorkingEvent>::new(); 7];
+    for event in events {
+        if !range.contains(event.date()) {
+            continue;
+        }
+        let day_offset = day_offset(range.start(), event.date())?;
+        let start = time_to_minutes(event.start_time());
+        let actual_end = time_to_minutes(event.end_time()).max(start);
+        let occupied_end = (start + metrics.minimum_occupancy_minutes)
+            .max(actual_end)
+            .min(MINUTES_PER_DAY);
+        by_day[day_offset].push(WorkingEvent {
+            event_id: event.id(),
+            start,
+            actual_end,
+            occupied_end,
+        });
+    }
+
+    let mut result = Vec::with_capacity(events.len());
+    for (day_offset, mut day_events) in by_day.into_iter().enumerate() {
+        day_events.sort_by(|left, right| {
+            left.start
+                .partial_cmp(&right.start)
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| {
+                    left.occupied_end
+                        .partial_cmp(&right.occupied_end)
+                        .unwrap_or(Ordering::Equal)
+                })
+                .then_with(|| left.event_id.cmp(&right.event_id))
+        });
+
+        let mut cursor = 0;
+        while cursor < day_events.len() {
+            let cluster_start = cursor;
+            let mut cluster_end = day_events[cursor].occupied_end;
+            cursor += 1;
+            while cursor < day_events.len() && day_events[cursor].start < cluster_end {
+                cluster_end = cluster_end.max(day_events[cursor].occupied_end);
+                cursor += 1;
+            }
+
+            let cluster = &day_events[cluster_start..cursor];
+            let mut lanes: Vec<Vec<WorkingEvent>> = Vec::new();
+            let mut placements = Vec::with_capacity(cluster.len());
+
+            for event in cluster.iter().copied() {
+                let lane = lanes
+                    .iter()
+                    .position(|lane_events| {
+                        lane_events
+                            .last()
+                            .is_some_and(|previous| previous.occupied_end <= event.start)
+                    })
+                    .unwrap_or_else(|| {
+                        lanes.push(Vec::new());
+                        lanes.len() - 1
+                    });
+                lanes[lane].push(event);
+                placements.push(Placement { event, lane });
+            }
+
+            let lane_count = lanes.len() as u16;
+            for placement in placements {
+                let mut lane_span = 1u16;
+                for lane_events in lanes.iter().skip(placement.lane + 1) {
+                    let blocked = lane_events
+                        .iter()
+                        .any(|other| overlaps(placement.event, *other));
+                    if blocked {
+                        break;
+                    }
+                    lane_span += 1;
+                }
+
+                let top = placement.event.start * metrics.pixels_per_minute;
+                let height = ((placement.event.actual_end - placement.event.start)
+                    * metrics.pixels_per_minute)
+                    .max(metrics.minimum_event_height)
+                    .min(MINUTES_PER_DAY * metrics.pixels_per_minute - top);
+                result.push(PositionedEvent {
+                    event_id: placement.event.event_id,
+                    day_offset: day_offset as u8,
+                    top,
+                    height,
+                    lane: placement.lane as u16,
+                    lane_span,
+                    lane_count,
+                });
+            }
+        }
+    }
+
+    result.sort_by(|left, right| {
+        left.day_offset
+            .cmp(&right.day_offset)
+            .then_with(|| left.top.partial_cmp(&right.top).unwrap_or(Ordering::Equal))
+            .then_with(|| left.event_id.cmp(&right.event_id))
+    });
+    Ok(result)
+}
+
+fn day_offset(start: Date, date: Date) -> Result<usize, LayoutError> {
+    let mut current = start;
+    for offset in 0..7 {
+        if current == date {
+            return Ok(offset);
+        }
+        current = current
+            .tomorrow()
+            .map_err(|_| LayoutError::DateArithmetic)?;
+    }
+    Err(LayoutError::DateArithmetic)
+}
+
+fn time_to_minutes(time: Time) -> f32 {
+    time.hour() as f32 * 60.0
+        + time.minute() as f32
+        + time.second() as f32 / 60.0
+        + time.subsec_nanosecond() as f32 / 60_000_000_000.0
+}
+
+fn overlaps(left: WorkingEvent, right: WorkingEvent) -> bool {
+    left.start < right.occupied_end && right.start < left.occupied_end
+}
