@@ -6,7 +6,7 @@ use crate::domain::{DateRange, Event, EventId};
 
 const MINUTES_PER_DAY: f32 = 24.0 * 60.0;
 
-/// Rendering constants for the week plane.
+/// Rendering constants for a calendar plane.
 ///
 /// # Fields
 ///
@@ -96,6 +96,8 @@ impl Default for LayoutMetrics {
 pub enum LayoutError {
     InvalidMetric(&'static str),
     DateArithmetic,
+    RangeTooWide,
+    TooManyLanes,
 }
 
 /// The screen-space placement of one event in a day column.
@@ -178,7 +180,7 @@ struct Placement {
     lane: usize,
 }
 
-/// Lay out all events in a seven-day range using end-exclusive overlap lanes.
+/// Lay out all events in a date range using end-exclusive overlap lanes.
 ///
 /// Events are kept in their true time positions, while a minimum occupancy is
 /// used for collision detection so very short adjacent events remain clickable
@@ -187,7 +189,7 @@ struct Placement {
 /// # Parameters
 ///
 /// - `events`: Events to position.
-/// - `range`: Seven-day date range represented by the calendar plane.
+/// - `range`: Date range represented by the calendar plane.
 /// - `metrics`: Rendering metrics used to convert time into pixels.
 ///
 /// # Returns
@@ -199,16 +201,10 @@ struct Placement {
 /// Returns an error when:
 ///
 /// - The rendering metrics are invalid.
-/// - Date arithmetic cannot map an event into the requested week.
-///
-/// # Panics
-///
-/// Panics when:
-///
-/// - The number of overlap lanes exceeds the supported `u16` range.
-/// - The requested day offset exceeds the supported `u8` range.
-/// - An event lane exceeds the supported `u16` range.
-pub fn layout_week(
+/// - Date arithmetic cannot map an event into the requested range.
+/// - The range contains more days than the layout can address.
+/// - An overlap cluster contains more lanes than the layout can address.
+pub fn layout_events(
     events: &[Event],
     range: DateRange,
     metrics: LayoutMetrics,
@@ -220,12 +216,13 @@ pub fn layout_week(
         metrics.minimum_occupancy_minutes,
     )?;
 
-    let mut by_day = vec![Vec::<WorkingEvent>::new(); 7];
+    let day_count = day_count(range)?;
+    let mut by_day = vec![Vec::<WorkingEvent>::new(); day_count];
     for event in events {
         if !range.contains(event.date()) {
             continue;
         }
-        let day_offset = day_offset(range.start(), event.date())?;
+        let day_offset = day_offset(range.start(), event.date(), day_count)?;
         let start = time_to_minutes(event.start_time());
         let actual_end = time_to_minutes(event.end_time()).max(start);
         let occupied_end = (start + metrics.minimum_occupancy_minutes)
@@ -283,7 +280,7 @@ pub fn layout_week(
                 placements.push(Placement { event, lane });
             }
 
-            let lane_count = u16::try_from(lanes.len()).expect("week lanes fit in u16");
+            let lane_count = u16::try_from(lanes.len()).map_err(|_| LayoutError::TooManyLanes)?;
             for placement in placements {
                 let mut lane_span = 1u16;
                 for lane_events in lanes.iter().skip(placement.lane + 1) {
@@ -303,10 +300,10 @@ pub fn layout_week(
                     .min(MINUTES_PER_DAY.mul_add(metrics.pixels_per_minute, -top));
                 result.push(PositionedEvent {
                     event_id: placement.event.event_id,
-                    day_offset: u8::try_from(day_offset).expect("week day fits in u8"),
+                    day_offset: u8::try_from(day_offset).map_err(|_| LayoutError::RangeTooWide)?,
                     top,
                     height,
-                    lane: u16::try_from(placement.lane).expect("event lane fits in u16"),
+                    lane: u16::try_from(placement.lane).map_err(|_| LayoutError::TooManyLanes)?,
                     lane_span,
                     lane_count,
                 });
@@ -323,9 +320,24 @@ pub fn layout_week(
     Ok(result)
 }
 
-fn day_offset(start: Date, date: Date) -> Result<usize, LayoutError> {
+fn day_count(range: DateRange) -> Result<usize, LayoutError> {
+    let mut current = range.start();
+    let mut count = 0_usize;
+    while current < range.end() {
+        count += 1;
+        if count > usize::from(u8::MAX) + 1 {
+            return Err(LayoutError::RangeTooWide);
+        }
+        current = current
+            .tomorrow()
+            .map_err(|_| LayoutError::DateArithmetic)?;
+    }
+    Ok(count)
+}
+
+fn day_offset(start: Date, date: Date, day_count: usize) -> Result<usize, LayoutError> {
     let mut current = start;
-    for offset in 0..7 {
+    for offset in 0..day_count {
         if current == date {
             return Ok(offset);
         }
