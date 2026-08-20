@@ -4,11 +4,12 @@ Cadence is a local-first desktop timetable for guiding a day and understanding a
 week. It is being built in Rust with [GPUI](https://gpui.rs/) and
 [GPUI Component](https://longbridge.github.io/gpui-component/).
 
-The current application is the Milestone 3 read-only timetable. It renders a
+The current application is the Milestone 4 timetable editor. It renders a
 seeded seven-day week view and a focused day view with category filtering,
 mode-aware navigation, sticky headers, overlap-aware event cards, vertical and
-horizontal scrolling, selection/tooltips, current-time treatment, seeded notes,
-and light/dark theme switching.
+horizontal scrolling, current-time treatment, seeded notes, light/dark theme
+switching, event inspection, and a shared create/edit dialog with validation,
+duplicate, delete, and session-scoped undo flows.
 
 ## Current platform baseline
 
@@ -100,6 +101,30 @@ After `cargo run`, verify all of the following:
 Milestone 3 passes only when the automated checks and this manual check both pass
 on the baseline platform. Record visual regressions before starting event
 editing.
+
+## Milestone 4 manual check
+
+After `cargo run`, verify all of the following:
+
+1. New event opens the editor from the toolbar and Cmd/Ctrl+N.
+2. Clicking an empty hour opens the editor with that date and hour prefilled;
+   Enter does the same when the slot is focused.
+3. The title field receives focus when the editor opens, and Tab reaches notes,
+   date, start/end time, category, and the footer buttons in order.
+4. Save shows field-level errors for an empty title, missing category, or an
+   end time that is not later than the start; invalid data is not stored.
+5. Save creates the event and both Day and Week surfaces update immediately.
+6. Selecting an event with the pointer or Enter opens its inspector. Edit
+   preserves its values, while Duplicate opens a new unsaved create draft.
+7. Cancel, Escape, and the dialog close affordance discard only after an
+   explicit confirmation when the draft is dirty.
+8. Delete requires confirmation, removes the event from both surfaces, and the
+   notification Undo action plus Cmd/Ctrl+Z restore the latest deletion.
+9. Closing the editor returns focus to the event card or empty slot that opened
+   it; the selected date and category filter remain intact.
+
+Milestone 4 passes only when this editor journey and the automated checks pass
+on the baseline platform. Persistence and restart behavior remain M5 work.
 
 ## Project documents
 

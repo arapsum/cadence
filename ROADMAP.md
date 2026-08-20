@@ -320,7 +320,11 @@ Done when:
 
 ### M4 — Event inspection and editing
 
-**Outcome:** the timetable is no longer read-only.
+**Status (2026-08-20): implementation complete; manual editor journey pending.**
+
+**Outcome:** the timetable is no longer read-only. Events can be created from a
+slot or the toolbar, inspected before mutation, edited in place, duplicated as
+a new draft, deleted intentionally, and restored during the current session.
 
 Tasks:
 
@@ -341,6 +345,26 @@ Done when:
   the current session.
 - Focus returns to the invoking slot/event when an editor closes.
 - All validation errors appear next to the relevant field.
+
+Implementation notes:
+
+- `src/editor.rs` owns the UI-independent form draft, default-time rules,
+  snap-aware time options, date adapters, and field-level validation.
+- `src/app/editor.rs` owns the GPUI Component dialog, editor subscriptions,
+  inspector actions, repository mutations, and transient undo state. Create and
+  edit share the same form entity; duplicate starts a fresh create draft with a
+  new identifier only when it is saved.
+- The toolbar's New event button and Cmd/Ctrl+N use the selected date. An empty
+  grid hour and Enter on a focused event/slot use the clicked date and hour.
+  Today uses the next snapped local time, while another date starts at the
+  configured display day start.
+- Save validates title, category, and end-after-start before touching the
+  repository. Cancel and dialog close require confirmation when the draft is
+  dirty. Delete uses a confirmation dialog and keeps the latest deleted event in
+  memory for the Undo notification and Cmd/Ctrl+Z.
+- Dialog focus is initially placed in the title field; GPUI Component's dialog
+  focus restoration returns focus to the event card or empty slot that opened
+  the surface.
 
 ### M5 — Durable local persistence
 

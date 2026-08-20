@@ -59,3 +59,30 @@ Automated validation currently passes:
 
 The remaining release check is a Wayland visual pass at the baseline and
 minimum window sizes, including horizontal scrolling and the seeded overlap.
+
+## M4 event editor
+
+The event workflow is intentionally split into an inspector and an editor
+dialog. Selecting an event (with a pointer or Enter after keyboard focus) opens
+the inspector first, keeping accidental edits out of the primary timetable
+surface. The inspector exposes Delete, Duplicate, and Edit. Duplicate copies
+the current editable values into a new, unsaved create draft; it does not write
+until Save is confirmed.
+
+The shared editor form contains title, notes, date, start time, end time, and
+category. `src/editor.rs` keeps its draft and validation independent of GPUI;
+`src/app/editor.rs` adapts those values to GPUI Component's Input, Textarea,
+DatePicker, and Select entities. Existing off-grid times are retained as
+additional select options so opening an event never silently changes its time.
+
+Creation defaults are deterministic: an empty slot uses that day and hour with
+a one-hour duration; New event uses the selected date and the next snapped local
+time when the date is today, otherwise the configured day start. The start is
+clamped so the default duration remains inside the configured display day.
+
+The form validates before repository mutation and places messages beside the
+invalid field. A dirty Cancel, Escape, or close request opens a discard
+confirmation. Delete first requires confirmation, then offers a persistent
+session-scoped Undo notification and Cmd/Ctrl+Z. Dialog focus starts in the
+title field and GPUI Component restores the invoking card or slot when the
+dialog stack closes.
