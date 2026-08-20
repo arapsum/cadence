@@ -226,8 +226,9 @@ const fn slot(
 ///
 /// # Panics
 ///
-/// Panics when a built-in sample category index cannot fit in the supported
-/// `u16` range.
+/// Panics when:
+///
+/// - A built-in sample category index cannot fit in the supported `u16` range.
 pub fn seed_sample_week(
     repository: &mut InMemoryRepository,
     date: Date,

@@ -265,8 +265,9 @@ pub fn format_time(time: Time, format: ClockFormat) -> String {
 ///
 /// # Panics
 ///
-/// Panics when a `jiff` time component cannot fit in the supported unsigned
-/// range.
+/// Panics when:
+///
+/// - A `jiff` time component cannot fit in the supported unsigned range.
 #[must_use]
 pub fn minutes_since_midnight(time: Time) -> u16 {
     let hour = u16::try_from(time.hour()).expect("time hour is non-negative");

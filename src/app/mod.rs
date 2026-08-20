@@ -16,7 +16,9 @@ use crate::components::title_bar::CadenceTitleBar;
 ///
 /// # Panics
 ///
-/// Panics when the Cadence window cannot be opened.
+/// Panics when:
+///
+/// - The Cadence window cannot be opened.
 pub fn run() {
     let app = gpui_platform::application().with_assets(gpui_component_assets::Assets);
 

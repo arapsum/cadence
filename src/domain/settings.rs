@@ -51,10 +51,12 @@ impl TimeZoneId {
     ///
     /// The system IANA time zone, falling back to `Etc/UTC` when no name is available.
     ///
-/// # Panics
-///
-/// Panics when the known-good `Etc/UTC` fallback cannot be validated.
-#[must_use]
+    /// # Panics
+    ///
+    /// Panics when:
+    ///
+    /// - The known-good `Etc/UTC` fallback cannot be validated.
+    #[must_use]
     pub fn system() -> Self {
         let system_zone = TimeZone::system();
         let identifier = system_zone.iana_name().unwrap_or("Etc/UTC");

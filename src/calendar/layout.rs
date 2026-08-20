@@ -203,8 +203,11 @@ struct Placement {
 ///
 /// # Panics
 ///
-/// Panics when the number of overlap lanes, the requested day offset, or an
-/// event lane exceeds its supported integer range.
+/// Panics when:
+///
+/// - The number of overlap lanes exceeds the supported `u16` range.
+/// - The requested day offset exceeds the supported `u8` range.
+/// - An event lane exceeds the supported `u16` range.
 pub fn layout_week(
     events: &[Event],
     range: DateRange,
