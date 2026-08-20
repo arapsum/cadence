@@ -86,11 +86,14 @@ src/
   main.rs                 application bootstrap and window setup
   lib.rs                  public modules and testable core
   app/
+    actions.rs             calendar key bindings and GPUI actions
+    day.rs                 focused one-day surface adapter
     mod.rs                composition root and window bootstrap
     state.rs              GPUI view state and actions
+    surface.rs             shared Day/Week surface shell and overlays
     view.rs               root render composition
     toolbar.rs            filters, navigation, and theme controls
-    week.rs               fixed week frame, header, and time gutter
+    week.rs               seven-day surface adapter
     grid.rs               time grid, empty slots, and now indicator
     event_card.rs         event card presentation and interaction
     presentation.rs       display-ready snapshots and date helpers
@@ -278,17 +281,35 @@ Done when:
 
 ### M3 — Day view and shared navigation
 
+**Status (2026-08-20): implementation complete; manual Wayland visual pass
+pending.**
+
 **Outcome:** the user can switch between a weekly overview and a focused daily
 plan without losing context.
 
 Tasks:
 
-- Add a Day/Week segmented control and keyboard actions.
-- Reuse the grid, event card, layout, and current-time components.
-- Give day cards room for notes/category details where height permits.
+- Add a Day/Week segmented control and keyboard actions. `TabBar` actions and
+  Cmd/Ctrl+1, Cmd/Ctrl+2, Alt+Left/Right, and Cmd/Ctrl+T are wired.
+- Reuse the grid, event card, layout, and current-time components through the
+  shared `surface` renderer; the Day surface is one full-width column and the
+  Week surface remains seven minimum-width columns.
+- Give day cards room for notes/category details where height permits. Seeded
+  deep-work events now carry notes, which are shown in sufficiently tall Day
+  cards and remain available in tooltips.
 - Preserve the selected date, filter, and approximate scroll position when
-  switching views.
+  switching views. Day and Week use the same minute-based vertical scroll
+  coordinate.
 - Make Today select the current date and reveal the current-time line.
+
+Implementation notes:
+
+- `CalendarState` derives a one-day or seven-day `DateRange` from the selected
+  date and moves by a day or week according to the active mode.
+- `layout_events` accepts any supported date range, so Day and Week share the
+  same overlap lanes and event geometry.
+- `src/app/day.rs` and `src/app/week.rs` are thin surface adapters over
+  `src/app/surface.rs`; toolbar and root action handling are mode-aware.
 
 Done when:
 

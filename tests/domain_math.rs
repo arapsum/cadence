@@ -9,11 +9,11 @@ use jiff::{
 };
 use uuid::Uuid;
 
-fn date(year: i16, month: i8, day: i8) -> Date {
+const fn date(year: i16, month: i8, day: i8) -> Date {
     Date::constant(year, month, day)
 }
 
-fn time(hour: i8, minute: i8) -> Time {
+const fn time(hour: i8, minute: i8) -> Time {
     Time::constant(hour, minute, 0, 0)
 }
 
@@ -56,7 +56,7 @@ fn time_formatting_and_offsets_are_deterministic() {
         "18:05"
     );
     assert_eq!(minutes_since_midnight(time(6, 30)), 390);
-    assert_eq!(time_to_offset(time(6, 30), 2.0).unwrap(), 780.0);
+    assert!((time_to_offset(time(6, 30), 2.0).unwrap() - 780.0).abs() < f32::EPSILON);
     assert!(matches!(
         time_to_offset(time(6, 30), 0.0),
         Err(CalendarError::InvalidPixelsPerMinute)

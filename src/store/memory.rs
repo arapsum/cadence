@@ -177,6 +177,7 @@ struct SampleSlot {
     end_minute: i8,
     category_index: usize,
     title: &'static str,
+    notes: Option<&'static str>,
 }
 
 const ROUTINE: usize = 0;
@@ -201,6 +202,27 @@ const fn slot(
         end_minute,
         category_index,
         title,
+        notes: None,
+    }
+}
+
+const fn slot_with_notes(
+    start_hour: i8,
+    start_minute: i8,
+    end_hour: i8,
+    end_minute: i8,
+    category_index: usize,
+    title: &'static str,
+    notes: &'static str,
+) -> SampleSlot {
+    SampleSlot {
+        start_hour,
+        start_minute,
+        end_hour,
+        end_minute,
+        category_index,
+        title,
+        notes: Some(notes),
     }
 }
 
@@ -270,7 +292,7 @@ pub fn seed_sample_week(
                 Time::constant(slot.start_hour, slot.start_minute, 0, 0),
                 Time::constant(slot.end_hour, slot.end_minute, 0, 0),
                 category_ids[slot.category_index],
-                None,
+                slot.notes.map(str::to_owned),
             );
             let id = EventId::from_uuid(Uuid::from_u128(event_index));
             let event = Event::new(id, draft, timestamp)
@@ -335,7 +357,15 @@ fn common_schedule(
 ) -> Vec<SampleSlot> {
     vec![
         slot(7, 30, 8, 0, ROUTINE, "Breakfast + plan"),
-        slot(8, 0, 10, 0, FOCUS, "Thesis"),
+        slot_with_notes(
+            8,
+            0,
+            10,
+            0,
+            FOCUS,
+            "Thesis",
+            "Protect this deep-work block and leave a short progress note before the break.",
+        ),
         slot(10, 0, 10, 20, BREAK, "Break"),
         slot(10, 20, 11, 50, FOCUS, technical_title),
         slot(11, 50, 12, 30, CAREER, "Job discovery"),
@@ -361,7 +391,15 @@ fn sunday_schedule() -> Vec<SampleSlot> {
 fn saturday_schedule() -> Vec<SampleSlot> {
     vec![
         slot(7, 30, 8, 0, ROUTINE, "Slow start"),
-        slot(8, 0, 10, 0, FOCUS, "Thesis / weekly catch-up"),
+        slot_with_notes(
+            8,
+            0,
+            10,
+            0,
+            FOCUS,
+            "Thesis / weekly catch-up",
+            "Review the week's open questions, then choose the smallest useful next step.",
+        ),
         slot(10, 0, 10, 20, BREAK, "Break"),
         slot(10, 20, 11, 50, FOCUS, "Coding / project build"),
         slot(11, 50, 12, 30, CAREER, "Job search review"),

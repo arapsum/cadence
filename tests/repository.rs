@@ -11,11 +11,11 @@ use jiff::{
 };
 use uuid::Uuid;
 
-fn date(year: i16, month: i8, day: i8) -> Date {
+const fn date(year: i16, month: i8, day: i8) -> Date {
     Date::constant(year, month, day)
 }
 
-fn time(hour: i8, minute: i8) -> Time {
+const fn time(hour: i8, minute: i8) -> Time {
     Time::constant(hour, minute, 0, 0)
 }
 
@@ -116,4 +116,5 @@ fn sample_week_contains_the_planning_screenshot_blocks() {
             .iter()
             .any(|event| event.title() == "Weekly planning")
     );
+    assert!(events.iter().any(|event| event.notes().is_some()));
 }

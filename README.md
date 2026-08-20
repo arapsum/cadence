@@ -4,10 +4,11 @@ Cadence is a local-first desktop timetable for guiding a day and understanding a
 week. It is being built in Rust with [GPUI](https://gpui.rs/) and
 [GPUI Component](https://longbridge.github.io/gpui-component/).
 
-The current application is the Milestone 2 read-only week view. It renders a
-seeded seven-day timetable with category filtering, navigation, sticky headers,
-overlap-aware event cards, vertical and horizontal scrolling, selection/tooltips,
-current-time treatment, and light/dark theme switching.
+The current application is the Milestone 3 read-only timetable. It renders a
+seeded seven-day week view and a focused day view with category filtering,
+mode-aware navigation, sticky headers, overlap-aware event cards, vertical and
+horizontal scrolling, selection/tooltips, current-time treatment, seeded notes,
+and light/dark theme switching.
 
 ## Current platform baseline
 
@@ -66,11 +67,12 @@ Run the same checks expected before completing a milestone:
 
 ```sh
 cargo fmt --all -- --check
-cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo clippy --locked --all-targets --all-features -- -D warnings \
+  -W clippy::pedantic -W clippy::nursery -W rust-2018-idioms
 cargo test --locked --all-targets
 ```
 
-## Milestone 2 manual check
+## Milestone 3 manual check
 
 After `cargo run`, verify all of the following:
 
@@ -78,20 +80,26 @@ After `cargo run`, verify all of the following:
 2. Minimize, maximize/restore, and close behave correctly.
 3. The category select opens, shows category dots, accepts one category, and
    filters the visible cards.
-4. Today, previous, and next preserve the selected weekday while changing the
-   displayed week range.
-5. The day header and time gutter remain fixed while the grid scrolls.
-6. Adjacent events do not collide, and the seeded Wednesday overlap remains
+4. The segmented control switches between Week and Day; Cmd/Ctrl+1 and
+   Cmd/Ctrl+2 perform the same actions.
+5. Selecting a day header or event opens that date in Day mode; returning to
+   Week highlights the same date and preserves the category filter.
+6. Today, previous, and next move by one day in Day mode and one week in Week
+   mode; Alt+Left/Right and Cmd/Ctrl+T perform the keyboard actions.
+7. The day header and time gutter remain fixed while the grid scrolls.
+8. Adjacent events do not collide, and the seeded Wednesday overlap remains
    individually clickable.
-7. Event hover/focus reveals the full title, category, time, and notes.
-8. The current day tint and green current-time line appear when today is in the
+9. Event hover/focus reveals the full title, category, time, and notes; a tall
+   Day card also shows the seeded note text.
+10. The current day tint and green current-time line appear when today is in the
    displayed week.
-9. Reducing the window below the seven-column minimum makes the grid
+11. Reducing the window below the seven-column minimum makes the Week grid
    horizontally scrollable while the toolbar remains usable.
-10. The theme button switches the entire window between light and dark colors.
+12. The theme button switches the entire window between light and dark colors.
 
-Milestone 2 passes only when the automated checks and this manual check both pass
-on the baseline platform. Record regressions before starting the day view.
+Milestone 3 passes only when the automated checks and this manual check both pass
+on the baseline platform. Record visual regressions before starting event
+editing.
 
 ## Project documents
 

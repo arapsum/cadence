@@ -19,8 +19,8 @@ with a timetable that stays readable as events overlap.
 ## Product shape
 
 Cadence is a native desktop app built in Rust with GPUI. It presents a
-seven-column week view, a focused day view later, and a shared event model with
-categories, colors, notes, and local wall-clock times.
+seven-column week view and a focused day view backed by a shared event model
+with categories, colors, notes, and local wall-clock times.
 
 ## Experience principles
 
@@ -34,10 +34,13 @@ categories, colors, notes, and local wall-clock times.
 
 ## Current scope
 
-Milestone 2 is a read-only seeded week view. It includes week navigation,
-Today, a single category filter, sticky day headers, a fixed time gutter,
-half-hour grid lines, overlap lanes, event selection/tooltips, current-day
-highlighting, a live current-time line, and light/dark theme support.
+Milestone 3 is a read-only seeded timetable with Day and Week surfaces. It
+includes mode-aware navigation, Today, a single category filter, sticky day
+headers, a fixed time gutter, half-hour grid lines, overlap lanes, event
+selection/tooltips, current-day highlighting, a live current-time line, and
+light/dark theme support. The selected date, filter, and approximate vertical
+scroll position survive mode changes; Day cards can reveal seeded notes when
+there is enough room.
 
-Event creation, editing, deletion, drag/resize, day view, persistence, and
-recurrence are later milestones.
+Event creation, editing, deletion, drag/resize, persistence, and recurrence are
+later milestones.
