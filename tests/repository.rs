@@ -87,6 +87,61 @@ fn repository_preserves_boundaries_and_referential_integrity() {
 }
 
 #[test]
+fn event_lifecycle_supports_edit_duplicate_delete_and_restore() {
+    let mut repository = InMemoryRepository::with_defaults();
+    let category = category(20, "Focus");
+    let category_id = category.id();
+    repository.create_category(category).unwrap();
+
+    let event_id = EventId::from_uuid(Uuid::from_u128(21));
+    let created = event(21, category_id, date(2024, 3, 4), 9, 10);
+    repository.create_event(created.clone()).unwrap();
+
+    let mut revised = created.clone();
+    revised
+        .revise(
+            EventDraft::new(
+                "Revised focus block",
+                date(2024, 3, 5),
+                time(10, 30),
+                time(12, 0),
+                category_id,
+                Some("Updated notes".to_owned()),
+            ),
+            Timestamp::from_second(60).unwrap(),
+        )
+        .unwrap();
+    repository.update_event(revised.clone()).unwrap();
+
+    let stored = repository.event(event_id).unwrap().unwrap();
+    assert_eq!(stored.title(), "Revised focus block");
+    assert_eq!(stored.date(), date(2024, 3, 5));
+    assert_eq!(stored.notes(), Some("Updated notes"));
+
+    let duplicate = Event::new(
+        EventId::from_uuid(Uuid::from_u128(22)),
+        stored.draft(),
+        Timestamp::from_second(120).unwrap(),
+    )
+    .unwrap();
+    repository.create_event(duplicate.clone()).unwrap();
+    assert_eq!(
+        repository
+            .events(DateRange::day(date(2024, 3, 5)).unwrap())
+            .unwrap()
+            .len(),
+        2
+    );
+
+    let deleted = repository.delete_event(event_id).unwrap();
+    assert_eq!(deleted, revised);
+    assert!(repository.event(event_id).unwrap().is_none());
+
+    repository.create_event(deleted.clone()).unwrap();
+    assert_eq!(repository.event(event_id).unwrap(), Some(deleted));
+}
+
+#[test]
 fn sample_week_contains_the_planning_screenshot_blocks() {
     let mut repository = InMemoryRepository::with_defaults();
     let week_start = seed_sample_week(

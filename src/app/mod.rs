@@ -1,5 +1,6 @@
 pub(super) mod actions;
 pub(super) mod day;
+pub(super) mod editor;
 pub(super) mod event_card;
 pub(super) mod grid;
 pub(super) mod presentation;

@@ -9,7 +9,7 @@ use jiff::{Timestamp, civil::Date};
 
 use crate::{
     calendar::{CalendarState, CalendarViewMode, CategoryFilter},
-    domain::{EventId, Settings},
+    domain::Settings,
     store::{InMemoryRepository, TimetableRepository, seed_sample_week},
 };
 
@@ -32,6 +32,8 @@ pub(super) struct CadenceView {
     pub(super) scroll_initialized: bool,
     pub(super) pending_scroll_minutes: Option<f32>,
     pub(super) error: Option<String>,
+    pub(super) last_deleted: Option<crate::domain::Event>,
+    pub(super) last_category: Option<crate::domain::CategoryId>,
     pub(super) subscriptions: Vec<Subscription>,
 }
 
@@ -76,6 +78,8 @@ impl CadenceView {
             scroll_initialized: false,
             pending_scroll_minutes: None,
             error,
+            last_deleted: None,
+            last_category: None,
             subscriptions: Vec::new(),
         };
         this.refresh_snapshot();
@@ -198,16 +202,6 @@ impl CadenceView {
         self.pending_scroll_minutes = Some(self.current_scroll_minutes());
         self.scroll_initialized = false;
         self.refresh_snapshot();
-        cx.notify();
-    }
-
-    pub(super) fn select_event(
-        &mut self,
-        event_id: EventId,
-        date: Date,
-        cx: &mut Context<'_, Self>,
-    ) {
-        self.state.select_event(event_id, date);
         cx.notify();
     }
 

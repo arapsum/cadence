@@ -19,6 +19,10 @@ gpui_platform = { git = "https://github.com/zed-industries/zed", features = [
 ] }
 gpui-component = { git = "https://github.com/longbridge/gpui-component", rev = "49229371e095bfd2ca77d336b5972b16956f0a87" }
 gpui-component-assets = { git = "https://github.com/longbridge/gpui-component", rev = "49229371e095bfd2ca77d336b5972b16956f0a87" }
+chrono = "0.4.45"
 uuid = { version = "1.24.1", features = ["serde", "v7"] }
 jiff = { version = "0.2.35", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
+
+[dev-dependencies]
+gpui = { git = "https://github.com/zed-industries/zed", features = ["test-support"] }
