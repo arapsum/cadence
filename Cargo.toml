@@ -1,0 +1,21 @@
+[package]
+name = "cadence"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "cadence"
+path = "src/bin/main.rs"
+
+[lib]
+name = "cadence"
+path = "src/lib.rs"
+
+[dependencies]
+gpui = { git = "https://github.com/zed-industries/zed" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", features = [
+  "font-kit",
+  "wayland",
+] }
+gpui-component = { git = "https://github.com/longbridge/gpui-component" }
+gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }
