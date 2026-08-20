@@ -185,6 +185,13 @@ reachable.
 **Outcome:** a pinned, reproducible GPUI toolchain that opens a window on the
 primary development platform.
 
+**Status (2026-08-20): automated gate passed; manual Wayland interaction check
+pending.** The tested dependency graph contains GPUI at
+`2b37a3ed5ec75a54f67936630548da03d411d2e8` and GPUI Component at
+`49229371e095bfd2ca77d336b5972b16956f0a87`. The smoke screen and exact manual
+checklist are documented in `README.md`. Do not start M1 until that checklist has
+been exercised on the baseline platform.
+
 Tasks:
 
 - Change the empty library skeleton into a binary plus testable library.
@@ -450,4 +457,3 @@ Use a thin vertical slice each time:
 
 This keeps every milestone demonstrable and avoids a long “infrastructure” phase
 with no usable timetable.
-
