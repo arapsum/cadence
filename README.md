@@ -1,41 +1,40 @@
 # Cadence
 
-Cadence is a local-first desktop timetable for guiding a day and understanding a
-week. It is being built in Rust with [GPUI](https://gpui.rs/) and
-[GPUI Component](https://longbridge.github.io/gpui-component/).
+Cadence is a local-first desktop timetable for planning a day and understanding
+a week. Built with Rust, [GPUI](https://gpui.rs/), and [GPUI
+Component](https://longbridge.github.io/gpui-component/), it keeps the calendar
+as a quiet, spatially honest time grid rather than a dashboard.
 
-The current application is the Milestone 4 timetable editor. It renders a
-seeded seven-day week view and a focused day view with category filtering,
-mode-aware navigation, sticky headers, overlap-aware event cards, vertical and
-horizontal scrolling, current-time treatment, seeded notes, light/dark theme
-switching, event inspection, and a shared create/edit dialog with validation,
-duplicate, delete, and session-scoped undo flows.
+> **Project status:** Milestone 4 is implemented. Cadence currently uses seeded,
+> in-memory data; durable local persistence and restart behavior are planned for
+> Milestone 5.
 
-## Current platform baseline
+## What it does
 
-The initial supported development environment is:
+- Switch between a seven-day Week view and a focused Day view.
+- Navigate by day or week, jump to today, and filter by category.
+- Read overlapping events clearly with a fixed time gutter, sticky day headers,
+  current-time treatment, and horizontal or vertical scrolling where needed.
+- Create events from the toolbar or an empty time slot; inspect, edit,
+  duplicate, delete, and undo a deletion during the current session.
+- Validate event titles, categories, and time ranges before changing the
+  timetable.
+- Use pointer and keyboard interactions with light and dark themes.
 
-- Ubuntu 26.04 LTS, x86_64
-- Wayland
-- Stable Rust 1.97.1 or newer
-- GPUI Component pinned in `Cargo.toml`; the complete GPUI graph pinned by
-  `Cargo.lock`
+## Requirements
 
-Only the Wayland backend is enabled right now. Enabling and testing the `x11`
-feature is a separate compatibility decision; do not assume an X11 session is
-supported by this milestone.
+The supported development baseline is Ubuntu 26.04 LTS on x86_64, running a
+Wayland session with stable Rust 1.97.1 or newer. Cadence currently enables only
+the Wayland backend; X11 support has not been enabled or tested.
 
-## Prerequisites
-
-Install Rust through [rustup](https://rustup.rs/) and select the current stable
-toolchain:
+Install Rust with [rustup](https://rustup.rs/):
 
 ```sh
 rustup default stable
 ```
 
-On Ubuntu/Debian, these packages cover the compiler and the native libraries
-needed by the current GPUI Wayland build:
+On Ubuntu or Debian, install the compiler toolchain and native libraries used by
+the current GPUI Wayland build:
 
 ```sh
 sudo apt update
@@ -45,13 +44,11 @@ sudo apt install \
   libwayland-dev libx11-xcb-dev libxkbcommon-x11-dev libzstd-dev
 ```
 
-A working Vulkan driver and Wayland compositor are runtime requirements. GPUI is
-pre-1.0 and changes quickly. GPUI Component currently declares GPUI from an
-unqualified Git source internally, so Cadence uses that same source to avoid two
-incompatible GPUI copies. Reproducibility comes from the committed `Cargo.lock`;
-use Cargo's `--locked` flag in automated checks.
+A working Vulkan driver and Wayland compositor are runtime requirements. The
+GPUI dependency graph is locked in `Cargo.lock`; use Cargo's `--locked` flag for
+reproducible builds and automated checks.
 
-## Build and run
+## Run
 
 From the repository root:
 
@@ -62,9 +59,22 @@ cargo run --locked
 The first build downloads Git dependencies and can take several minutes. Later
 builds reuse Cargo's cache.
 
-## Quality checks
+## Keyboard shortcuts
 
-Run the same checks expected before completing a milestone:
+| Action | Shortcut |
+| --- | --- |
+| Show Day | Cmd/Ctrl+1 |
+| Show Week | Cmd/Ctrl+2 |
+| Previous or next period | Alt+Left / Alt+Right |
+| Go to today | Cmd/Ctrl+T |
+| Create an event | Cmd/Ctrl+N |
+| Undo the latest deletion | Cmd/Ctrl+Z |
+
+In Day mode, previous and next move one day; in Week mode, they move one week.
+
+## Validate
+
+Run these checks before completing a milestone or submitting a change:
 
 ```sh
 cargo fmt --all -- --check
@@ -73,61 +83,27 @@ cargo clippy --locked --all-targets --all-features -- -D warnings \
 cargo test --locked --all-targets
 ```
 
-## Milestone 3 manual check
+## Manual verification
 
-After `cargo run`, verify all of the following:
+After running the application, verify the following on the supported baseline:
 
-1. The window opens at a usable size and can be moved and resized.
-2. Minimize, maximize/restore, and close behave correctly.
-3. The category select opens, shows category dots, accepts one category, and
-   filters the visible cards.
-4. The segmented control switches between Week and Day; Cmd/Ctrl+1 and
-   Cmd/Ctrl+2 perform the same actions.
-5. Selecting a day header or event opens that date in Day mode; returning to
-   Week highlights the same date and preserves the category filter.
-6. Today, previous, and next move by one day in Day mode and one week in Week
-   mode; Alt+Left/Right and Cmd/Ctrl+T perform the keyboard actions.
-7. The day header and time gutter remain fixed while the grid scrolls.
-8. Adjacent events do not collide, and the seeded Wednesday overlap remains
-   individually clickable.
-9. Event hover/focus reveals the full title, category, time, and notes; a tall
-   Day card also shows the seeded note text.
-10. The current day tint and green current-time line appear when today is in the
-   displayed week.
-11. Reducing the window below the seven-column minimum makes the Week grid
-   horizontally scrollable while the toolbar remains usable.
-12. The theme button switches the entire window between light and dark colors.
-
-Milestone 3 passes only when the automated checks and this manual check both pass
-on the baseline platform. Record visual regressions before starting event
-editing.
-
-## Milestone 4 manual check
-
-After `cargo run`, verify all of the following:
-
-1. New event opens the editor from the toolbar and Cmd/Ctrl+N.
-2. Clicking an empty hour opens the editor with that date and hour prefilled;
-   Enter does the same when the slot is focused.
-3. The title field receives focus when the editor opens, and Tab reaches notes,
-   date, start/end time, category, and the footer buttons in order.
-4. Save shows field-level errors for an empty title, missing category, or an
-   end time that is not later than the start; invalid data is not stored.
-5. Save creates the event and both Day and Week surfaces update immediately.
-6. Selecting an event with the pointer or Enter opens its inspector. Edit
-   preserves its values, while Duplicate opens a new unsaved create draft.
-7. Cancel, Escape, and the dialog close affordance discard only after an
-   explicit confirmation when the draft is dirty.
-8. Delete requires confirmation, removes the event from both surfaces, and the
-   notification Undo action plus Cmd/Ctrl+Z restore the latest deletion.
-9. Closing the editor returns focus to the event card or empty slot that opened
-   it; the selected date and category filter remain intact.
-
-Milestone 4 passes only when this editor journey and the automated checks pass
-on the baseline platform. Persistence and restart behavior remain M5 work.
+1. The window can be moved, resized, minimized, maximized/restored, and closed.
+2. The category filter, Day/Week control, navigation, and theme control work;
+   the selected date and filter survive a mode change.
+3. The fixed header and time gutter remain aligned while the grid scrolls.
+   Narrow windows retain usable cards through horizontal Week scrolling.
+4. Adjacent events do not collide, overlapping events remain individually
+   selectable, and event hover/focus exposes their complete details.
+5. The current-day tint and current-time line appear when today is displayed.
+6. New event, empty-slot creation, event inspection, editing, duplication,
+   deletion, and Undo update both Day and Week immediately.
+7. Invalid titles, categories, and time ranges show field-level errors without
+   changing stored data; cancelling a dirty form asks for confirmation.
+8. Keyboard focus begins in the editor title, follows the form in order, and
+   returns to the invoking card or slot when the dialog closes.
 
 ## Project documents
 
-- [Roadmap](ROADMAP.md)
-- [Product contract](PRODUCT.md)
-- [Design record](DESIGN.md)
+- [Roadmap](ROADMAP.md) — scope, milestones, and technical direction.
+- [Product contract](PRODUCT.md) — product intent and experience principles.
+- [Design record](DESIGN.md) — surface, geometry, and editor decisions.
