@@ -4,10 +4,10 @@ Cadence is a local-first desktop timetable for guiding a day and understanding a
 week. It is being built in Rust with [GPUI](https://gpui.rs/) and
 [GPUI Component](https://longbridge.github.io/gpui-component/).
 
-The current application is the Milestone 0 framework smoke test. It deliberately
-exercises the window chrome, bundled icons, text input and focus, select overlay,
-popover dismissal, vertical scrolling, and light/dark theme switching before the
-timetable domain is introduced.
+The current application is the Milestone 2 read-only week view. It renders a
+seeded seven-day timetable with category filtering, navigation, sticky headers,
+overlap-aware event cards, vertical and horizontal scrolling, selection/tooltips,
+current-time treatment, and light/dark theme switching.
 
 ## Current platform baseline
 
@@ -70,23 +70,31 @@ cargo clippy --locked --all-targets --all-features -- -D warnings
 cargo test --locked --all-targets
 ```
 
-## Milestone 0 manual check
+## Milestone 2 manual check
 
 After `cargo run`, verify all of the following:
 
 1. The window opens at a usable size and can be moved and resized.
 2. Minimize, maximize/restore, and close behave correctly.
-3. The bundled Sun/Moon icon renders on the theme button.
-4. The Day/Week select opens, accepts a selection, and closes.
-5. The popover opens, receives interaction, and dismisses when clicking outside.
-6. The event-title input accepts typing, selection, and keyboard focus traversal.
-7. The theme button switches the entire window between light and dark colors.
-8. Reducing the window height makes the Scroll checkpoint reachable by scrolling.
+3. The category select opens, shows category dots, accepts one category, and
+   filters the visible cards.
+4. Today, previous, and next preserve the selected weekday while changing the
+   displayed week range.
+5. The day header and time gutter remain fixed while the grid scrolls.
+6. Adjacent events do not collide, and the seeded Wednesday overlap remains
+   individually clickable.
+7. Event hover/focus reveals the full title, category, time, and notes.
+8. The current day tint and green current-time line appear when today is in the
+   displayed week.
+9. Reducing the window below the seven-column minimum makes the grid
+   horizontally scrollable while the toolbar remains usable.
+10. The theme button switches the entire window between light and dark colors.
 
-Milestone 0 passes only when the automated checks and this manual check both pass
-on the baseline platform. Record regressions before starting timetable domain
-work.
+Milestone 2 passes only when the automated checks and this manual check both pass
+on the baseline platform. Record regressions before starting the day view.
 
 ## Project documents
 
 - [Roadmap](ROADMAP.md)
+- [Product contract](PRODUCT.md)
+- [Design record](DESIGN.md)

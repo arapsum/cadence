@@ -85,7 +85,16 @@ track an unpinned branch after the spike.
 src/
   main.rs                 application bootstrap and window setup
   lib.rs                  public modules and testable core
-  app.rs                  root view and top-level actions
+  app/
+    mod.rs                composition root and window bootstrap
+    state.rs              GPUI view state and actions
+    view.rs               root render composition
+    toolbar.rs            filters, navigation, and theme controls
+    week.rs               fixed week frame, header, and time gutter
+    grid.rs               time grid, empty slots, and now indicator
+    event_card.rs         event card presentation and interaction
+    presentation.rs       display-ready snapshots and date helpers
+    style.rs              layout constants and category palette
   domain/
     event.rs              Event, Category, identifiers, validation
     time.rs               day/week ranges, snapping, formatting
@@ -185,8 +194,7 @@ reachable.
 **Outcome:** a pinned, reproducible GPUI toolchain that opens a window on the
 primary development platform.
 
-**Status (2026-08-20): automated gate passed; manual Wayland interaction check
-pending.** The tested dependency graph contains GPUI at
+**Status (2026-08-20): complete.** The tested dependency graph contains GPUI at
 `2b37a3ed5ec75a54f67936630548da03d411d2e8` and GPUI Component at
 `49229371e095bfd2ca77d336b5972b16956f0a87`. The smoke screen and exact manual
 checklist are documented in `README.md`. Do not start M1 until that checklist has
@@ -215,6 +223,8 @@ the timetable grid.
 
 **Outcome:** UI-independent types can represent and query a valid timetable.
 
+**Status (2026-08-20): complete.**
+
 Tasks:
 
 - Add `Event`, `Category`, `Settings`, and stable ID types.
@@ -235,6 +245,9 @@ Done when:
 
 **Outcome:** the reference design is recognizable and useful with seeded data.
 
+**Status (2026-08-20): implementation complete; manual Wayland visual pass
+pending.**
+
 Tasks:
 
 - Build the toolbar: title, category filter, Today, date range, previous/next.
@@ -244,6 +257,16 @@ Tasks:
 - Add vertical scrolling and scroll initially near the current/first event time.
 - Add a current-day treatment and a live current-time line.
 - Implement overlap lanes using the pure layout engine.
+
+Implementation notes:
+
+- src/calendar/layout.rs contains the GPUI-free end-exclusive overlap algorithm
+  with minimum occupancy for short events.
+- src/calendar/state.rs owns selected date, category filter, and selection
+  transitions.
+- src/app/week.rs renders one tracked scroll plane with fixed header/gutter
+  overlays and a responsive minimum column width; `grid.rs` and `event_card.rs`
+  keep the body surfaces independently evolvable.
 
 Done when:
 
