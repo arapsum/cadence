@@ -2373,7 +2373,7 @@ dependencies = [
 [[package]]
 name = "gpui-base"
 version = "0.5.2"
-source = "git+https://github.com/longbridge/gpui-component#49229371e095bfd2ca77d336b5972b16956f0a87"
+source = "git+https://github.com/longbridge/gpui-component?rev=49229371e095bfd2ca77d336b5972b16956f0a87#49229371e095bfd2ca77d336b5972b16956f0a87"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -2405,7 +2405,7 @@ dependencies = [
 [[package]]
 name = "gpui-component"
 version = "0.5.2"
-source = "git+https://github.com/longbridge/gpui-component#49229371e095bfd2ca77d336b5972b16956f0a87"
+source = "git+https://github.com/longbridge/gpui-component?rev=49229371e095bfd2ca77d336b5972b16956f0a87#49229371e095bfd2ca77d336b5972b16956f0a87"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2450,7 +2450,7 @@ dependencies = [
 [[package]]
 name = "gpui-component-assets"
 version = "0.5.1"
-source = "git+https://github.com/longbridge/gpui-component#49229371e095bfd2ca77d336b5972b16956f0a87"
+source = "git+https://github.com/longbridge/gpui-component?rev=49229371e095bfd2ca77d336b5972b16956f0a87#49229371e095bfd2ca77d336b5972b16956f0a87"
 dependencies = [
  "anyhow",
  "gpui",
@@ -2464,7 +2464,7 @@ dependencies = [
 [[package]]
 name = "gpui-component-macros"
 version = "0.5.1"
-source = "git+https://github.com/longbridge/gpui-component#49229371e095bfd2ca77d336b5972b16956f0a87"
+source = "git+https://github.com/longbridge/gpui-component?rev=49229371e095bfd2ca77d336b5972b16956f0a87#49229371e095bfd2ca77d336b5972b16956f0a87"
 dependencies = [
  "proc-macro2",
  "quote",

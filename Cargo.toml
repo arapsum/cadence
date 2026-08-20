@@ -17,5 +17,5 @@ gpui_platform = { git = "https://github.com/zed-industries/zed", features = [
   "font-kit",
   "wayland",
 ] }
-gpui-component = { git = "https://github.com/longbridge/gpui-component" }
-gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }
+gpui-component = { git = "https://github.com/longbridge/gpui-component", rev = "49229371e095bfd2ca77d336b5972b16956f0a87" }
+gpui-component-assets = { git = "https://github.com/longbridge/gpui-component", rev = "49229371e095bfd2ca77d336b5972b16956f0a87" }
