@@ -87,7 +87,7 @@ fn repository_preserves_boundaries_and_referential_integrity() {
 }
 
 #[test]
-fn sample_week_contains_short_adjacent_overlapping_and_empty_days() {
+fn sample_week_contains_the_planning_screenshot_blocks() {
     let mut repository = InMemoryRepository::with_defaults();
     let week_start = seed_sample_week(
         &mut repository,
@@ -98,16 +98,22 @@ fn sample_week_contains_short_adjacent_overlapping_and_empty_days() {
     let events = repository
         .events(DateRange::week(week_start, WeekStart::Sunday).unwrap())
         .unwrap();
-    assert!(events.iter().any(|event| event.end_time() == time(6, 30)));
+    assert_eq!(events.len(), 81);
     assert!(
         events
             .iter()
-            .any(|event| event.start_time() == time(10, 0) && event.end_time() == time(10, 30))
+            .any(|event| event.title() == "Breakfast + plan")
+    );
+    assert!(events.iter().any(|event| event.date() == date(2024, 3, 6)
+        && event.title() == "Backend / database interview prep"));
+    assert!(
+        events
+            .iter()
+            .any(|event| event.date() == date(2024, 3, 9) && event.title() == "Finish / commit")
     );
     assert!(
         events
             .iter()
-            .any(|event| event.date() == date(2024, 3, 6) && event.start_time() == time(7, 30))
+            .any(|event| event.title() == "Weekly planning")
     );
-    assert!(events.iter().all(|event| event.date() != date(2024, 3, 8)));
 }
