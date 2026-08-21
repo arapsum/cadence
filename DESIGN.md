@@ -111,3 +111,26 @@ to a timestamped recovery folder before a new database is created; Cadence
 never overwrites an unreadable file automatically. JSON export is versioned,
 pretty-printed, and written through a temporary sibling file followed by a
 rename so an interrupted export cannot leave a partial backup.
+
+## M6 direct manipulation and history
+
+Direct manipulation is an accelerated editing path layered on top of the M4
+editor, not a second source of event rules. A card click selects, a double-click
+opens inspection, dragging the body proposes a snapped date/time move, and
+dragging a top or bottom handle proposes a snapped resize. The original card is
+dimmed while a dashed ghost shows the proposed result, so the committed event
+remains visually distinct until drop succeeds.
+
+Move and resize math lives in `calendar::interaction` and preserves the domain
+invariants: events stay within one civil day, moves preserve duration, and
+resizes keep at least one snap interval. Near an edge of the scroll viewport,
+the active surface auto-scrolls in the same direction as the pointer. Escape
+cancels the manipulation and restores the original selection without touching
+the repository.
+
+History is session-scoped and bounded to 100 committed changes. Create, edit,
+delete, move, and resize operations share one `EventChange` representation.
+Undo/redo applies the inverse or forward repository operation first, then moves
+the verified entry between the stacks; a failed write leaves both storage and
+history unchanged. The toolbar keeps both controls next to the title, outside
+the notification region, and disables each control when its stack is empty.

@@ -5,10 +5,10 @@ a week. Built with Rust, [GPUI](https://gpui.rs/), and [GPUI
 Component](https://longbridge.github.io/gpui-component/), it keeps the calendar
 as a quiet, spatially honest time grid rather than a dashboard.
 
-> **Project status:** Milestone 5 is implemented. Cadence stores timetable data
-> in a local SQLite database, restores mode/filter preferences on restart, and
-> offers versioned JSON export plus non-destructive recovery for unreadable
-> databases.
+> **Project status:** Milestone 6 is implemented. Cadence stores timetable data
+> in a local SQLite database, supports snap-aware event dragging and resizing,
+> and provides bounded session undo/redo plus non-destructive recovery for
+> unreadable databases.
 
 ## What it does
 
@@ -17,10 +17,13 @@ as a quiet, spatially honest time grid rather than a dashboard.
 - Read overlapping events clearly with a fixed time gutter, sticky day headers,
   current-time treatment, and horizontal or vertical scrolling where needed.
 - Create events from the toolbar or an empty time slot; inspect, edit,
-  duplicate, delete, and undo a deletion during the current session.
+  duplicate, delete, move, and resize them; undo or redo committed changes
+  during the current session.
 - Validate event titles, categories, and time ranges before changing the
   timetable.
 - Use pointer and keyboard interactions with light and dark themes.
+- Drag event bodies across time and days, resize their start or end, preview
+  snapped changes, and cancel an in-progress manipulation with Escape.
 - Store events, categories, settings, and calendar preferences locally with
   transactional writes and numbered schema migrations.
 - Export a human-readable JSON backup or reveal the data folder from the
@@ -73,7 +76,8 @@ builds reuse Cargo's cache.
 | Previous or next period | Alt+Left / Alt+Right |
 | Go to today | Cmd/Ctrl+T |
 | Create an event | Cmd/Ctrl+N |
-| Undo the latest deletion | Cmd/Ctrl+Z |
+| Undo the latest change | Cmd/Ctrl+Z |
+| Redo the latest change | Cmd/Ctrl+Shift+Z or Ctrl+Y |
 
 In Day mode, previous and next move one day; in Week mode, they move one week.
 
@@ -121,7 +125,8 @@ After running the application, verify the following on the supported baseline:
    selectable, and event hover/focus exposes their complete details.
 5. The current-day tint and current-time line appear when today is displayed.
 6. New event, empty-slot creation, event inspection, editing, duplication,
-   deletion, and Undo update both Day and Week immediately.
+   deletion, dragging, resizing, undo, and redo update both Day and Week
+   immediately.
 7. Invalid titles, categories, and time ranges show field-level errors without
    changing stored data; cancelling a dirty form asks for confirmation.
 8. Keyboard focus begins in the editor title, follows the form in order, and

@@ -361,7 +361,9 @@ Implementation notes:
 - Save validates title, category, and end-after-start before touching the
   repository. Cancel and dialog close require confirmation when the draft is
   dirty. Delete uses a confirmation dialog and keeps the latest deleted event in
-  memory for the Undo notification and Cmd/Ctrl+Z.
+  memory for the Undo notification and Cmd/Ctrl+Z. Time options begin at the
+  configured display-day start, and the end-time options begin at the first
+  valid slot after the selected start time.
 - Dialog focus is initially placed in the title field; GPUI Component's dialog
   focus restoration returns focus to the event card or empty slot that opened
   the surface.
@@ -415,6 +417,9 @@ and no known issue can silently lose or shift an event.
 
 ### M6 — Direct manipulation
 
+**Status (2026-08-21): implementation complete; manual manipulation pass
+pending.**
+
 **Outcome:** reshaping a day is fast while keyboard/form editing remains a full
 fallback.
 
@@ -427,12 +432,31 @@ Tasks:
 - Commit only on drop; Escape cancels and restores the original event.
 - Add undo/redo commands for create, edit, move, resize, and delete.
 
+Implementation notes:
+
+- `src/app/interaction.rs` owns transient drag payloads, snapped proposals,
+  resize edges, and viewport-edge auto-scroll calculations.
+- `src/calendar/interaction.rs` keeps move and resize proposal math free of
+  GPUI, including duration preservation, date changes, clamping, and minimum
+  snap-sized durations.
+- Event cards distinguish click, double-click, move, and resize gestures. A
+  dashed preview and dimmed original card make an in-progress mutation clear;
+  Escape cancels it before persistence.
+- `EventHistory` stores up to 100 committed changes in memory. Undo and redo
+  only advance their stacks after the corresponding repository write succeeds;
+  failed writes restore the prior snapshot and view state.
+- Undo and redo controls sit beside the timetable title so notifications do not
+  obscure repeated history actions. Cmd/Ctrl+Z undoes and Cmd/Ctrl+Shift+Z (or
+  Ctrl+Y) redoes the latest committed change.
+
 Done when:
 
 - Drag and resize cannot produce invalid or negative durations.
 - A cancelled/failed operation leaves storage unchanged.
 - Click, double-click, drag, and resize gestures do not conflict.
 - All pointer operations have a keyboard/form alternative.
+- Undo and redo preserve the bounded session history and remain disabled when
+  no corresponding change is available.
 
 ### M7 — Repeating events
 
