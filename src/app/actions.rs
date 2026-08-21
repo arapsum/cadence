@@ -21,7 +21,6 @@ cadence_actions!(
     GoToToday,
     NewEvent,
     OpenAgenda,
-    ExportBackup,
     OpenSettings,
     Undo,
     Redo,

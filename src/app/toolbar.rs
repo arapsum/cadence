@@ -10,7 +10,7 @@ use gpui_component::{
 use crate::calendar::{CalendarViewMode, CategoryFilter};
 use crate::{domain::CategoryColor, store::TimetableRepository};
 
-use super::{actions, state::CadenceView, style::category_dot};
+use super::{state::CadenceView, style::category_dot};
 
 #[derive(Clone)]
 pub(super) struct FilterOption {
@@ -61,9 +61,7 @@ pub(super) fn render_titlebar_history(
         .icon(IconName::Undo2)
         .disabled(!interactive || !view.history.can_undo())
         .tooltip("Undo (Ctrl/Cmd+Z)")
-        .on_click(cx.listener(|_, _, window, cx| {
-            window.dispatch_action(Box::new(actions::Undo), cx);
-        }))
+        .on_click(cx.listener(|this, _, window, cx| this.undo(window, cx)))
         .into_any_element();
     let redo_button = Button::new("redo")
         .ghost()
@@ -71,9 +69,7 @@ pub(super) fn render_titlebar_history(
         .icon(IconName::Redo2)
         .disabled(!interactive || !view.history.can_redo())
         .tooltip("Redo (Ctrl/Cmd+Shift+Z)")
-        .on_click(cx.listener(|_, _, window, cx| {
-            window.dispatch_action(Box::new(actions::Redo), cx);
-        }))
+        .on_click(cx.listener(|this, _, window, cx| this.redo(window, cx)))
         .into_any_element();
     div()
         .flex()
@@ -119,9 +115,7 @@ pub(super) fn render_titlebar_actions(
         .small()
         .disabled(!interactive)
         .label("Today")
-        .on_click(cx.listener(|_, _, window, cx| {
-            window.dispatch_action(Box::new(actions::GoToToday), cx);
-        }));
+        .on_click(cx.listener(|this, _, _, cx| this.go_to_today(cx)));
     let new_event_button = Button::new("new-event")
         .debug_selector(|| "new-event".into())
         .primary()
@@ -129,9 +123,9 @@ pub(super) fn render_titlebar_actions(
         .disabled(!interactive)
         .label("New event")
         .tooltip("New event (Ctrl/Cmd+N)")
-        .on_click(cx.listener(|_, _, window, cx| {
+        .on_click(cx.listener(|this, _, window, cx| {
             cx.stop_propagation();
-            window.dispatch_action(Box::new(actions::NewEvent), cx);
+            this.new_event(window, cx);
         }));
 
     div()
@@ -163,12 +157,12 @@ fn render_mode_control(view: &CadenceView, cx: &Context<'_, CadenceView>) -> gpu
             CalendarViewMode::Day => 0,
             CalendarViewMode::Week => 1,
         })
-        .on_click(cx.listener(|_, index: &usize, window, cx| {
-            window.dispatch_action(
+        .on_click(cx.listener(|this, index: &usize, _, cx| {
+            this.set_view_mode(
                 if *index == 0 {
-                    Box::new(actions::ShowDay)
+                    CalendarViewMode::Day
                 } else {
-                    Box::new(actions::ShowWeek)
+                    CalendarViewMode::Week
                 },
                 cx,
             );
@@ -210,7 +204,13 @@ fn render_overflow_menu(
         .icon(IconName::Ellipsis)
         .tooltip("More timetable actions")
         .dropdown_menu(move |menu, _, _| {
-            let menu = add_navigation_items(menu, interactive, show_navigation, show_today);
+            let menu = add_navigation_items(
+                menu,
+                owner.clone(),
+                interactive,
+                show_navigation,
+                show_today,
+            );
             let menu = add_filter_items(
                 menu,
                 &owner,
@@ -219,12 +219,13 @@ fn render_overflow_menu(
                 selected_filter,
                 &filters,
             );
-            add_secondary_items(menu, interactive, is_dark)
+            add_secondary_items(menu, owner.clone(), interactive, is_dark)
         })
 }
 
 fn add_navigation_items(
     menu: PopupMenu,
+    owner: gpui::WeakEntity<CadenceView>,
     interactive: bool,
     show_navigation: bool,
     show_today: bool,
@@ -232,20 +233,26 @@ fn add_navigation_items(
     let menu = if show_navigation {
         menu
     } else {
+        let previous_owner = owner.clone();
+        let next_owner = owner.clone();
         menu.item(
             PopupMenuItem::new("Previous period")
                 .icon(IconName::ChevronLeft)
                 .disabled(!interactive)
-                .on_click(|_, window, cx| {
-                    window.dispatch_action(Box::new(actions::PreviousPeriod), cx);
+                .on_click(move |_, _, cx| {
+                    previous_owner
+                        .update(cx, |view, cx| view.shift_period(false, cx))
+                        .ok();
                 }),
         )
         .item(
             PopupMenuItem::new("Next period")
                 .icon(IconName::ChevronRight)
                 .disabled(!interactive)
-                .on_click(|_, window, cx| {
-                    window.dispatch_action(Box::new(actions::NextPeriod), cx);
+                .on_click(move |_, _, cx| {
+                    next_owner
+                        .update(cx, |view, cx| view.shift_period(true, cx))
+                        .ok();
                 }),
         )
     };
@@ -256,8 +263,8 @@ fn add_navigation_items(
             PopupMenuItem::new("Today")
                 .icon(IconName::Calendar)
                 .disabled(!interactive)
-                .on_click(|_, window, cx| {
-                    window.dispatch_action(Box::new(actions::GoToToday), cx);
+                .on_click(move |_, _, cx| {
+                    owner.update(cx, CadenceView::go_to_today).ok();
                 }),
         )
     }
@@ -298,29 +305,43 @@ fn add_filter_items(
     )
 }
 
-fn add_secondary_items(menu: PopupMenu, interactive: bool, is_dark: bool) -> PopupMenu {
+fn add_secondary_items(
+    menu: PopupMenu,
+    owner: gpui::WeakEntity<CadenceView>,
+    interactive: bool,
+    is_dark: bool,
+) -> PopupMenu {
+    let agenda_owner = owner.clone();
+    let export_owner = owner.clone();
+    let settings_owner = owner;
     menu.separator()
         .item(
             PopupMenuItem::new("Agenda")
                 .icon(IconName::Calendar)
                 .disabled(!interactive)
-                .on_click(|_, window, cx| {
-                    window.dispatch_action(Box::new(actions::OpenAgenda), cx);
+                .on_click(move |_, window, cx| {
+                    agenda_owner
+                        .update(cx, |view, cx| view.open_agenda(window, cx))
+                        .ok();
                 }),
         )
         .item(
             PopupMenuItem::new("Export backup")
                 .icon(IconName::File)
                 .disabled(!interactive)
-                .on_click(|_, window, cx| {
-                    window.dispatch_action(Box::new(actions::ExportBackup), cx);
+                .on_click(move |_, window, cx| {
+                    export_owner
+                        .update(cx, |view, cx| view.export_backup(window, cx))
+                        .ok();
                 }),
         )
         .item(
             PopupMenuItem::new("Settings")
                 .icon(IconName::Settings)
-                .on_click(|_, window, cx| {
-                    window.dispatch_action(Box::new(actions::OpenSettings), cx);
+                .on_click(move |_, window, cx| {
+                    settings_owner
+                        .update(cx, |view, cx| view.open_settings(window, cx))
+                        .ok();
                 }),
         )
         .separator()
@@ -365,9 +386,7 @@ fn render_navigation(
                 .ghost()
                 .icon(IconName::ChevronLeft)
                 .tooltip("Previous period (Alt+Left)")
-                .on_click(cx.listener(|_, _, window, cx| {
-                    window.dispatch_action(Box::new(actions::PreviousPeriod), cx);
-                })),
+                .on_click(cx.listener(|this, _, _, cx| this.shift_period(false, cx))),
         )
         .child(
             div()
@@ -386,9 +405,7 @@ fn render_navigation(
                 .ghost()
                 .icon(IconName::ChevronRight)
                 .tooltip("Next period (Alt+Right)")
-                .on_click(cx.listener(|_, _, window, cx| {
-                    window.dispatch_action(Box::new(actions::NextPeriod), cx);
-                })),
+                .on_click(cx.listener(|this, _, _, cx| this.shift_period(true, cx))),
         )
         .into_any_element()
 }
