@@ -10,6 +10,7 @@ use gpui_component::{
     input::{Input, InputEvent, InputState, Textarea, TextareaState},
     notification::Notification,
     select::{Select, SelectItem, SelectState},
+    window_paddings,
 };
 use jiff::{
     Timestamp,
@@ -459,13 +460,25 @@ impl CadenceView {
             EditorMode::Edit(_) => "Edit Event",
         };
 
-        window.open_dialog(cx, move |dialog, _, _| {
+        window.open_dialog(cx, move |dialog, dialog_window, _| {
+            let viewport = dialog_window.viewport_size();
+            let padding = window_paddings(dialog_window);
+
+            let available_height = viewport.height - padding.top - padding.bottom;
+            let dialog_height = px(468.0);
+
+            let margin_top = ((available_height - dialog_height) / 2.0).max(px(0.0));
+
             let owner_ok = owner.clone();
             let owner_cancel = owner.clone();
+
             let content_editor = content_editor.clone();
+
             let ok_editor = ok_editor.clone();
             let cancel_editor = cancel_editor.clone();
+
             dialog
+                .margin_top(margin_top)
                 .w(px(480.0))
                 .max_w(px(560.0))
                 .title(title)
