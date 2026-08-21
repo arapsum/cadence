@@ -1,8 +1,13 @@
-use std::time::Duration;
+use std::{
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use gpui::{AppContext as _, Context, Entity, ScrollHandle, Subscription, Window};
 use gpui_component::{
-    IndexPath,
+    IndexPath, WindowExt as _,
     select::{SelectEvent, SelectState},
 };
 use jiff::{Timestamp, civil::Date};
@@ -10,7 +15,10 @@ use jiff::{Timestamp, civil::Date};
 use crate::{
     calendar::{CalendarState, CalendarViewMode, CategoryFilter},
     domain::Settings,
-    store::{InMemoryRepository, TimetableRepository, seed_sample_week},
+    store::{
+        AppPreferences, CalendarViewModePreference, InMemoryRepository, StorageClient,
+        StorageError, TimetableRepository, database_path, default_categories,
+    },
 };
 
 use super::{
@@ -23,6 +31,10 @@ use super::{
 
 pub(super) struct CadenceView {
     pub(super) repository: InMemoryRepository,
+    pub(super) storage: StorageClient,
+    pub(super) storage_path: PathBuf,
+    pub(super) persistence_state: PersistenceState,
+    pending_snapshot: Option<crate::store::PersistenceSnapshot>,
     pub(super) settings: Settings,
     pub(super) state: CalendarState,
     pub(super) category_filter: Entity<SelectState<Vec<FilterOption>>>,
@@ -37,17 +49,34 @@ pub(super) struct CadenceView {
     pub(super) subscriptions: Vec<Subscription>,
 }
 
+/// Lifecycle state shown while the local database is opened or written.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub(super) enum PersistenceState {
+    /// The database is being opened or migrated.
+    Opening,
+    /// The database is available for normal use.
+    Ready,
+    /// A write is being committed.
+    Writing,
+    /// The database needs user-directed recovery.
+    Recovery(StorageError),
+}
+
 impl CadenceView {
+    #[allow(clippy::too_many_lines)]
     pub(super) fn new(window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
         let settings = Settings::default();
         let now = Timestamp::now();
         let (today, _) = local_date_time(now, &settings);
         let mut repository = InMemoryRepository::new(settings.clone());
-        let error = if let Err(seed_error) = seed_sample_week(&mut repository, today, now) {
-            Some(format!("Could not load sample week: {seed_error}"))
-        } else {
-            None
-        };
+        for category in default_categories() {
+            let _ = repository.create_category(category);
+        }
+
+        let storage_path = database_path().unwrap_or_else(|_| PathBuf::from("cadence.sqlite3"));
+        let storage = StorageClient::spawn(storage_path.clone());
+        #[cfg(not(test))]
+        let load_storage = storage.clone();
 
         let categories = repository.categories().unwrap_or_default();
         let filter_options = std::iter::once(FilterOption::all())
@@ -69,6 +98,10 @@ impl CadenceView {
         let state = CalendarState::new(today, settings.week_starts_on(), CalendarViewMode::Week);
         let mut this = Self {
             repository,
+            storage,
+            storage_path,
+            persistence_state: PersistenceState::Opening,
+            pending_snapshot: None,
             settings,
             state,
             category_filter,
@@ -77,26 +110,55 @@ impl CadenceView {
             now,
             scroll_initialized: false,
             pending_scroll_minutes: None,
-            error,
+            error: None,
             last_deleted: None,
             last_category: None,
             subscriptions: Vec::new(),
         };
-        this.refresh_snapshot();
 
         let category_filter_entity = this.category_filter.clone();
         this.subscriptions.push(cx.subscribe(
             &category_filter_entity,
             |this, _, event: &SelectEvent<Vec<FilterOption>>, cx| {
                 if let SelectEvent::Confirm(Some(filter)) = event {
+                    if !this.is_interactive() {
+                        return;
+                    }
+                    let before = this.repository.snapshot().ok();
                     this.state.set_category_filter(*filter);
                     this.state.clear_selection();
                     this.scroll_initialized = false;
                     this.refresh_snapshot();
+                    let _ = this.repository.replace_preferences(this.preferences());
+                    if let Some(before) = before {
+                        this.persist_snapshot(before, cx);
+                    }
                     cx.notify();
                 }
             },
         ));
+
+        #[cfg(not(test))]
+        cx.spawn_in(window, async move |weak_view, cx| {
+            let result = load_storage
+                .load()
+                .recv()
+                .await
+                .map_err(|_| StorageError::Io("storage worker stopped unexpectedly".to_owned()))
+                .and_then(std::convert::identity);
+            let _ = weak_view.update_in(cx, |view, window, cx| {
+                view.apply_loaded(result, window, cx);
+            });
+        })
+        .detach();
+
+        #[cfg(test)]
+        {
+            this.repository = InMemoryRepository::new(this.settings.clone());
+            let _ = crate::store::seed_sample_week(&mut this.repository, today, now);
+            this.persistence_state = PersistenceState::Ready;
+            this.refresh_snapshot();
+        }
 
         cx.spawn(async move |weak_view, cx| {
             loop {
@@ -119,7 +181,79 @@ impl CadenceView {
         this
     }
 
+    fn apply_loaded(
+        &mut self,
+        result: Result<crate::store::StorageSnapshot, StorageError>,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let snapshot = match result {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.persistence_state = PersistenceState::Recovery(error.clone());
+                self.error = Some(error.user_message());
+                cx.notify();
+                return;
+            }
+        };
+        match InMemoryRepository::from_snapshot(&snapshot) {
+            Ok(repository) => {
+                self.settings = snapshot.settings.clone();
+                self.repository = repository;
+                let (today, _) = local_date_time(self.now, &self.settings);
+                self.state = CalendarState::new(
+                    today,
+                    self.settings.week_starts_on(),
+                    match snapshot.preferences.view_mode {
+                        CalendarViewModePreference::Day => CalendarViewMode::Day,
+                        CalendarViewModePreference::Week => CalendarViewMode::Week,
+                    },
+                );
+                let filter = snapshot
+                    .preferences
+                    .category_filter
+                    .filter(|id| {
+                        snapshot
+                            .categories
+                            .iter()
+                            .any(|category| category.id() == *id)
+                    })
+                    .map_or(CategoryFilter::All, CategoryFilter::Only);
+                self.state.set_category_filter(filter);
+                let filter_options = std::iter::once(FilterOption::all())
+                    .chain(snapshot.categories.iter().map(|category| FilterOption {
+                        filter: CategoryFilter::Only(category.id()),
+                        label: category.name().into(),
+                        color: Some(category.color_token()),
+                    }))
+                    .collect::<Vec<_>>();
+                self.category_filter.update(cx, |select, cx| {
+                    select.set_items(filter_options, window, cx);
+                    select.set_selected_value(&filter, window, cx);
+                });
+                self.persistence_state = PersistenceState::Ready;
+                self.error = None;
+                self.scroll_initialized = false;
+                self.pending_scroll_minutes = None;
+                self.refresh_snapshot();
+            }
+            Err(error) => {
+                self.persistence_state =
+                    PersistenceState::Recovery(StorageError::InvalidEntity(error.to_string()));
+                self.error = Some(error.to_string());
+            }
+        }
+        cx.notify();
+    }
+
     pub(super) fn refresh_snapshot(&mut self) {
+        if !matches!(
+            self.persistence_state,
+            PersistenceState::Ready | PersistenceState::Writing
+        ) {
+            self.snapshot = None;
+            return;
+        }
         let range = match self.state.visible_range() {
             Ok(range) => range,
             Err(error) => {
@@ -167,6 +301,9 @@ impl CadenceView {
     }
 
     pub(super) fn go_to_today(&mut self, cx: &mut Context<'_, Self>) {
+        if !self.is_interactive() {
+            return;
+        }
         self.now = Timestamp::now();
         let (today, _) = local_date_time(self.now, &self.settings);
         self.state.go_to_today(today);
@@ -177,6 +314,9 @@ impl CadenceView {
     }
 
     pub(super) fn shift_period(&mut self, next: bool, cx: &mut Context<'_, Self>) {
+        if !self.is_interactive() {
+            return;
+        }
         let result = if next {
             self.state.next_period()
         } else {
@@ -198,6 +338,9 @@ impl CadenceView {
     }
 
     pub(super) fn select_date(&mut self, date: Date, cx: &mut Context<'_, Self>) {
+        if !self.is_interactive() {
+            return;
+        }
         self.state.select_date(date);
         self.pending_scroll_minutes = Some(self.current_scroll_minutes());
         self.scroll_initialized = false;
@@ -210,13 +353,205 @@ impl CadenceView {
         view_mode: CalendarViewMode,
         cx: &mut Context<'_, Self>,
     ) {
+        if !self.is_interactive() {
+            return;
+        }
         if self.state.view_mode() == view_mode {
             return;
         }
+        let before = self.repository.snapshot().ok();
         self.pending_scroll_minutes = Some(self.current_scroll_minutes());
         self.state.set_view_mode(view_mode);
         self.scroll_initialized = false;
         self.refresh_snapshot();
+        let _ = self.repository.replace_preferences(self.preferences());
+        if let Some(before) = before {
+            self.persist_snapshot(before, cx);
+        }
+        cx.notify();
+    }
+
+    pub(super) const fn is_interactive(&self) -> bool {
+        matches!(self.persistence_state, PersistenceState::Ready)
+    }
+
+    pub(super) fn retry_storage(&mut self, window: &Window, cx: &Context<'_, Self>) {
+        self.persistence_state = PersistenceState::Opening;
+        self.error = None;
+        self.snapshot = None;
+        let storage = self.storage.clone();
+        let weak_view = cx.entity().downgrade();
+        cx.spawn_in(window, async move |_, cx| {
+            let result = storage
+                .load()
+                .recv()
+                .await
+                .map_err(|_| StorageError::Io("storage worker stopped unexpectedly".to_owned()))
+                .and_then(std::convert::identity);
+            let _ = weak_view.update_in(cx, |view, window, cx| {
+                view.apply_loaded(result, window, cx);
+            });
+        })
+        .detach();
+    }
+
+    #[allow(clippy::unused_self, clippy::needless_pass_by_ref_mut)]
+    pub(super) fn archive_and_start_fresh(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let owner = cx.entity().downgrade();
+        window.open_alert_dialog(cx, move |alert, _, _| {
+            let owner = owner.clone();
+            alert
+                .title("Archive database and start fresh?")
+                .description("The unreadable database will be moved into a recovery folder. This cannot be undone from Cadence.")
+                .button_props(
+                    gpui_component::dialog::DialogButtonProps::default()
+                        .ok_text("Archive and start fresh")
+                        .ok_variant(gpui_component::button::ButtonVariant::Danger)
+                        .cancel_text("Keep database")
+                        .show_cancel(true),
+                )
+                .on_ok(move |_, window, app| {
+                    owner
+                        .update(app, |view, cx| view.start_archive(window, cx))
+                        .ok();
+                    true
+                })
+        });
+    }
+
+    fn start_archive(&mut self, window: &Window, cx: &Context<'_, Self>) {
+        self.persistence_state = PersistenceState::Opening;
+        self.error = None;
+        self.snapshot = None;
+        let storage = self.storage.clone();
+        let weak_view = cx.entity().downgrade();
+        cx.spawn_in(window, async move |_, cx| {
+            let result = storage
+                .archive_and_start_fresh()
+                .recv()
+                .await
+                .map_err(|_| StorageError::Io("storage worker stopped unexpectedly".to_owned()))
+                .and_then(std::convert::identity);
+            let _ = weak_view.update_in(cx, |view, window, cx| {
+                view.apply_loaded(result, window, cx);
+            });
+        })
+        .detach();
+    }
+
+    pub(super) fn export_backup(&self, window: &Window, cx: &Context<'_, Self>) {
+        if !self.is_interactive() {
+            return;
+        }
+        let directory = self
+            .storage_path
+            .parent()
+            .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+        let receiver = cx.prompt_for_new_path(&directory, Some("cadence-backup.json"));
+        let storage = self.storage.clone();
+        let weak_view = cx.entity().downgrade();
+        cx.spawn_in(window, async move |_, cx| {
+            let selected = receiver.await.ok().and_then(Result::ok).flatten();
+            let Some(path) = selected else {
+                return;
+            };
+            let result = storage
+                .export_json()
+                .recv()
+                .await
+                .map_err(|_| StorageError::Io("storage worker stopped unexpectedly".to_owned()))
+                .and_then(std::convert::identity)
+                .and_then(|json| write_backup_atomically(&path, &json));
+            let _ = weak_view.update(cx, |view, cx| match result {
+                Ok(()) => {
+                    view.error = None;
+                    cx.notify();
+                }
+                Err(error) => {
+                    view.error = Some(format!("Could not export backup: {error}"));
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    pub(super) const fn preferences(&self) -> AppPreferences {
+        AppPreferences {
+            view_mode: match self.state.view_mode() {
+                CalendarViewMode::Day => CalendarViewModePreference::Day,
+                CalendarViewMode::Week => CalendarViewModePreference::Week,
+            },
+            category_filter: match self.state.category_filter() {
+                CategoryFilter::All => None,
+                CategoryFilter::Only(id) => Some(id),
+            },
+        }
+    }
+
+    pub(super) fn persist_snapshot(
+        &mut self,
+        before: crate::store::PersistenceSnapshot,
+        cx: &Context<'_, Self>,
+    ) {
+        if matches!(self.persistence_state, PersistenceState::Writing) {
+            return;
+        }
+        let Ok(after) = self.repository.snapshot() else {
+            return;
+        };
+        self.persistence_state = PersistenceState::Writing;
+        self.pending_snapshot = Some(before);
+        let storage = self.storage.clone();
+        let weak_view = cx.entity().downgrade();
+        cx.spawn(async move |_, cx| {
+            let result = storage
+                .replace(after)
+                .recv()
+                .await
+                .map_err(|_| StorageError::Io("storage worker stopped unexpectedly".to_owned()))
+                .and_then(std::convert::identity);
+            let _ = weak_view.update(cx, |view, cx| {
+                view.finish_persist(result, cx);
+            });
+        })
+        .detach();
+    }
+
+    fn finish_persist(&mut self, result: Result<(), StorageError>, cx: &mut Context<'_, Self>) {
+        match result {
+            Ok(()) => {
+                self.pending_snapshot = None;
+                self.persistence_state = PersistenceState::Ready;
+                self.error = None;
+            }
+            Err(error) => {
+                if let Some(before) = self.pending_snapshot.take()
+                    && let Ok(repository) = InMemoryRepository::from_snapshot(&before)
+                {
+                    self.settings = before.settings;
+                    self.repository = repository;
+                    self.state.set_category_filter(
+                        before
+                            .preferences
+                            .category_filter
+                            .map_or(CategoryFilter::All, CategoryFilter::Only),
+                    );
+                    self.state
+                        .set_view_mode(match before.preferences.view_mode {
+                            CalendarViewModePreference::Day => CalendarViewMode::Day,
+                            CalendarViewModePreference::Week => CalendarViewMode::Week,
+                        });
+                    self.refresh_snapshot();
+                }
+                self.persistence_state = PersistenceState::Ready;
+                self.error = Some(format!("Could not save changes: {error}"));
+            }
+        }
         cx.notify();
     }
 
@@ -278,4 +613,27 @@ impl CadenceView {
     fn current_scroll_minutes(&self) -> f32 {
         (-self.scroll_handle.offset().y.as_f32() / PIXELS_PER_MINUTE).max(0.0)
     }
+}
+
+fn write_backup_atomically(path: &Path, contents: &str) -> Result<(), StorageError> {
+    let temporary = path.with_file_name(format!(
+        ".{}.tmp-{}",
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("cadence-backup.json"),
+        std::process::id(),
+    ));
+    let result = (|| {
+        let mut file =
+            fs::File::create(&temporary).map_err(|error| StorageError::Io(error.to_string()))?;
+        file.write_all(contents.as_bytes())
+            .map_err(|error| StorageError::Io(error.to_string()))?;
+        file.sync_all()
+            .map_err(|error| StorageError::Io(error.to_string()))?;
+        fs::rename(&temporary, path).map_err(|error| StorageError::Io(error.to_string()))
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
 }

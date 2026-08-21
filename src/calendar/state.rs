@@ -6,14 +6,14 @@ use crate::domain::{
 };
 
 /// The category selector shown above a calendar surface.
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum CategoryFilter {
     All,
     Only(CategoryId),
 }
 
 /// Calendar surface used to present the timetable.
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum CalendarViewMode {
     Day,
     Week,

@@ -1,10 +1,18 @@
-use gpui::{Context, IntoElement, Render, Window, div, prelude::*};
-use gpui_component::{ActiveTheme as _, Root, StyledExt as _};
+use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px};
+use gpui_component::{
+    ActiveTheme as _, Root, StyledExt as _,
+    button::{Button, ButtonVariants as _},
+    skeleton::Skeleton,
+};
 
 use crate::calendar::CalendarViewMode;
 use crate::components::title_bar::CadenceTitleBar;
 
-use super::{actions, day, state::CadenceView, toolbar, week};
+use super::{
+    actions, day,
+    state::{CadenceView, PersistenceState},
+    toolbar, week,
+};
 
 impl Render for CadenceView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
@@ -54,12 +62,161 @@ impl Render for CadenceView {
                         .child(error),
                 )
             })
-            .child(match self.state.view_mode() {
-                CalendarViewMode::Day => day::render(self, window, cx).into_any_element(),
-                CalendarViewMode::Week => week::render(self, window, cx).into_any_element(),
-            })
+            .child(render_content(self, window, cx))
             .children(sheet_layer)
             .children(dialog_layer)
             .children(notification_layer)
     }
+}
+
+fn render_content(
+    view: &mut CadenceView,
+    window: &Window,
+    cx: &Context<'_, CadenceView>,
+) -> gpui::AnyElement {
+    match &view.persistence_state {
+        PersistenceState::Opening => render_opening_skeleton(cx),
+        PersistenceState::Recovery(error) => {
+            let retry = cx.listener(|this, _, window, cx| this.retry_storage(window, cx));
+            let archive =
+                cx.listener(|this, _, window, cx| this.archive_and_start_fresh(window, cx));
+            div()
+                .flex_1()
+                .flex()
+                .items_center()
+                .justify_center()
+                .p_6()
+                .child(
+                    div()
+                        .max_w(px(520.0))
+                        .v_flex()
+                        .gap_3()
+                        .rounded_lg()
+                        .border_1()
+                        .border_color(cx.theme().border)
+                        .p_6()
+                        .bg(cx.theme().secondary)
+                        .child(
+                            div()
+                                .text_lg()
+                                .font_semibold()
+                                .child("Timetable needs attention"),
+                        )
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(error.user_message()),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!("Database: {}", view.storage_path.display())),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .gap_2()
+                                .child(
+                                    Button::new("storage-retry")
+                                        .outline()
+                                        .label("Retry")
+                                        .on_click(retry),
+                                )
+                                .child(
+                                    Button::new("storage-reveal")
+                                        .outline()
+                                        .label("Reveal data folder")
+                                        .on_click({
+                                            let path = view.storage_path.clone();
+                                            move |_, _, cx| {
+                                                cx.reveal_path(
+                                                    path.parent().unwrap_or_else(|| {
+                                                        std::path::Path::new(".")
+                                                    }),
+                                                );
+                                            }
+                                        }),
+                                )
+                                .child(
+                                    Button::new("storage-fresh")
+                                        .danger()
+                                        .label("Archive and start fresh")
+                                        .on_click(archive),
+                                ),
+                        ),
+                )
+                .into_any_element()
+        }
+        PersistenceState::Ready | PersistenceState::Writing => match view.state.view_mode() {
+            CalendarViewMode::Day => day::render(view, window, cx).into_any_element(),
+            CalendarViewMode::Week => week::render(view, window, cx).into_any_element(),
+        },
+    }
+}
+
+fn render_opening_skeleton(cx: &Context<'_, CadenceView>) -> gpui::AnyElement {
+    let day_headers = (0..7).map(|_| {
+        div()
+            .flex_1()
+            .child(Skeleton::new().secondary().h_5().w_20().max_w_full())
+            .into_any_element()
+    });
+    let time_rows = (0..6).map(|_| {
+        div()
+            .flex()
+            .gap_2()
+            .h(px(72.0))
+            .child(
+                div()
+                    .w(px(64.0))
+                    .flex_shrink_0()
+                    .child(Skeleton::new().secondary().h_4().w_16().max_w_full()),
+            )
+            .children((0..7).map(|_| {
+                div()
+                    .flex_1()
+                    .h_full()
+                    .rounded_md()
+                    .overflow_hidden()
+                    .child(Skeleton::new().secondary().h_full().w_full())
+                    .into_any_element()
+            }))
+            .into_any_element()
+    });
+
+    div()
+        .flex_1()
+        .p_4()
+        .overflow_hidden()
+        .child(
+            div()
+                .v_flex()
+                .gap_3()
+                .h_full()
+                .rounded_lg()
+                .border_1()
+                .border_color(cx.theme().border)
+                .p_4()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .text_sm()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(Skeleton::new().h_4().w_4().rounded_full())
+                        .child("Opening timetable…"),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .gap_2()
+                        .child(div().w(px(64.0)).flex_shrink_0())
+                        .children(day_headers),
+                )
+                .children(time_rows),
+        )
+        .into_any_element()
 }

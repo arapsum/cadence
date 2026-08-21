@@ -347,6 +347,9 @@ fn inspector_details(
 
 impl CadenceView {
     pub(super) fn new_event(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        if !self.is_interactive() {
+            return;
+        }
         let (today, current_time) = super::presentation::local_date_time(self.now, &self.settings);
         let date = self.state.selected_date();
         let (start_time, end_time) = crate::editor::default_times(
@@ -379,6 +382,9 @@ impl CadenceView {
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
+        if !self.is_interactive() {
+            return;
+        }
         let end_time = start_time
             .checked_add(jiff::SignedDuration::from_hours(1))
             .unwrap_or_else(|_| self.settings.day_end())
@@ -405,6 +411,9 @@ impl CadenceView {
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
+        if !self.is_interactive() {
+            return;
+        }
         self.state.select_event(event_id, date);
         let event = match self.repository.event(event_id) {
             Ok(Some(event)) => event,
@@ -564,6 +573,13 @@ impl CadenceView {
                 return false;
             }
         };
+        let before = match self.repository.snapshot() {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.show_error(error.to_string(), window, cx);
+                return false;
+            }
+        };
         let mode = editor.read_with(cx, |editor, _| editor.mode);
         let timestamp = Timestamp::now();
         let result = match mode {
@@ -608,6 +624,7 @@ impl CadenceView {
         self.pending_scroll_minutes = None;
         self.scroll_initialized = false;
         self.refresh_snapshot();
+        self.persist_snapshot(before, cx);
         window.push_notification(
             Notification::success(match mode {
                 EditorMode::Create => "Event created",
@@ -627,6 +644,9 @@ impl CadenceView {
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
+        if !self.is_interactive() {
+            return;
+        }
         let owner = cx.entity().downgrade();
         let event_id = event.id();
         let category_label = category.map_or_else(
@@ -775,11 +795,19 @@ impl CadenceView {
     }
 
     fn delete_event(&mut self, event_id: EventId, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let before = match self.repository.snapshot() {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.show_error(error.to_string(), window, cx);
+                return;
+            }
+        };
         match self.repository.delete_event(event_id) {
             Ok(event) => {
                 self.last_deleted = Some(event);
                 self.state.clear_selection();
                 self.refresh_snapshot();
+                self.persist_snapshot(before, cx);
                 let owner = cx.entity().downgrade();
                 window.push_notification(
                     Notification::new()
@@ -805,14 +833,25 @@ impl CadenceView {
     }
 
     pub(super) fn undo_delete(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        if !self.is_interactive() {
+            return;
+        }
         let Some(event) = self.last_deleted.clone() else {
             return;
+        };
+        let before = match self.repository.snapshot() {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.show_error(error.to_string(), window, cx);
+                return;
+            }
         };
         match self.repository.create_event(event.clone()) {
             Ok(()) => {
                 self.last_deleted = None;
                 self.state.select_event(event.id(), event.date());
                 self.refresh_snapshot();
+                self.persist_snapshot(before, cx);
                 window.push_notification(Notification::success("Event restored"), cx);
                 cx.notify();
             }
@@ -838,7 +877,7 @@ mod tests {
     use std::{cell::RefCell, rc::Rc};
 
     use gpui::{AppContext as _, Entity, Modifiers, TestAppContext};
-    use gpui_component::{Root, WindowExt as _};
+    use gpui_component::Root;
 
     use super::CadenceView;
 
@@ -864,12 +903,12 @@ mod tests {
             .expect("new event button was rendered");
         cx.simulate_click(new_event.center(), Modifiers::none());
 
-        assert!(cx.update(|window, app| window.has_active_dialog(app)));
+        assert!(cx.update(gpui_component::WindowExt::has_active_dialog));
         assert!(cx.update(|window, app| Root::render_dialog_layer(window, app).is_some()));
         cx.update(|window, app| window.draw(app).clear(app));
         assert!(cx.debug_bounds("event-editor-form").is_some());
 
-        cx.update(|window, app| window.close_all_dialogs(app));
+        cx.update(gpui_component::WindowExt::close_all_dialogs);
         let (event_id, event_date) = calendar.read_with(cx, |view, _| {
             let event = view
                 .snapshot
