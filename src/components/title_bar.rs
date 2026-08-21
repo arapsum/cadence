@@ -1,5 +1,5 @@
 use gpui::{
-    App, Context, Decorations, InteractiveElement as _, IntoElement, MouseButton,
+    AnyElement, App, Context, Decorations, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement as _, Render, RenderOnce, SharedString, StatefulInteractiveElement as _,
     Styled as _, Window, WindowControlArea, WindowOptions, div, prelude::FluentBuilder as _, px,
 };
@@ -8,12 +8,14 @@ use gpui_component::{
     h_flex,
 };
 
-const TITLE_BAR_HEIGHT: gpui::Pixels = px(34.);
+const TITLE_BAR_HEIGHT: gpui::Pixels = px(44.);
 
 /// Cadence's custom title bar and native-style window controls.
 #[derive(IntoElement)]
 pub struct CadenceTitleBar {
     title: SharedString,
+    leading: Option<AnyElement>,
+    controls: Option<AnyElement>,
 }
 
 impl CadenceTitleBar {
@@ -29,7 +31,39 @@ impl CadenceTitleBar {
     pub fn new(title: impl Into<SharedString>) -> Self {
         Self {
             title: title.into(),
+            leading: None,
+            controls: None,
         }
+    }
+
+    /// Adds controls next to the window title.
+    ///
+    /// # Parameters
+    ///
+    /// - `controls`: Application controls that should follow the title.
+    ///
+    /// # Returns
+    ///
+    /// A title bar containing `controls` beside its title.
+    #[must_use]
+    pub fn leading(mut self, controls: impl IntoElement) -> Self {
+        self.leading = Some(controls.into_any_element());
+        self
+    }
+
+    /// Adds application controls before the window-management buttons.
+    ///
+    /// # Parameters
+    ///
+    /// - `controls`: Interactive application controls for the trailing title-bar region.
+    ///
+    /// # Returns
+    ///
+    /// A title bar containing `controls` before the window controls.
+    #[must_use]
+    pub fn controls(mut self, controls: impl IntoElement) -> Self {
+        self.controls = Some(controls.into_any_element());
+        self
     }
 
     /// Returns the default `gpui_component` window options.
@@ -129,6 +163,7 @@ impl RenderOnce for WindowControl {
             .group("window-control")
             .flex()
             .items_center()
+            .relative()
             .justify_center()
             .w(px(20.))
             .h(px(20.))
@@ -207,7 +242,6 @@ impl RenderOnce for CadenceTitleBar {
             .id("cadence-title-bar")
             .flex()
             .items_center()
-            .justify_between()
             .h(TITLE_BAR_HEIGHT)
             .flex_shrink_0()
             .border_b_1()
@@ -258,6 +292,41 @@ impl RenderOnce for CadenceTitleBar {
                     .font_medium()
                     .child(self.title),
             )
+            .when_some(self.leading, |this, leading| {
+                this.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .h_full()
+                        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                        .child(leading),
+                )
+            })
+            .child(div().flex_1().h_full())
+            .when_some(self.controls, |this, controls| {
+                this.child(
+                    div()
+                        .id("title-bar-controls")
+                        .absolute()
+                        .inset_0()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .gap_2()
+                        .h_full()
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                                    cx.stop_propagation();
+                                })
+                                .child(controls),
+                        ),
+                )
+            })
             .child(WindowControls)
     }
 }

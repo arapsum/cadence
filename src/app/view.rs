@@ -61,8 +61,11 @@ impl Render for CadenceView {
             .size_full()
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
-            .child(CadenceTitleBar::new("Cadence"))
-            .child(toolbar::render(self, window, cx))
+            .child(
+                CadenceTitleBar::new("Timetable")
+                    .leading(toolbar::render_titlebar_history(self, cx))
+                    .controls(toolbar::render_titlebar_actions(self, window, cx)),
+            )
             .when_some(error, |this, error| {
                 this.child(
                     div()

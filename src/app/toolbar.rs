@@ -1,13 +1,14 @@
 use gpui::{App, Context, IntoElement, SharedString, Window, div, prelude::*, px};
 use gpui_component::{
-    ActiveTheme as _, Disableable as _, IconName, StyledExt as _, Theme, ThemeMode,
+    ActiveTheme as _, Disableable as _, IconName, Sizable as _, StyledExt as _, Theme, ThemeMode,
     button::{Button, ButtonVariants as _},
+    menu::{DropdownMenu as _, PopupMenu, PopupMenuItem},
     select::{Select, SelectItem},
     tab::{Tab, TabBar},
 };
 
 use crate::calendar::{CalendarViewMode, CategoryFilter};
-use crate::domain::CategoryColor;
+use crate::{domain::CategoryColor, store::TimetableRepository};
 
 use super::{state::CadenceView, style::category_dot};
 
@@ -49,28 +50,31 @@ impl SelectItem for FilterOption {
     }
 }
 
-#[allow(clippy::too_many_lines)]
-pub(super) fn render(
+pub(super) fn render_titlebar_history(
     view: &CadenceView,
-    window: &Window,
     cx: &Context<'_, CadenceView>,
 ) -> gpui::AnyElement {
-    let compact = window.viewport_size().width.as_f32() < 760.0;
-    let is_dark = cx.theme().mode.is_dark();
-    let theme_icon = if is_dark {
-        IconName::Sun
-    } else {
-        IconName::Moon
-    };
-    let theme_label = if is_dark {
-        "Use light theme"
-    } else {
-        "Use dark theme"
-    };
-    let title = div()
-        .text_2xl()
-        .font_semibold()
-        .child("Timetable")
+    let interactive = view.is_interactive();
+    let undo_button = Button::new("undo")
+        .ghost()
+        .small()
+        .icon(IconName::Undo2)
+        .disabled(!interactive || !view.history.can_undo())
+        .tooltip("Undo (Ctrl/Cmd+Z)")
+        .on_click(cx.listener(|this, _, window, cx| this.undo(window, cx)))
+        .into_any_element();
+    let redo_button = Button::new("redo")
+        .ghost()
+        .small()
+        .icon(IconName::Redo2)
+        .disabled(!interactive || !view.history.can_redo())
+        .tooltip("Redo (Ctrl/Cmd+Shift+Z)")
+        .on_click(cx.listener(|this, _, window, cx| this.redo(window, cx)))
+        .into_any_element();
+    div()
+        .flex()
+        .items_center()
+        .gap_1()
         .when(
             matches!(
                 view.persistence_state,
@@ -79,113 +83,76 @@ pub(super) fn render(
             |this| {
                 this.child(
                     div()
-                        .ml_2()
+                        .mr_1()
                         .text_xs()
-                        .font_normal()
                         .text_color(cx.theme().muted_foreground)
                         .child("Saving…"),
                 )
             },
         )
-        .into_any_element();
+        .child(undo_button)
+        .child(redo_button)
+        .into_any_element()
+}
+
+pub(super) fn render_titlebar_actions(
+    view: &CadenceView,
+    window: &Window,
+    cx: &Context<'_, CadenceView>,
+) -> gpui::AnyElement {
+    let width = window.viewport_size().width.as_f32();
+    let show_filter = width >= 960.0;
+    let show_today = width >= 760.0;
+    let show_navigation = width >= 1_160.0;
     let interactive = view.is_interactive();
-    let undo_button = Button::new("undo")
-        .ghost()
-        .icon(IconName::Undo2)
-        .disabled(!interactive || !view.history.can_undo())
-        .tooltip("Undo (Ctrl/Cmd+Z)")
-        .on_click(cx.listener(|this, _, window, cx| this.undo(window, cx)))
-        .into_any_element();
-    let redo_button = Button::new("redo")
-        .ghost()
-        .icon(IconName::Redo2)
-        .disabled(!interactive || !view.history.can_redo())
-        .tooltip("Redo (Ctrl/Cmd+Shift+Z)")
-        .on_click(cx.listener(|this, _, window, cx| this.redo(window, cx)))
-        .into_any_element();
     let filter = Select::new(&view.category_filter)
-        .w(px(if compact { 190.0 } else { 210.0 }))
+        .w(px(200.0))
         .appearance(false)
         .disabled(!interactive)
-        .placeholder("Filter categories")
-        .into_any_element();
-    let mode_control = render_mode_control(view, cx);
-    let navigation = render_navigation(view, compact, cx);
+        .placeholder("Filter categories");
     let today_button = Button::new("today")
         .outline()
+        .small()
         .disabled(!interactive)
         .label("Today")
-        .on_click(cx.listener(|this, _, _, cx| this.go_to_today(cx)))
-        .into_any_element();
+        .on_click(cx.listener(|this, _, _, cx| this.go_to_today(cx)));
     let new_event_button = Button::new("new-event")
         .debug_selector(|| "new-event".into())
         .primary()
+        .small()
         .disabled(!interactive)
         .label("New event")
         .tooltip("New event (Ctrl/Cmd+N)")
         .on_click(cx.listener(|this, _, window, cx| {
             cx.stop_propagation();
             this.new_event(window, cx);
-        }))
-        .into_any_element();
-    let export_button = Button::new("export-backup")
-        .outline()
-        .disabled(!interactive)
-        .label("Export")
-        .tooltip("Export a JSON backup")
-        .on_click(cx.listener(|this, _, window, cx| this.export_backup(window, cx)))
-        .into_any_element();
-    let agenda_button = Button::new("open-agenda")
-        .outline()
-        .disabled(!interactive)
-        .label("Agenda")
-        .tooltip("Open agenda (Ctrl/Cmd+F)")
-        .on_click(cx.listener(|this, _, window, cx| this.open_agenda(window, cx)))
-        .into_any_element();
-    let settings_button = Button::new("open-settings")
-        .ghost()
-        .icon(IconName::Settings)
-        .tooltip("Settings (Ctrl/Cmd+,)")
-        .on_click(cx.listener(|this, _, window, cx| this.open_settings(window, cx)))
-        .into_any_element();
-    let theme_button = Button::new("toggle-theme")
-        .ghost()
-        .icon(theme_icon)
-        .tooltip(theme_label)
-        .on_click(|_, window, cx| {
-            let mode = if cx.theme().mode.is_dark() {
-                ThemeMode::Light
-            } else {
-                ThemeMode::Dark
-            };
-            Theme::change(mode, Some(window), cx);
-        })
-        .into_any_element();
+        }));
 
-    let elements = ToolbarElements {
-        title,
-        undo_button,
-        redo_button,
-        theme_button,
-        mode_control,
-        filter,
-        today_button,
-        new_event_button,
-        export_button,
-        agenda_button,
-        settings_button,
-        navigation,
-    };
-    if compact {
-        render_compact(elements)
-    } else {
-        render_wide(elements)
-    }
+    div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .child(render_mode_control(view, cx))
+        .when(show_filter, |this| this.child(filter))
+        .when(show_today, |this| this.child(today_button))
+        .child(new_event_button)
+        .when(show_navigation, |this| {
+            this.child(render_navigation(view, false, cx))
+        })
+        .child(render_overflow_menu(
+            view,
+            show_filter,
+            show_today,
+            show_navigation,
+            cx,
+        ))
+        .into_any_element()
 }
 
 fn render_mode_control(view: &CadenceView, cx: &Context<'_, CadenceView>) -> gpui::AnyElement {
     TabBar::new("calendar-view-mode")
         .segmented()
+        .small()
         .selected_index(match view.state.view_mode() {
             CalendarViewMode::Day => 0,
             CalendarViewMode::Week => 1,
@@ -205,142 +172,202 @@ fn render_mode_control(view: &CadenceView, cx: &Context<'_, CadenceView>) -> gpu
         .into_any_element()
 }
 
-struct ToolbarElements {
-    title: gpui::AnyElement,
-    undo_button: gpui::AnyElement,
-    redo_button: gpui::AnyElement,
-    theme_button: gpui::AnyElement,
-    mode_control: gpui::AnyElement,
-    filter: gpui::AnyElement,
-    today_button: gpui::AnyElement,
-    new_event_button: gpui::AnyElement,
-    export_button: gpui::AnyElement,
-    agenda_button: gpui::AnyElement,
-    settings_button: gpui::AnyElement,
-    navigation: gpui::AnyElement,
+fn render_overflow_menu(
+    view: &CadenceView,
+    show_filter: bool,
+    show_today: bool,
+    show_navigation: bool,
+    cx: &Context<'_, CadenceView>,
+) -> impl IntoElement {
+    let owner = cx.entity().downgrade();
+    let interactive = view.is_interactive();
+    let is_dark = cx.theme().mode.is_dark();
+    let selected_filter = view.state.category_filter();
+    let filters = std::iter::once(FilterOption::all())
+        .chain(
+            view.repository
+                .categories()
+                .unwrap_or_default()
+                .into_iter()
+                .filter(crate::domain::Category::is_visible)
+                .map(|category| FilterOption {
+                    filter: CategoryFilter::Only(category.id()),
+                    label: category.name().into(),
+                    color: Some(category.color_token()),
+                }),
+        )
+        .collect::<Vec<_>>();
+
+    Button::new("titlebar-more")
+        .ghost()
+        .small()
+        .icon(IconName::Ellipsis)
+        .tooltip("More timetable actions")
+        .dropdown_menu(move |menu, _, _| {
+            let menu = add_navigation_items(
+                menu,
+                owner.clone(),
+                interactive,
+                show_navigation,
+                show_today,
+            );
+            let menu = add_filter_items(
+                menu,
+                &owner,
+                interactive,
+                show_filter,
+                selected_filter,
+                &filters,
+            );
+            add_secondary_items(menu, owner.clone(), interactive, is_dark)
+        })
 }
 
-fn render_compact(elements: ToolbarElements) -> gpui::AnyElement {
-    let ToolbarElements {
-        title,
-        undo_button,
-        redo_button,
-        theme_button,
-        mode_control,
-        filter,
-        today_button,
-        new_event_button,
-        export_button,
-        agenda_button,
-        settings_button,
-        navigation,
-    } = elements;
-    let history_controls = div()
-        .flex()
-        .items_center()
-        .gap_1()
-        .child(undo_button)
-        .child(redo_button);
-    div()
-        .v_flex()
-        .gap_3()
-        .p_4()
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_3()
-                        .child(title)
-                        .child(history_controls),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .child(settings_button)
-                        .child(theme_button),
-                ),
+fn add_navigation_items(
+    menu: PopupMenu,
+    owner: gpui::WeakEntity<CadenceView>,
+    interactive: bool,
+    show_navigation: bool,
+    show_today: bool,
+) -> PopupMenu {
+    let menu = if show_navigation {
+        menu
+    } else {
+        let previous_owner = owner.clone();
+        let next_owner = owner.clone();
+        menu.item(
+            PopupMenuItem::new("Previous period")
+                .icon(IconName::ChevronLeft)
+                .disabled(!interactive)
+                .on_click(move |_, _, cx| {
+                    previous_owner
+                        .update(cx, |view, cx| view.shift_period(false, cx))
+                        .ok();
+                }),
         )
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .gap_3()
-                .child(mode_control)
-                .child(filter),
+        .item(
+            PopupMenuItem::new("Next period")
+                .icon(IconName::ChevronRight)
+                .disabled(!interactive)
+                .on_click(move |_, _, cx| {
+                    next_owner
+                        .update(cx, |view, cx| view.shift_period(true, cx))
+                        .ok();
+                }),
         )
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .gap_3()
-                .child(today_button)
-                .child(new_event_button)
-                .child(export_button)
-                .child(agenda_button)
-                .child(navigation),
+    };
+    if show_today {
+        menu
+    } else {
+        menu.item(
+            PopupMenuItem::new("Today")
+                .icon(IconName::Calendar)
+                .disabled(!interactive)
+                .on_click(move |_, _, cx| {
+                    owner.update(cx, CadenceView::go_to_today).ok();
+                }),
         )
-        .into_any_element()
+    }
 }
 
-fn render_wide(elements: ToolbarElements) -> gpui::AnyElement {
-    let ToolbarElements {
-        title,
-        undo_button,
-        redo_button,
-        theme_button,
-        mode_control,
-        filter,
-        today_button,
-        new_event_button,
-        export_button,
-        agenda_button,
-        settings_button,
-        navigation,
-    } = elements;
-    let history_controls = div()
-        .flex()
-        .items_center()
-        .gap_1()
-        .child(undo_button)
-        .child(redo_button);
-    div()
-        .flex()
-        .items_center()
-        .justify_between()
-        .gap_4()
-        .p_4()
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap_3()
-                .child(title)
-                .child(history_controls),
+fn add_filter_items(
+    menu: PopupMenu,
+    owner: &gpui::WeakEntity<CadenceView>,
+    interactive: bool,
+    show_filter: bool,
+    selected_filter: CategoryFilter,
+    filters: &[FilterOption],
+) -> PopupMenu {
+    if show_filter {
+        return menu;
+    }
+    filters.iter().fold(
+        menu.separator()
+            .item(PopupMenuItem::label("Filter categories")),
+        |menu, option| {
+            let filter_owner = owner.clone();
+            let filter = option.filter;
+            menu.item(
+                PopupMenuItem::new(option.label.clone())
+                    .checked(filter == selected_filter)
+                    .disabled(!interactive)
+                    .on_click(move |_, window, cx| {
+                        filter_owner
+                            .update(cx, |view, cx| {
+                                view.category_filter.update(cx, |select, cx| {
+                                    select.set_selected_value(&filter, window, cx);
+                                });
+                            })
+                            .ok();
+                    }),
+            )
+        },
+    )
+}
+
+fn add_secondary_items(
+    menu: PopupMenu,
+    owner: gpui::WeakEntity<CadenceView>,
+    interactive: bool,
+    is_dark: bool,
+) -> PopupMenu {
+    let agenda_owner = owner.clone();
+    let export_owner = owner.clone();
+    let settings_owner = owner;
+    menu.separator()
+        .item(
+            PopupMenuItem::new("Agenda")
+                .icon(IconName::Calendar)
+                .disabled(!interactive)
+                .on_click(move |_, window, cx| {
+                    agenda_owner
+                        .update(cx, |view, cx| view.open_agenda(window, cx))
+                        .ok();
+                }),
         )
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap_3()
-                .child(mode_control)
-                .child(filter)
-                .child(today_button)
-                .child(new_event_button)
-                .child(export_button)
-                .child(agenda_button)
-                .child(navigation)
-                .child(settings_button)
-                .child(theme_button),
+        .item(
+            PopupMenuItem::new("Export backup")
+                .icon(IconName::File)
+                .disabled(!interactive)
+                .on_click(move |_, window, cx| {
+                    export_owner
+                        .update(cx, |view, cx| view.export_backup(window, cx))
+                        .ok();
+                }),
         )
-        .into_any_element()
+        .item(
+            PopupMenuItem::new("Settings")
+                .icon(IconName::Settings)
+                .on_click(move |_, window, cx| {
+                    settings_owner
+                        .update(cx, |view, cx| view.open_settings(window, cx))
+                        .ok();
+                }),
+        )
+        .separator()
+        .item(
+            PopupMenuItem::new(if is_dark {
+                "Use light theme"
+            } else {
+                "Use dark theme"
+            })
+            .icon(if is_dark {
+                IconName::Sun
+            } else {
+                IconName::Moon
+            })
+            .on_click(|_, window, cx| {
+                Theme::change(
+                    if cx.theme().mode.is_dark() {
+                        ThemeMode::Light
+                    } else {
+                        ThemeMode::Dark
+                    },
+                    Some(window),
+                    cx,
+                );
+            }),
+        )
 }
 
 fn render_navigation(
