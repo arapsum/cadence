@@ -150,7 +150,7 @@ fn run_worker(path: &Path, receiver: &Receiver<Command>) {
                     .and_then(|repository| repository.load_snapshot())
                     .and_then(|data| {
                         serde_json::to_string_pretty(&BackupFile {
-                            format_version: 1,
+                            format_version: 2,
                             application_version: env!("CARGO_PKG_VERSION"),
                             exported_at: Timestamp::now().to_string(),
                             data,

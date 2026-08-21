@@ -14,13 +14,14 @@ use uuid::Uuid;
 
 use crate::domain::{
     Category, CategoryColor, CategoryId, ClockFormat, DateRange, Event, EventDraft, EventId,
-    RepositoryError, Settings, SnapInterval, TimeZoneId, WeekStart,
+    RecurrenceException, RecurrenceSeries, RecurrenceSeriesId, RepositoryError, Settings,
+    SnapInterval, TimeZoneId, WeekStart,
 };
 
 use super::{AppPreferences, CalendarViewModePreference, PersistenceSnapshot, TimetableRepository};
 
 /// Latest schema version understood by Cadence.
-pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+pub const CURRENT_SCHEMA_VERSION: u32 = 3;
 
 /// Error raised while opening, migrating, validating, or using local storage.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -198,11 +199,15 @@ impl SqliteRepository {
         let preferences = self.load_preferences()?;
         let categories = self.load_categories()?;
         let events = self.load_all_events()?;
+        let recurrence_series = self.load_all_series()?;
+        let recurrence_exceptions = self.load_all_exceptions()?;
         Ok(PersistenceSnapshot {
             settings,
             preferences,
             categories,
             events,
+            recurrence_series,
+            recurrence_exceptions,
         })
     }
 
@@ -224,11 +229,17 @@ impl SqliteRepository {
     /// - The transaction cannot commit.
     pub fn replace_snapshot(&mut self, snapshot: &PersistenceSnapshot) -> Result<(), StorageError> {
         let tx = self.connection.transaction().map_err(sqlite_error)?;
+        tx.execute("DELETE FROM recurrence_exceptions", [])
+            .map_err(sqlite_error)?;
+        tx.execute("DELETE FROM recurrence_series", [])
+            .map_err(sqlite_error)?;
         tx.execute("DELETE FROM events", []).map_err(sqlite_error)?;
         tx.execute("DELETE FROM categories", [])
             .map_err(sqlite_error)?;
         insert_categories(&tx, &snapshot.categories)?;
         insert_events(&tx, &snapshot.events)?;
+        insert_series(&tx, &snapshot.recurrence_series)?;
+        insert_exceptions(&tx, &snapshot.recurrence_exceptions)?;
         update_settings(&tx, &snapshot.settings)?;
         update_preferences(&tx, &snapshot.preferences)?;
         tx.commit().map_err(sqlite_error)
@@ -322,6 +333,42 @@ impl SqliteRepository {
         rows.map(|row| row.map_err(sqlite_error).and_then(event_from_values))
             .collect()
     }
+
+    fn load_all_series(&self) -> Result<Vec<RecurrenceSeries>, StorageError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT data FROM recurrence_series ORDER BY id")
+            .map_err(sqlite_error)?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(sqlite_error)?;
+        rows.map(|row| {
+            row.map_err(sqlite_error).and_then(|data| {
+                serde_json::from_str(&data).map_err(|error| {
+                    StorageError::InvalidEntity(format!("invalid recurrence series: {error}"))
+                })
+            })
+        })
+        .collect()
+    }
+
+    fn load_all_exceptions(&self) -> Result<Vec<RecurrenceException>, StorageError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT data FROM recurrence_exceptions ORDER BY series_id, original_date")
+            .map_err(sqlite_error)?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(sqlite_error)?;
+        rows.map(|row| {
+            row.map_err(sqlite_error).and_then(|data| {
+                serde_json::from_str(&data).map_err(|error| {
+                    StorageError::InvalidEntity(format!("invalid recurrence exception: {error}"))
+                })
+            })
+        })
+        .collect()
+    }
 }
 
 impl TimetableRepository for SqliteRepository {
@@ -351,6 +398,108 @@ impl TimetableRepository for SqliteRepository {
         rows.map(|row| row.map_err(sqlite_error).and_then(event_from_values))
             .collect::<Result<Vec<_>, _>>()
             .map_err(Into::into)
+    }
+
+    fn recurrence_series(&self) -> Result<Vec<RecurrenceSeries>, RepositoryError> {
+        self.load_all_series().map_err(Into::into)
+    }
+
+    fn series(&self, id: RecurrenceSeriesId) -> Result<Option<RecurrenceSeries>, RepositoryError> {
+        self.connection
+            .query_row(
+                "SELECT data FROM recurrence_series WHERE id = ?1",
+                [id.to_string()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(sqlite_error)
+            .and_then(|data| {
+                data.map(|data| {
+                    serde_json::from_str(&data)
+                        .map_err(|error| StorageError::InvalidEntity(error.to_string()))
+                })
+                .transpose()
+            })
+            .map_err(Into::into)
+    }
+
+    fn recurrence_exceptions(&self) -> Result<Vec<RecurrenceException>, RepositoryError> {
+        self.load_all_exceptions().map_err(Into::into)
+    }
+
+    fn create_series(&mut self, series: RecurrenceSeries) -> Result<(), RepositoryError> {
+        let tx = self.connection.transaction().map_err(sqlite_error)?;
+        insert_series(&tx, std::slice::from_ref(&series)).map_err(map_repository_error)?;
+        tx.commit().map_err(sqlite_error).map_err(Into::into)
+    }
+
+    fn update_series(&mut self, series: RecurrenceSeries) -> Result<(), RepositoryError> {
+        let data = serde_json::to_string(&series)
+            .map_err(|error| RepositoryError::InvalidEntity(error.to_string()))?;
+        let changed = self
+            .connection
+            .execute(
+                "UPDATE recurrence_series SET category_id = ?2, start_date = ?3, data = ?4 WHERE id = ?1",
+                params![
+                    series.id().to_string(),
+                    series.template().category_id.to_string(),
+                    series.template().date.to_string(),
+                    data,
+                ],
+            )
+            .map_err(sqlite_error)?;
+        if changed == 0 {
+            return Err(RepositoryError::SeriesNotFound);
+        }
+        Ok(())
+    }
+
+    fn delete_series(
+        &mut self,
+        id: RecurrenceSeriesId,
+    ) -> Result<RecurrenceSeries, RepositoryError> {
+        let Some(series) = self.series(id)? else {
+            return Err(RepositoryError::SeriesNotFound);
+        };
+        self.connection
+            .execute(
+                "DELETE FROM recurrence_series WHERE id = ?1",
+                [id.to_string()],
+            )
+            .map_err(sqlite_error)?;
+        Ok(series)
+    }
+
+    fn upsert_exception(&mut self, exception: RecurrenceException) -> Result<(), RepositoryError> {
+        let data = serde_json::to_string(&exception)
+            .map_err(|error| RepositoryError::InvalidEntity(error.to_string()))?;
+        let Some(_series) = self.series(exception.series_id())? else {
+            return Err(RepositoryError::SeriesNotFound);
+        };
+        self.connection
+            .execute(
+                "INSERT INTO recurrence_exceptions (series_id, original_date, data) VALUES (?1, ?2, ?3) ON CONFLICT(series_id, original_date) DO UPDATE SET data = excluded.data",
+                params![exception.series_id().to_string(), exception.original_date().to_string(), data],
+            )
+            .map_err(sqlite_error)?;
+        Ok(())
+    }
+
+    fn delete_exception(
+        &mut self,
+        series_id: RecurrenceSeriesId,
+        original_date: Date,
+    ) -> Result<Option<RecurrenceException>, RepositoryError> {
+        let existing = self.recurrence_exceptions()?.into_iter().find(|exception| {
+            exception.series_id() == series_id && exception.original_date() == original_date
+        });
+        self.connection
+            .execute(
+                "DELETE FROM recurrence_exceptions WHERE series_id = ?1 AND original_date = ?2",
+                params![series_id.to_string(), original_date.to_string()],
+            )
+            .map_err(sqlite_error)?;
+        Ok(existing)
     }
 
     fn create_event(&mut self, event: Event) -> Result<(), RepositoryError> {
@@ -540,6 +689,17 @@ fn migrate(connection: &Connection) -> Result<(), StorageError> {
         tx.pragma_update(None, "user_version", 2_u32)
             .map_err(|error| StorageError::Migration(error.to_string()))?;
     }
+    if current < 3 {
+        tx.execute_batch(
+            "CREATE TABLE recurrence_series (id TEXT PRIMARY KEY NOT NULL, category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE RESTRICT, start_date TEXT NOT NULL, data TEXT NOT NULL);
+             CREATE INDEX recurrence_series_category_date_idx ON recurrence_series(category_id, start_date);
+             CREATE TABLE recurrence_exceptions (series_id TEXT NOT NULL REFERENCES recurrence_series(id) ON DELETE CASCADE, original_date TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(series_id, original_date));
+             CREATE INDEX recurrence_exceptions_date_idx ON recurrence_exceptions(original_date);",
+        )
+        .map_err(|error| StorageError::Migration(error.to_string()))?;
+        tx.pragma_update(None, "user_version", 3_u32)
+            .map_err(|error| StorageError::Migration(error.to_string()))?;
+    }
     tx.commit()
         .map_err(|error| StorageError::Migration(error.to_string()))
 }
@@ -598,6 +758,47 @@ fn insert_events(connection: &Connection, events: &[Event]) -> Result<(), Storag
 
 fn insert_event(connection: &Connection, event: &Event) -> Result<(), StorageError> {
     connection.execute("INSERT INTO events (id, category_id, title, date, start_time, end_time, notes, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)", params![event.id().to_string(), event.category_id().to_string(), event.title(), event.date().to_string(), event.start_time().to_string(), event.end_time().to_string(), event.notes(), event.created_at().to_string(), event.updated_at().to_string()]).map(|_| ()).map_err(|error| StorageError::Sqlite(error.to_string()))
+}
+
+fn insert_series(connection: &Connection, series: &[RecurrenceSeries]) -> Result<(), StorageError> {
+    for series in series {
+        let data = serde_json::to_string(series)
+            .map_err(|error| StorageError::InvalidEntity(error.to_string()))?;
+        let template = series.template();
+        connection
+            .execute(
+                "INSERT INTO recurrence_series (id, category_id, start_date, data) VALUES (?1, ?2, ?3, ?4)",
+                params![
+                    series.id().to_string(),
+                    template.category_id.to_string(),
+                    template.date.to_string(),
+                    data,
+                ],
+            )
+            .map_err(|error| StorageError::Sqlite(error.to_string()))?;
+    }
+    Ok(())
+}
+
+fn insert_exceptions(
+    connection: &Connection,
+    exceptions: &[RecurrenceException],
+) -> Result<(), StorageError> {
+    for exception in exceptions {
+        let data = serde_json::to_string(exception)
+            .map_err(|error| StorageError::InvalidEntity(error.to_string()))?;
+        connection
+            .execute(
+                "INSERT INTO recurrence_exceptions (series_id, original_date, data) VALUES (?1, ?2, ?3)",
+                params![
+                    exception.series_id().to_string(),
+                    exception.original_date().to_string(),
+                    data,
+                ],
+            )
+            .map_err(|error| StorageError::Sqlite(error.to_string()))?;
+    }
+    Ok(())
 }
 
 fn update_settings(connection: &Connection, settings: &Settings) -> Result<(), StorageError> {
@@ -799,6 +1000,8 @@ fn map_repository_error(error: StorageError) -> RepositoryError {
     let message = error.to_string();
     if message.contains("UNIQUE constraint failed: events.id") {
         RepositoryError::DuplicateEvent
+    } else if message.contains("UNIQUE constraint failed: recurrence_series.id") {
+        RepositoryError::DuplicateSeries
     } else if message.contains("UNIQUE constraint failed: categories.id") {
         RepositoryError::DuplicateCategory
     } else if message.contains("FOREIGN KEY constraint failed") {

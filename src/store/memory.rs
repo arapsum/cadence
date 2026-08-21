@@ -7,8 +7,9 @@ use jiff::{
 use uuid::Uuid;
 
 use crate::domain::{
-    Category, CategoryColor, CategoryId, DateRange, Event, EventDraft, EventId, RepositoryError,
-    Settings, WeekStart,
+    Category, CategoryColor, CategoryId, DateRange, Event, EventDraft, EventId,
+    RecurrenceException, RecurrenceSeries, RecurrenceSeriesId, RepositoryError, Settings,
+    WeekStart,
 };
 
 use super::{AppPreferences, PersistenceSnapshot, TimetableRepository};
@@ -23,6 +24,8 @@ use super::{AppPreferences, PersistenceSnapshot, TimetableRepository};
 #[derive(Debug, Clone, Default)]
 pub struct InMemoryRepository {
     events: HashMap<EventId, Event>,
+    recurrence_series: HashMap<RecurrenceSeriesId, RecurrenceSeries>,
+    recurrence_exceptions: HashMap<(RecurrenceSeriesId, jiff::civil::Date), RecurrenceException>,
     categories: HashMap<CategoryId, Category>,
     settings: Settings,
     preferences: AppPreferences,
@@ -42,6 +45,8 @@ impl InMemoryRepository {
     pub fn new(settings: Settings) -> Self {
         Self {
             events: HashMap::new(),
+            recurrence_series: HashMap::new(),
+            recurrence_exceptions: HashMap::new(),
             categories: HashMap::new(),
             settings,
             preferences: AppPreferences::default(),
@@ -58,14 +63,17 @@ impl InMemoryRepository {
         Self::new(Settings::default())
     }
 
-    /// Reports whether the repository has no events or categories.
+    /// Reports whether the repository has no stored data.
     ///
     /// # Returns
     ///
-    /// `true` when both the event and category stores are empty.
+    /// `true` when events, recurring series, exceptions, and categories are empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.events.is_empty() && self.categories.is_empty()
+        self.events.is_empty()
+            && self.recurrence_series.is_empty()
+            && self.recurrence_exceptions.is_empty()
+            && self.categories.is_empty()
     }
 
     /// Rebuilds an in-memory cache from a persisted snapshot.
@@ -92,6 +100,12 @@ impl InMemoryRepository {
         for event in snapshot.events.iter().cloned() {
             repository.create_event(event)?;
         }
+        for series in snapshot.recurrence_series.iter().cloned() {
+            repository.create_series(series)?;
+        }
+        for exception in snapshot.recurrence_exceptions.iter().cloned() {
+            repository.upsert_exception(exception)?;
+        }
         Ok(repository)
     }
 }
@@ -117,6 +131,78 @@ impl TimetableRepository for InMemoryRepository {
             )
         });
         Ok(events)
+    }
+
+    fn recurrence_series(&self) -> Result<Vec<RecurrenceSeries>, RepositoryError> {
+        let mut series = self.recurrence_series.values().cloned().collect::<Vec<_>>();
+        series.sort_by_key(RecurrenceSeries::id);
+        Ok(series)
+    }
+
+    fn series(&self, id: RecurrenceSeriesId) -> Result<Option<RecurrenceSeries>, RepositoryError> {
+        Ok(self.recurrence_series.get(&id).cloned())
+    }
+
+    fn recurrence_exceptions(&self) -> Result<Vec<RecurrenceException>, RepositoryError> {
+        let mut exceptions = self
+            .recurrence_exceptions
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        exceptions.sort_by_key(|exception| (exception.series_id(), exception.original_date()));
+        Ok(exceptions)
+    }
+
+    fn create_series(&mut self, series: RecurrenceSeries) -> Result<(), RepositoryError> {
+        if self.recurrence_series.contains_key(&series.id()) {
+            return Err(RepositoryError::DuplicateSeries);
+        }
+        self.ensure_category(series.template().category_id)?;
+        self.recurrence_series.insert(series.id(), series);
+        Ok(())
+    }
+
+    fn update_series(&mut self, series: RecurrenceSeries) -> Result<(), RepositoryError> {
+        if !self.recurrence_series.contains_key(&series.id()) {
+            return Err(RepositoryError::SeriesNotFound);
+        }
+        self.ensure_category(series.template().category_id)?;
+        self.recurrence_series.insert(series.id(), series);
+        Ok(())
+    }
+
+    fn delete_series(
+        &mut self,
+        id: RecurrenceSeriesId,
+    ) -> Result<RecurrenceSeries, RepositoryError> {
+        let series = self
+            .recurrence_series
+            .remove(&id)
+            .ok_or(RepositoryError::SeriesNotFound)?;
+        self.recurrence_exceptions
+            .retain(|(series_id, _), _| *series_id != id);
+        Ok(series)
+    }
+
+    fn upsert_exception(&mut self, exception: RecurrenceException) -> Result<(), RepositoryError> {
+        if !self.recurrence_series.contains_key(&exception.series_id()) {
+            return Err(RepositoryError::SeriesNotFound);
+        }
+        self.recurrence_exceptions.insert(
+            (exception.series_id(), exception.original_date()),
+            exception,
+        );
+        Ok(())
+    }
+
+    fn delete_exception(
+        &mut self,
+        series_id: RecurrenceSeriesId,
+        original_date: jiff::civil::Date,
+    ) -> Result<Option<RecurrenceException>, RepositoryError> {
+        Ok(self
+            .recurrence_exceptions
+            .remove(&(series_id, original_date)))
     }
 
     fn create_event(&mut self, event: Event) -> Result<(), RepositoryError> {
@@ -170,7 +256,12 @@ impl TimetableRepository for InMemoryRepository {
     }
 
     fn delete_category(&mut self, id: CategoryId) -> Result<Category, RepositoryError> {
-        if self.events.values().any(|event| event.category_id() == id) {
+        if self.events.values().any(|event| event.category_id() == id)
+            || self
+                .recurrence_series
+                .values()
+                .any(|series| series.template().category_id == id)
+        {
             return Err(RepositoryError::CategoryInUse);
         }
         self.categories
@@ -209,6 +300,8 @@ impl TimetableRepository for InMemoryRepository {
             preferences: self.preferences,
             categories,
             events,
+            recurrence_series: self.recurrence_series()?,
+            recurrence_exceptions: self.recurrence_exceptions()?,
         })
     }
 }

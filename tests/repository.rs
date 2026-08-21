@@ -1,7 +1,8 @@
 use cadence::{
     domain::{
-        Category, CategoryColor, CategoryId, DateRange, Event, EventDraft, EventId, Settings,
-        WeekStart,
+        Category, CategoryColor, CategoryId, DateRange, Event, EventDraft, EventId,
+        RecurrenceException, RecurrenceRule, RecurrenceSeries, RecurrenceSeriesId, Settings,
+        WeekStart, WeekdaySet,
     },
     store::{InMemoryRepository, TimetableRepository, seed_sample_week},
 };
@@ -172,4 +173,73 @@ fn sample_week_contains_the_planning_screenshot_blocks() {
             .any(|event| event.title() == "Weekly planning")
     );
     assert!(events.iter().any(|event| event.notes().is_some()));
+}
+
+#[test]
+fn recurring_occurrences_are_range_bounded_and_exceptions_are_persisted_in_memory() {
+    let mut repository = InMemoryRepository::with_defaults();
+    let category_id = category(500, "Focus").id();
+    repository.create_category(category(500, "Focus")).unwrap();
+    let start = date(2026, 8, 17);
+    let series = RecurrenceSeries::new(
+        RecurrenceSeriesId::from_uuid(Uuid::from_u128(500)),
+        EventDraft::new(
+            "Deep work",
+            start,
+            time(8, 0),
+            time(9, 0),
+            category_id,
+            None,
+        ),
+        RecurrenceRule::Weekly(WeekdaySet::one(jiff::civil::Weekday::Monday)),
+        None,
+        Timestamp::from_second(0).unwrap(),
+    )
+    .unwrap();
+    repository.create_series(series.clone()).unwrap();
+
+    let range = DateRange::new(start, date(2026, 9, 1)).unwrap();
+    assert_eq!(repository.occurrences(range).unwrap().len(), 3);
+
+    repository
+        .upsert_exception(RecurrenceException::cancelled(series.id(), start))
+        .unwrap();
+    assert_eq!(repository.occurrences(range).unwrap().len(), 2);
+    assert!(
+        repository
+            .occurrence(cadence::domain::OccurrenceId::Recurring {
+                series_id: series.id(),
+                original_date: start,
+            })
+            .unwrap()
+            .is_none()
+    );
+
+    let moved_date = date(2026, 8, 28);
+    repository
+        .upsert_exception(
+            RecurrenceException::modified(
+                series.id(),
+                date(2026, 8, 24),
+                EventDraft::new(
+                    "Moved deep work",
+                    moved_date,
+                    time(10, 0),
+                    time(11, 0),
+                    category_id,
+                    None,
+                ),
+                Timestamp::from_second(1).unwrap(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    let moved_id = cadence::domain::OccurrenceId::Recurring {
+        series_id: series.id(),
+        original_date: date(2026, 8, 24),
+    };
+    assert_eq!(
+        repository.occurrence(moved_id).unwrap().unwrap().date(),
+        moved_date
+    );
 }

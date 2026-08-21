@@ -2,7 +2,11 @@ mod memory;
 mod sqlite;
 mod worker;
 
-use crate::domain::{Category, CategoryId, DateRange, Event, EventId, RepositoryError, Settings};
+use crate::domain::{
+    Category, CategoryId, DateRange, Event, EventId, EventOccurrence, OccurrenceId,
+    RecurrenceException, RecurrenceSeries, RecurrenceSeriesId, RepositoryError, Settings,
+    expand_series,
+};
 
 pub use memory::{InMemoryRepository, default_categories, seed_sample_week};
 pub use sqlite::{SqliteRepository, StorageError, data_directory, database_path};
@@ -46,6 +50,10 @@ pub struct PersistenceSnapshot {
     pub categories: Vec<Category>,
     /// Stored events.
     pub events: Vec<Event>,
+    /// Stored recurring series.
+    pub recurrence_series: Vec<RecurrenceSeries>,
+    /// Stored recurring occurrence exceptions.
+    pub recurrence_exceptions: Vec<RecurrenceException>,
 }
 
 /// Storage contract shared by the in-memory and `SQLite` repositories.
@@ -83,6 +91,145 @@ pub trait TimetableRepository {
     ///
     /// - The repository cannot read its event store.
     fn events(&self, range: DateRange) -> Result<Vec<Event>, RepositoryError>;
+
+    /// Lists standalone and recurring occurrences intersecting `range`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when any underlying event, series, or exception query fails.
+    fn occurrences(&self, range: DateRange) -> Result<Vec<EventOccurrence>, RepositoryError> {
+        let mut occurrences = self
+            .events(range)?
+            .iter()
+            .map(EventOccurrence::standalone)
+            .collect::<Vec<_>>();
+        let exceptions = self.recurrence_exceptions()?;
+        for series in self.recurrence_series()? {
+            let series_exceptions = exceptions
+                .iter()
+                .filter(|exception| exception.series_id() == series.id())
+                .cloned()
+                .collect::<Vec<_>>();
+            occurrences.extend(expand_series(&series, &series_exceptions, range));
+        }
+        occurrences.sort_by_key(|occurrence| {
+            (
+                occurrence.date(),
+                occurrence.start_time(),
+                occurrence.end_time(),
+                occurrence.id(),
+            )
+        });
+        Ok(occurrences)
+    }
+
+    /// Looks up one standalone or recurring occurrence.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the repository cannot read the requested occurrence data.
+    fn occurrence(&self, id: OccurrenceId) -> Result<Option<EventOccurrence>, RepositoryError> {
+        match id {
+            OccurrenceId::Standalone(event_id) => Ok(self
+                .event(event_id)?
+                .as_ref()
+                .map(EventOccurrence::standalone)),
+            OccurrenceId::Recurring {
+                series_id,
+                original_date,
+            } => {
+                let Some(series) = self.series(series_id)? else {
+                    return Ok(None);
+                };
+                let exception = self.recurrence_exceptions()?.into_iter().find(|exception| {
+                    exception.series_id() == series_id && exception.original_date() == original_date
+                });
+                match exception {
+                    Some(exception) => match exception.kind() {
+                        crate::domain::RecurrenceExceptionKind::Cancelled => Ok(None),
+                        crate::domain::RecurrenceExceptionKind::Modified(draft) => Ok(Some(
+                            EventOccurrence::recurring(series_id, original_date, draft.clone()),
+                        )),
+                    },
+                    None if series.contains_date(original_date) => {
+                        let mut draft = series.template();
+                        draft.date = original_date;
+                        Ok(Some(EventOccurrence::recurring(
+                            series_id,
+                            original_date,
+                            draft,
+                        )))
+                    }
+                    None => Ok(None),
+                }
+            }
+        }
+    }
+
+    /// Lists all stored recurring series.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the repository cannot read its recurring-series store.
+    fn recurrence_series(&self) -> Result<Vec<RecurrenceSeries>, RepositoryError>;
+
+    /// Looks up one recurring series.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the repository cannot read its recurring-series store.
+    fn series(&self, id: RecurrenceSeriesId) -> Result<Option<RecurrenceSeries>, RepositoryError>;
+
+    /// Lists all persisted recurring exceptions.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the repository cannot read its recurring-exception store.
+    fn recurrence_exceptions(&self) -> Result<Vec<RecurrenceException>, RepositoryError>;
+
+    /// Stores a new recurring series.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the series already exists, references an unknown category, or
+    /// cannot be written.
+    fn create_series(&mut self, series: RecurrenceSeries) -> Result<(), RepositoryError>;
+
+    /// Replaces an existing recurring series.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the series does not exist, references an unknown category, or
+    /// cannot be written.
+    fn update_series(&mut self, series: RecurrenceSeries) -> Result<(), RepositoryError>;
+
+    /// Removes a recurring series and its exceptions.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the series does not exist or cannot be written.
+    fn delete_series(
+        &mut self,
+        id: RecurrenceSeriesId,
+    ) -> Result<RecurrenceSeries, RepositoryError>;
+
+    /// Inserts or replaces one recurring exception.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the owning series does not exist or the exception cannot be written.
+    fn upsert_exception(&mut self, exception: RecurrenceException) -> Result<(), RepositoryError>;
+
+    /// Removes one recurring exception, returning it when present.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the exception cannot be removed.
+    fn delete_exception(
+        &mut self,
+        series_id: RecurrenceSeriesId,
+        original_date: jiff::civil::Date,
+    ) -> Result<Option<RecurrenceException>, RepositoryError>;
 
     /// Stores a new event.
     ///
@@ -305,6 +452,8 @@ pub trait TimetableRepository {
                 jiff::civil::Date::MIN,
                 jiff::civil::Date::MAX,
             )?)?,
+            recurrence_series: self.recurrence_series()?,
+            recurrence_exceptions: self.recurrence_exceptions()?,
         })
     }
 }

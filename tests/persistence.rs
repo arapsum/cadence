@@ -2,8 +2,9 @@ use std::fs;
 
 use cadence::{
     domain::{
-        Category, CategoryColor, CategoryId, DateRange, Event, EventDraft, EventId, Settings,
-        WeekStart,
+        Category, CategoryColor, CategoryId, DateRange, Event, EventDraft, EventId,
+        RecurrenceException, RecurrenceRule, RecurrenceSeries, RecurrenceSeriesId, Settings,
+        WeekStart, WeekdaySet,
     },
     store::{
         AppPreferences, CalendarViewModePreference, PersistenceSnapshot, SqliteRepository,
@@ -118,10 +119,53 @@ fn failed_snapshot_write_keeps_last_committed_state() {
         preferences: AppPreferences::default(),
         categories: vec![category],
         events: vec![event(202, CategoryId::from_uuid(Uuid::from_u128(999)))],
+        recurrence_series: Vec::new(),
+        recurrence_exceptions: Vec::new(),
     };
 
     assert!(repository.replace_snapshot(&invalid).is_err());
     assert_eq!(repository.snapshot().unwrap(), before);
+}
+
+#[test]
+fn sqlite_round_trip_preserves_recurring_series_and_exceptions() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("cadence.sqlite3");
+    let mut repository = SqliteRepository::open(&path).unwrap();
+    let category = category(300);
+    repository.create_category(category.clone()).unwrap();
+    let start = date(2026, 8, 17);
+    let series = RecurrenceSeries::new(
+        RecurrenceSeriesId::from_uuid(Uuid::from_u128(301)),
+        EventDraft::new(
+            "Recurring focus",
+            start,
+            time(8, 0),
+            time(9, 0),
+            category.id(),
+            Some("Series note".to_owned()),
+        ),
+        RecurrenceRule::Weekly(WeekdaySet::one(jiff::civil::Weekday::Monday)),
+        Some(date(2026, 9, 30)),
+        Timestamp::from_second(0).unwrap(),
+    )
+    .unwrap();
+    repository.create_series(series.clone()).unwrap();
+    repository
+        .upsert_exception(RecurrenceException::cancelled(series.id(), start))
+        .unwrap();
+    drop(repository);
+
+    let repository = SqliteRepository::open(path).unwrap();
+    assert_eq!(repository.recurrence_series().unwrap(), vec![series]);
+    assert_eq!(repository.recurrence_exceptions().unwrap().len(), 1);
+    assert_eq!(
+        repository
+            .occurrences(DateRange::new(start, date(2026, 9, 30)).unwrap())
+            .unwrap()
+            .len(),
+        6
+    );
 }
 
 #[test]
@@ -144,7 +188,7 @@ fn version_one_database_migrates_to_current_schema() {
         .unwrap()
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 2);
+    assert_eq!(version, 3);
 }
 
 #[test]
@@ -170,7 +214,7 @@ fn worker_exports_a_versioned_read_consistent_backup() {
 
     let backup = client.export_json().recv_blocking().unwrap().unwrap();
     let value: serde_json::Value = serde_json::from_str(&backup).unwrap();
-    assert_eq!(value["format_version"], 1);
+    assert_eq!(value["format_version"], 2);
     assert_eq!(value["data"]["events"].as_array().unwrap().len(), 0);
     assert_eq!(value["data"]["categories"].as_array().unwrap().len(), 6);
 }
