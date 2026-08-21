@@ -33,6 +33,7 @@ pub(in crate::app::editor) fn draft_to_domain(draft: &FormDraft) -> EventDraft {
             .expect("form validation supplies a category before commit"),
         Some(draft.notes.clone()),
     )
+    .with_reminder(draft.reminder)
 }
 
 impl CadenceView {

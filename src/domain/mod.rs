@@ -7,7 +7,7 @@ mod time;
 
 pub use category::{Category, CategoryColor, CategoryId};
 pub use errors::{CalendarError, RepositoryError, ValidationError};
-pub use event::{Event, EventDraft, EventId};
+pub use event::{Event, EventDraft, EventId, ReminderOffset};
 pub use recurrence::{
     EventOccurrence, OccurrenceId, RecurrenceException, RecurrenceExceptionKind, RecurrenceRule,
     RecurrenceSeries, RecurrenceSeriesId, WeekdaySet, expand_series,

@@ -14,14 +14,14 @@ use uuid::Uuid;
 
 use crate::domain::{
     Category, CategoryColor, CategoryId, ClockFormat, DateRange, Event, EventDraft, EventId,
-    RecurrenceException, RecurrenceSeries, RecurrenceSeriesId, RepositoryError, Settings,
-    SnapInterval, TimeZoneId, WeekStart,
+    RecurrenceException, RecurrenceSeries, RecurrenceSeriesId, ReminderOffset, RepositoryError,
+    Settings, SnapInterval, TimeZoneId, WeekStart,
 };
 
 use super::{AppPreferences, CalendarViewModePreference, PersistenceSnapshot, TimetableRepository};
 
 /// Latest schema version understood by Cadence.
-pub const CURRENT_SCHEMA_VERSION: u32 = 3;
+pub const CURRENT_SCHEMA_VERSION: u32 = 4;
 
 /// Error raised while opening, migrating, validating, or using local storage.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -271,13 +271,14 @@ impl SqliteRepository {
         let row = self
             .connection
             .query_row(
-                "SELECT view_mode, category_filter_id FROM app_preferences WHERE id = 1",
+                "SELECT view_mode, category_filter_id, notifications_enabled, reduce_motion FROM app_preferences WHERE id = 1",
                 [],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?, row.get::<_, i64>(2)?, row.get::<_, i64>(3)?)),
             )
             .optional()
             .map_err(sqlite_error)?;
-        let Some((view_mode, category_filter_id)) = row else {
+        let Some((view_mode, category_filter_id, notifications_enabled, reduce_motion)) = row
+        else {
             return Ok(AppPreferences::default());
         };
         let view_mode = match view_mode.as_str() {
@@ -298,6 +299,8 @@ impl SqliteRepository {
         Ok(AppPreferences {
             view_mode,
             category_filter,
+            notifications_enabled: notifications_enabled != 0,
+            reduce_motion: reduce_motion != 0,
         })
     }
 
@@ -327,7 +330,7 @@ impl SqliteRepository {
 
     fn load_all_events(&self) -> Result<Vec<Event>, StorageError> {
         let mut statement = self.connection
-            .prepare("SELECT id, category_id, title, date, start_time, end_time, notes, created_at, updated_at FROM events ORDER BY date, start_time, end_time, id")
+            .prepare("SELECT id, category_id, title, date, start_time, end_time, notes, reminder_minutes, created_at, updated_at FROM events ORDER BY date, start_time, end_time, id")
             .map_err(sqlite_error)?;
         let rows = statement.query_map([], event_row).map_err(sqlite_error)?;
         rows.map(|row| row.map_err(sqlite_error).and_then(event_from_values))
@@ -375,7 +378,7 @@ impl TimetableRepository for SqliteRepository {
     fn event(&self, id: EventId) -> Result<Option<Event>, RepositoryError> {
         self.connection
             .query_row(
-                "SELECT id, category_id, title, date, start_time, end_time, notes, created_at, updated_at FROM events WHERE id = ?1",
+                "SELECT id, category_id, title, date, start_time, end_time, notes, reminder_minutes, created_at, updated_at FROM events WHERE id = ?1",
                 [id.to_string()],
                 event_row,
             )
@@ -387,7 +390,7 @@ impl TimetableRepository for SqliteRepository {
 
     fn events(&self, range: DateRange) -> Result<Vec<Event>, RepositoryError> {
         let mut statement = self.connection
-            .prepare("SELECT id, category_id, title, date, start_time, end_time, notes, created_at, updated_at FROM events WHERE date >= ?1 AND date < ?2 ORDER BY date, start_time, end_time, id")
+            .prepare("SELECT id, category_id, title, date, start_time, end_time, notes, reminder_minutes, created_at, updated_at FROM events WHERE date >= ?1 AND date < ?2 ORDER BY date, start_time, end_time, id")
             .map_err(sqlite_error)?;
         let rows = statement
             .query_map(
@@ -512,8 +515,8 @@ impl TimetableRepository for SqliteRepository {
         let tx = self.connection.transaction().map_err(sqlite_error)?;
         let changed = tx
             .execute(
-                "UPDATE events SET category_id = ?2, title = ?3, date = ?4, start_time = ?5, end_time = ?6, notes = ?7, created_at = ?8, updated_at = ?9 WHERE id = ?1",
-                params![event.id().to_string(), event.category_id().to_string(), event.title(), event.date().to_string(), event.start_time().to_string(), event.end_time().to_string(), event.notes(), event.created_at().to_string(), event.updated_at().to_string()],
+                "UPDATE events SET category_id = ?2, title = ?3, date = ?4, start_time = ?5, end_time = ?6, notes = ?7, reminder_minutes = ?8, created_at = ?9, updated_at = ?10 WHERE id = ?1",
+                params![event.id().to_string(), event.category_id().to_string(), event.title(), event.date().to_string(), event.start_time().to_string(), event.end_time().to_string(), event.notes(), event.reminder().map(|reminder| i64::from(reminder.minutes())), event.created_at().to_string(), event.updated_at().to_string()],
             )
             .map_err(|error| map_repository_error(sqlite_error(error)))?;
         if changed == 0 {
@@ -700,6 +703,16 @@ fn migrate(connection: &Connection) -> Result<(), StorageError> {
         tx.pragma_update(None, "user_version", 3_u32)
             .map_err(|error| StorageError::Migration(error.to_string()))?;
     }
+    if current < 4 {
+        tx.execute_batch(
+            "ALTER TABLE events ADD COLUMN reminder_minutes INTEGER;
+             ALTER TABLE app_preferences ADD COLUMN notifications_enabled INTEGER NOT NULL DEFAULT 0 CHECK (notifications_enabled IN (0, 1));
+             ALTER TABLE app_preferences ADD COLUMN reduce_motion INTEGER NOT NULL DEFAULT 0 CHECK (reduce_motion IN (0, 1));",
+        )
+        .map_err(|error| StorageError::Migration(error.to_string()))?;
+        tx.pragma_update(None, "user_version", 4_u32)
+            .map_err(|error| StorageError::Migration(error.to_string()))?;
+    }
     tx.commit()
         .map_err(|error| StorageError::Migration(error.to_string()))
 }
@@ -757,7 +770,7 @@ fn insert_events(connection: &Connection, events: &[Event]) -> Result<(), Storag
 }
 
 fn insert_event(connection: &Connection, event: &Event) -> Result<(), StorageError> {
-    connection.execute("INSERT INTO events (id, category_id, title, date, start_time, end_time, notes, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)", params![event.id().to_string(), event.category_id().to_string(), event.title(), event.date().to_string(), event.start_time().to_string(), event.end_time().to_string(), event.notes(), event.created_at().to_string(), event.updated_at().to_string()]).map(|_| ()).map_err(|error| StorageError::Sqlite(error.to_string()))
+    connection.execute("INSERT INTO events (id, category_id, title, date, start_time, end_time, notes, reminder_minutes, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)", params![event.id().to_string(), event.category_id().to_string(), event.title(), event.date().to_string(), event.start_time().to_string(), event.end_time().to_string(), event.notes(), event.reminder().map(|reminder| i64::from(reminder.minutes())), event.created_at().to_string(), event.updated_at().to_string()]).map(|_| ()).map_err(|error| StorageError::Sqlite(error.to_string()))
 }
 
 fn insert_series(connection: &Connection, series: &[RecurrenceSeries]) -> Result<(), StorageError> {
@@ -815,10 +828,12 @@ fn update_preferences(
     };
     connection
         .execute(
-            "UPDATE app_preferences SET view_mode = ?1, category_filter_id = ?2 WHERE id = 1",
+            "UPDATE app_preferences SET view_mode = ?1, category_filter_id = ?2, notifications_enabled = ?3, reduce_motion = ?4 WHERE id = 1",
             params![
                 view_mode,
-                preferences.category_filter.map(|id| id.to_string())
+                preferences.category_filter.map(|id| id.to_string()),
+                i64::from(preferences.notifications_enabled),
+                i64::from(preferences.reduce_motion)
             ],
         )
         .map(|_| ())
@@ -898,6 +913,7 @@ type EventRow = (
     String,
     String,
     Option<String>,
+    Option<i64>,
     String,
     String,
 );
@@ -913,12 +929,23 @@ fn event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EventRow> {
         row.get(6)?,
         row.get(7)?,
         row.get(8)?,
+        row.get(9)?,
     ))
 }
 
 fn event_from_values(values: EventRow) -> Result<Event, StorageError> {
-    let (id, category_id, title, date, start_time, end_time, notes, created_at, updated_at) =
-        values;
+    let (
+        id,
+        category_id,
+        title,
+        date,
+        start_time,
+        end_time,
+        notes,
+        reminder_minutes,
+        created_at,
+        updated_at,
+    ) = values;
     let id = id
         .parse::<Uuid>()
         .map(EventId::from_uuid)
@@ -946,7 +973,20 @@ fn event_from_values(values: EventRow) -> Result<Event, StorageError> {
     })?;
     Event::from_persisted(
         id,
-        EventDraft::new(title, date, start_time, end_time, category_id, notes),
+        EventDraft::new(title, date, start_time, end_time, category_id, notes).with_reminder(
+            reminder_minutes
+                .map(|minutes| {
+                    u16::try_from(minutes)
+                        .map_err(|_| {
+                            StorageError::InvalidEntity("invalid reminder offset".to_owned())
+                        })
+                        .and_then(|minutes| {
+                            ReminderOffset::new(minutes)
+                                .map_err(|error| StorageError::InvalidEntity(error.to_string()))
+                        })
+                })
+                .transpose()?,
+        ),
         created_at,
         updated_at,
     )

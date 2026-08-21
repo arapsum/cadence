@@ -289,6 +289,7 @@ impl CadenceView {
             category_id: Some(proposed.category_id),
             recurrence: Some(series.rule()),
             ends_on: series.ends_on(),
+            reminder: proposed.reminder,
         };
         let result = self
             .apply_recurring_edit(series_id, original_date, &form, scope, Timestamp::now())

@@ -4,7 +4,8 @@ use chrono::Datelike as _;
 use jiff::civil::{Date, Time};
 
 use crate::domain::{
-    CategoryId, EventDraft, EventOccurrence, OccurrenceId, RecurrenceRule, ValidationError,
+    CategoryId, EventDraft, EventOccurrence, OccurrenceId, RecurrenceRule, ReminderOffset,
+    ValidationError,
 };
 
 /// The operation currently being performed by the event editor.
@@ -25,6 +26,7 @@ pub struct FormDraft {
     pub category_id: Option<CategoryId>,
     pub recurrence: Option<RecurrenceRule>,
     pub ends_on: Option<Date>,
+    pub reminder: Option<ReminderOffset>,
 }
 
 impl FormDraft {
@@ -48,6 +50,7 @@ impl FormDraft {
             category_id: Some(draft.category_id),
             recurrence: None,
             ends_on: None,
+            reminder: draft.reminder,
         }
     }
 
@@ -86,7 +89,8 @@ impl FormDraft {
             self.end_time,
             category_id,
             Some(self.notes.clone()),
-        );
+        )
+        .with_reminder(self.reminder);
 
         validate_draft(&draft)?;
         Ok(draft)
@@ -320,6 +324,7 @@ mod tests {
             category_id: Some(category()),
             recurrence: None,
             ends_on: None,
+            reminder: None,
         };
 
         let errors = form.to_domain().expect_err("invalid form must be rejected");
@@ -342,6 +347,7 @@ mod tests {
             category_id: Some(category()),
             recurrence: Some(RecurrenceRule::Daily),
             ends_on: Some(Date::constant(2026, 8, 19)),
+            reminder: None,
         };
 
         let errors = form

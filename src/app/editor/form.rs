@@ -12,7 +12,9 @@ use gpui_component::{
 use jiff::civil::{Time, Weekday};
 
 use crate::{
-    domain::{Category, CategoryId, RecurrenceRule, Settings, WeekdaySet, format_time},
+    domain::{
+        Category, CategoryId, RecurrenceRule, ReminderOffset, Settings, WeekdaySet, format_time,
+    },
     editor::{EditorMode, FormDraft, FormErrors, chrono_date, jiff_date, time_options},
 };
 
@@ -69,6 +71,24 @@ impl SelectItem for RepeatOption {
     }
 }
 
+#[derive(Clone)]
+pub(in crate::app::editor) struct ReminderOption {
+    reminder: Option<ReminderOffset>,
+    label: SharedString,
+}
+
+impl SelectItem for ReminderOption {
+    type Value = Option<ReminderOffset>;
+
+    fn title(&self) -> SharedString {
+        self.label.clone()
+    }
+
+    fn value(&self) -> &Self::Value {
+        &self.reminder
+    }
+}
+
 impl SelectItem for TimeOption {
     type Value = Time;
 
@@ -91,6 +111,7 @@ pub(in crate::app::editor) struct EventEditor {
     end_time: Entity<SelectState<Vec<TimeOption>>>,
     category: Entity<SelectState<Vec<CategoryOption>>>,
     repeat: Entity<SelectState<Vec<RepeatOption>>>,
+    reminder: Entity<SelectState<Vec<ReminderOption>>>,
     ends_on: Entity<DatePickerState>,
     ends_enabled: bool,
     weekly_days: WeekdaySet,
@@ -168,6 +189,36 @@ fn repeat_options_for(draft: &FormDraft) -> (Vec<RepeatOption>, Option<gpui_comp
     (options, index)
 }
 
+fn reminder_options_for(
+    draft: &FormDraft,
+) -> (Vec<ReminderOption>, Option<gpui_component::IndexPath>) {
+    let options = [
+        None,
+        Some(0),
+        Some(5),
+        Some(10),
+        Some(15),
+        Some(30),
+        Some(60),
+    ]
+    .into_iter()
+    .map(|minutes| ReminderOption {
+        reminder: minutes
+            .map(|minutes| ReminderOffset::new(minutes).expect("fixed reminder offset is valid")),
+        label: match minutes {
+            None => "No reminder".into(),
+            Some(0) => "At start".into(),
+            Some(minutes) => format!("{minutes} minutes before").into(),
+        },
+    })
+    .collect::<Vec<_>>();
+    let index = options
+        .iter()
+        .position(|option| option.reminder == draft.reminder)
+        .map(gpui_component::IndexPath::new);
+    (options, index)
+}
+
 impl EventEditor {
     pub(in crate::app::editor) fn new(
         mode: EditorMode,
@@ -218,6 +269,8 @@ impl EventEditor {
 
         let (repeat_options, repeat_index) = repeat_options_for(draft);
         let repeat = cx.new(|cx| SelectState::new(repeat_options, repeat_index, window, cx));
+        let (reminder_options, reminder_index) = reminder_options_for(draft);
+        let reminder = cx.new(|cx| SelectState::new(reminder_options, reminder_index, window, cx));
         let ends_enabled = draft.ends_on.is_some();
         let ends_on = cx.new(|cx| {
             let mut state = DatePickerState::new(window, cx).date_format("%B %-d, %Y");
@@ -235,6 +288,7 @@ impl EventEditor {
             end_time,
             category,
             repeat,
+            reminder,
             ends_on,
             ends_enabled,
             weekly_days: match draft.recurrence {
@@ -307,6 +361,13 @@ impl EventEditor {
                 this.errors.recurrence = None;
             },
         ));
+        let reminder = self.reminder.clone();
+        self.subscriptions.push(cx.subscribe(
+            &reminder,
+            |_, _, _: &gpui_component::select::SelectEvent<Vec<ReminderOption>>, cx| {
+                cx.notify();
+            },
+        ));
         let ends_on = self.ends_on.clone();
         self.subscriptions
             .push(cx.subscribe(&ends_on, |this, _, _: &DatePickerEvent, cx| {
@@ -355,6 +416,7 @@ impl EventEditor {
                     .start()
                     .map_or(self.initial.date, jiff_date)
             }),
+            reminder: self.reminder.read(cx).selected_value().copied().flatten(),
         }
     }
 
@@ -562,6 +624,13 @@ impl Render for EventEditor {
                     .w_full()
                     .placeholder("Choose a category"),
                 errors.category,
+            ))
+            .child(field(
+                "Reminder",
+                Select::new(&self.reminder)
+                    .w_full()
+                    .placeholder("Choose a reminder"),
+                None,
             ))
             .child(field(
                 "Repeats",

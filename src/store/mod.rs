@@ -19,6 +19,12 @@ pub struct AppPreferences {
     pub view_mode: CalendarViewModePreference,
     /// Category selected at the previous shutdown, or `None` for all categories.
     pub category_filter: Option<CategoryId>,
+    /// Whether desktop reminders may be delivered while Cadence is running.
+    #[serde(default)]
+    pub notifications_enabled: bool,
+    /// Whether non-essential interface animation is reduced.
+    #[serde(default)]
+    pub reduce_motion: bool,
 }
 
 impl Default for AppPreferences {
@@ -26,6 +32,8 @@ impl Default for AppPreferences {
         Self {
             view_mode: CalendarViewModePreference::Week,
             category_filter: None,
+            notifications_enabled: false,
+            reduce_motion: false,
         }
     }
 }

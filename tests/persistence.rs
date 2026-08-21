@@ -81,6 +81,8 @@ fn sqlite_round_trip_preserves_entities_and_preferences() {
         .replace_preferences(AppPreferences {
             view_mode: CalendarViewModePreference::Day,
             category_filter: Some(category_id),
+            notifications_enabled: true,
+            reduce_motion: true,
         })
         .unwrap();
     drop(repository);
@@ -188,7 +190,7 @@ fn version_one_database_migrates_to_current_schema() {
         .unwrap()
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 3);
+    assert_eq!(version, 4);
 }
 
 #[test]
@@ -214,7 +216,7 @@ fn worker_exports_a_versioned_read_consistent_backup() {
 
     let backup = client.export_json().recv_blocking().unwrap().unwrap();
     let value: serde_json::Value = serde_json::from_str(&backup).unwrap();
-    assert_eq!(value["format_version"], 2);
+    assert_eq!(value["format_version"], 3);
     assert_eq!(value["data"]["events"].as_array().unwrap().len(), 0);
     assert_eq!(value["data"]["categories"].as_array().unwrap().len(), 6);
 }

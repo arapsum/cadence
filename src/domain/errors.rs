@@ -6,10 +6,24 @@ use jiff::civil::{Date, Time};
 pub enum ValidationError {
     EmptyTitle,
     EmptyCategoryName,
-    EndNotAfterStart { start: Time, end: Time },
-    InvalidTimeZone { identifier: String },
-    InvalidDayRange { start: Time, end: Time },
-    InvalidSnapInterval { minutes: u16 },
+    EndNotAfterStart {
+        start: Time,
+        end: Time,
+    },
+    InvalidTimeZone {
+        identifier: String,
+    },
+    InvalidDayRange {
+        start: Time,
+        end: Time,
+    },
+    InvalidSnapInterval {
+        minutes: u16,
+    },
+    /// Reminder offset is outside the supported range.
+    InvalidReminderOffset {
+        minutes: u16,
+    },
     InvalidRecurrence(String),
 }
 
@@ -29,6 +43,12 @@ impl fmt::Display for ValidationError {
                 write!(
                     f,
                     "Snap interval must be between 1 and 60 minutes; got {minutes}."
+                )
+            }
+            Self::InvalidReminderOffset { minutes } => {
+                write!(
+                    f,
+                    "Reminder offset must be between 0 and 1,440 minutes; got {minutes}."
                 )
             }
             Self::InvalidRecurrence(message) => f.write_str(message),

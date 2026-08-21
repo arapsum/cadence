@@ -9,6 +9,40 @@ use uuid::Uuid;
 
 use super::{CategoryId, ValidationError};
 
+/// An optional amount of notice before an event begins.
+#[derive(Debug, Clone, Copy, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct ReminderOffset(u16);
+
+impl ReminderOffset {
+    /// Creates a reminder offset in minutes.
+    ///
+    /// # Parameters
+    ///
+    /// - `minutes`: Minutes before the event start, from zero through one day.
+    ///
+    /// # Returns
+    ///
+    /// A validated reminder offset.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when:
+    ///
+    /// - `minutes` is greater than 1,440.
+    pub const fn new(minutes: u16) -> Result<Self, ValidationError> {
+        if minutes > 24 * 60 {
+            return Err(ValidationError::InvalidReminderOffset { minutes });
+        }
+        Ok(Self(minutes))
+    }
+
+    /// Returns the number of minutes before the event start.
+    #[must_use]
+    pub const fn minutes(self) -> u16 {
+        self.0
+    }
+}
+
 /// Stable identifier for an event.
 #[derive(Debug, Clone, Copy, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct EventId(Uuid);
@@ -85,6 +119,7 @@ impl fmt::Display for EventId {
 /// - `end_time`: Exclusive event end time.
 /// - `category_id`: Category assigned to the event.
 /// - `notes`: Optional supporting notes.
+/// - `reminder`: Optional notice before the event begins.
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
 pub struct EventDraft {
     pub title: String,
@@ -93,6 +128,8 @@ pub struct EventDraft {
     pub end_time: Time,
     pub category_id: CategoryId,
     pub notes: Option<String>,
+    #[serde(default)]
+    pub reminder: Option<ReminderOffset>,
 }
 
 impl EventDraft {
@@ -125,7 +162,23 @@ impl EventDraft {
             end_time,
             category_id,
             notes,
+            reminder: None,
         }
+    }
+
+    /// Assigns an optional reminder to this draft.
+    ///
+    /// # Parameters
+    ///
+    /// - `reminder`: Notice to schedule before the event begins.
+    ///
+    /// # Returns
+    ///
+    /// The draft with its reminder updated.
+    #[must_use]
+    pub const fn with_reminder(mut self, reminder: Option<ReminderOffset>) -> Self {
+        self.reminder = reminder;
+        self
     }
 }
 
@@ -151,6 +204,7 @@ pub struct Event {
     start_time: Time,
     end_time: Time,
     notes: Option<String>,
+    reminder: Option<ReminderOffset>,
     created_at: Timestamp,
     updated_at: Timestamp,
 }
@@ -186,6 +240,7 @@ impl Event {
             end_time,
             category_id,
             notes: draft_notes,
+            reminder,
         } = draft;
         let (title, notes) = normalize_text(&draft_title, draft_notes.as_deref());
         validate(&title, start_time, end_time)?;
@@ -198,6 +253,7 @@ impl Event {
             start_time,
             end_time,
             notes,
+            reminder,
             created_at: timestamp,
             updated_at: timestamp,
         })
@@ -262,6 +318,7 @@ impl Event {
             end_time,
             category_id,
             notes: draft_notes,
+            reminder,
         } = draft;
         let (title, notes) = normalize_text(&draft_title, draft_notes.as_deref());
         validate(&title, start_time, end_time)?;
@@ -272,6 +329,7 @@ impl Event {
         self.start_time = start_time;
         self.end_time = end_time;
         self.notes = notes;
+        self.reminder = reminder;
         self.updated_at = timestamp;
         Ok(())
     }
@@ -318,6 +376,12 @@ impl Event {
         self.notes.as_deref()
     }
 
+    /// Returns the optional reminder offset.
+    #[must_use]
+    pub const fn reminder(&self) -> Option<ReminderOffset> {
+        self.reminder
+    }
+
     /// Returns the event creation timestamp.
     #[must_use]
     pub const fn created_at(&self) -> Timestamp {
@@ -344,6 +408,7 @@ impl Event {
             end_time: self.end_time,
             category_id: self.category_id,
             notes: self.notes.clone(),
+            reminder: self.reminder,
         }
     }
 }
