@@ -1,6 +1,4 @@
-use gpui::{
-    Context, DragMoveEvent, Hsla, IntoElement, MouseButton, Window, div, point, prelude::*, px,
-};
+use gpui::{Context, DragMoveEvent, Hsla, IntoElement, MouseButton, Window, div, prelude::*, px};
 use gpui_component::scroll::ScrollableElement as _;
 use gpui_component::{ActiveTheme as _, StyledExt as _};
 use jiff::civil::Time;
@@ -40,7 +38,7 @@ pub(super) fn render(
     view: &mut CadenceView,
     window: &Window,
     mode: SurfaceMode,
-    cx: &Context<'_, CadenceView>,
+    cx: &mut Context<'_, CadenceView>,
 ) -> impl IntoElement {
     let viewport_width = window.viewport_size().width.as_f32();
     let available_width = (viewport_width - 48.0 - TIME_GUTTER_WIDTH).max(0.0);
@@ -53,11 +51,15 @@ pub(super) fn render(
     let column_width =
         plane_width / f32::from(u16::try_from(column_count).expect("surface columns fit in u16"));
 
-    if !view.scroll_initialized {
+    if !view.scroll_initialized && !view.scroll_initialization_scheduled {
         let initial = view.initial_scroll_offset(column_width);
-        view.scroll_handle
-            .set_offset(point(px(-initial.0), px(-initial.1)));
-        view.scroll_initialized = true;
+        view.scroll_initialization_scheduled = true;
+        let scroll_view = cx.entity().downgrade();
+        window.defer(cx, move |_, cx| {
+            scroll_view
+                .update(cx, |view, _| view.initialize_scroll(initial))
+                .ok();
+        });
     }
     let scroll_offset = view.scroll_handle.offset();
     let view_id = cx.entity_id();

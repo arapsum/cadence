@@ -101,6 +101,7 @@ impl CadenceView {
         }
         self.pending_scroll_minutes = None;
         self.scroll_initialized = false;
+        self.scroll_initialization_scheduled = false;
         self.refresh_snapshot();
         let effect = if forward {
             super::super::state::HistoryEffect::Redo(change.clone())

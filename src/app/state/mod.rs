@@ -9,7 +9,7 @@ pub(in crate::app) use viewport::RollbackViewState;
 
 use std::{collections::HashSet, path::PathBuf};
 
-use gpui::{Entity, ScrollHandle, Subscription};
+use gpui::{Entity, ScrollHandle, Subscription, Task};
 use gpui_component::select::SelectState;
 use jiff::Timestamp;
 
@@ -32,6 +32,10 @@ pub(super) struct CadenceView {
     pub(super) storage_path: PathBuf,
     pub(super) persistence_state: PersistenceState,
     pending_write: Option<PendingWrite>,
+    storage_task: Option<Task<()>>,
+    pending_write_task: Option<Task<()>>,
+    export_task: Option<Task<()>>,
+    clock_task: Option<Task<()>>,
     pub(super) manipulation: Option<Manipulation>,
     manipulation_rollback: Option<RollbackViewState>,
     pub(super) history: EventHistory,
@@ -42,6 +46,7 @@ pub(super) struct CadenceView {
     pub(super) snapshot: Option<CalendarSnapshot>,
     pub(super) now: Timestamp,
     pub(super) scroll_initialized: bool,
+    pub(super) scroll_initialization_scheduled: bool,
     pub(super) pending_scroll_minutes: Option<f32>,
     pub(super) error: Option<String>,
     pub(super) last_category: Option<crate::domain::CategoryId>,

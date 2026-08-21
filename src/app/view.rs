@@ -89,7 +89,7 @@ impl Render for CadenceView {
 fn render_content(
     view: &mut CadenceView,
     window: &Window,
-    cx: &Context<'_, CadenceView>,
+    cx: &mut Context<'_, CadenceView>,
 ) -> gpui::AnyElement {
     match &view.persistence_state {
         PersistenceState::Opening => render_opening_skeleton(cx),

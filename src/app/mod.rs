@@ -15,7 +15,7 @@ pub(super) mod view;
 pub(super) mod week;
 
 use gpui::{App, AppContext as _, WindowBounds, WindowDecorations, WindowOptions, px, size};
-use gpui_component::Root;
+use gpui_component::{Root, WindowExt as _};
 
 use crate::components::title_bar::CadenceTitleBar;
 
@@ -46,6 +46,21 @@ pub fn run() {
                 window.set_window_title("Cadence");
 
                 let view = cx.new(|cx| state::CadenceView::new(window, cx));
+                let close_view = view.downgrade();
+                window.on_window_should_close(cx, move |window, cx| {
+                    let can_close = close_view
+                        .update(cx, |view, _| {
+                            !matches!(view.persistence_state, state::PersistenceState::Writing)
+                        })
+                        .unwrap_or(true);
+                    if !can_close {
+                        window.push_notification(
+                            "Cadence is still saving. Try closing again when the save finishes.",
+                            cx,
+                        );
+                    }
+                    can_close
+                });
                 cx.new(|cx| Root::new(view, window, cx))
             })
             .expect("Failed to open Cadence window");

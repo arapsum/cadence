@@ -62,6 +62,10 @@ impl CadenceView {
             storage_path,
             persistence_state: PersistenceState::Opening,
             pending_write: None,
+            storage_task: None,
+            pending_write_task: None,
+            export_task: None,
+            clock_task: None,
             manipulation: None,
             manipulation_rollback: None,
             history: EventHistory::new(),
@@ -72,6 +76,7 @@ impl CadenceView {
             snapshot: None,
             now,
             scroll_initialized: false,
+            scroll_initialization_scheduled: false,
             pending_scroll_minutes: None,
             error: None,
             last_category: None,
@@ -84,18 +89,19 @@ impl CadenceView {
         this.subscribe_category_filter(cx);
 
         #[cfg(not(test))]
-        cx.spawn_in(window, async move |weak_view, cx| {
-            let result = load_storage
-                .load()
-                .recv()
-                .await
-                .map_err(|_| StorageError::Io("storage worker stopped unexpectedly".to_owned()))
-                .and_then(std::convert::identity);
-            let _ = weak_view.update_in(cx, |view, window, cx| {
-                view.apply_loaded(result, window, cx);
-            });
-        })
-        .detach();
+        {
+            this.storage_task = Some(cx.spawn_in(window, async move |weak_view, cx| {
+                let result = load_storage
+                    .load()
+                    .recv()
+                    .await
+                    .map_err(|_| StorageError::Io("storage worker stopped unexpectedly".to_owned()))
+                    .and_then(std::convert::identity);
+                let _ = weak_view.update_in(cx, |view, window, cx| {
+                    view.apply_loaded(result, window, cx);
+                });
+            }));
+        }
 
         #[cfg(test)]
         {
@@ -105,7 +111,7 @@ impl CadenceView {
             this.refresh_snapshot();
         }
 
-        cx.spawn(async move |weak_view, cx| {
+        this.clock_task = Some(cx.spawn(async move |weak_view, cx| {
             loop {
                 cx.background_executor()
                     .timer(Duration::from_secs(30))
@@ -120,8 +126,7 @@ impl CadenceView {
                     break;
                 }
             }
-        })
-        .detach();
+        }));
 
         this
     }
@@ -195,6 +200,7 @@ impl CadenceView {
                     this.state.set_category_filter(*filter);
                     this.state.clear_selection();
                     this.scroll_initialized = false;
+                    this.scroll_initialization_scheduled = false;
                     this.refresh_snapshot();
                     let _ = this.repository.replace_preferences(this.preferences());
                     if let Some(before) = before {
@@ -262,6 +268,7 @@ impl CadenceView {
                 self.persistence_state = PersistenceState::Ready;
                 self.error = None;
                 self.scroll_initialized = false;
+                self.scroll_initialization_scheduled = false;
                 self.pending_scroll_minutes = None;
                 self.refresh_snapshot();
             }

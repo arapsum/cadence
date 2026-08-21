@@ -6,7 +6,7 @@ use super::{presentation::local_date_time, state::CadenceView, surface};
 pub(super) fn render(
     view: &mut CadenceView,
     window: &Window,
-    cx: &Context<'_, CadenceView>,
+    cx: &mut Context<'_, CadenceView>,
 ) -> impl IntoElement {
     let (today, now_time) = local_date_time(view.now, &view.settings);
     let selected_date = view.state.selected_date();

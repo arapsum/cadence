@@ -49,7 +49,7 @@ impl CadenceView {
         self.snapshot = None;
         let storage = self.storage.clone();
         let weak_view = cx.entity().downgrade();
-        cx.spawn_in(window, async move |_, cx| {
+        self.storage_task = Some(cx.spawn_in(window, async move |_, cx| {
             let result = storage
                 .load()
                 .recv()
@@ -59,12 +59,11 @@ impl CadenceView {
             let _ = weak_view.update_in(cx, |view, window, cx| {
                 view.apply_loaded(result, window, cx);
             });
-        })
-        .detach();
+        }));
     }
 
     pub(in crate::app) fn archive_and_start_fresh(
-        &self,
+        &mut self,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
@@ -99,7 +98,7 @@ impl CadenceView {
         self.snapshot = None;
         let storage = self.storage.clone();
         let weak_view = cx.entity().downgrade();
-        cx.spawn_in(window, async move |_, cx| {
+        self.storage_task = Some(cx.spawn_in(window, async move |_, cx| {
             let result = storage
                 .archive_and_start_fresh()
                 .recv()
@@ -109,11 +108,10 @@ impl CadenceView {
             let _ = weak_view.update_in(cx, |view, window, cx| {
                 view.apply_loaded(result, window, cx);
             });
-        })
-        .detach();
+        }));
     }
 
-    pub(in crate::app) fn export_backup(&self, window: &Window, cx: &Context<'_, Self>) {
+    pub(in crate::app) fn export_backup(&mut self, window: &Window, cx: &Context<'_, Self>) {
         if !self.is_interactive() {
             return;
         }
@@ -124,7 +122,7 @@ impl CadenceView {
         let receiver = cx.prompt_for_new_path(&directory, Some("cadence-backup.json"));
         let storage = self.storage.clone();
         let weak_view = cx.entity().downgrade();
-        cx.spawn_in(window, async move |_, cx| {
+        self.export_task = Some(cx.spawn_in(window, async move |_, cx| {
             let selected = receiver.await.ok().and_then(Result::ok).flatten();
             let Some(path) = selected else {
                 return;
@@ -145,8 +143,7 @@ impl CadenceView {
                     cx.notify();
                 }
             });
-        })
-        .detach();
+        }));
     }
 
     pub(in crate::app) const fn preferences(&self) -> AppPreferences {
@@ -185,7 +182,7 @@ impl CadenceView {
         });
         let storage = self.storage.clone();
         let weak_view = cx.entity().downgrade();
-        cx.spawn(async move |_, cx| {
+        self.pending_write_task = Some(cx.spawn(async move |_, cx| {
             let result = storage
                 .replace(after)
                 .recv()
@@ -195,8 +192,7 @@ impl CadenceView {
             let _ = weak_view.update(cx, |view, cx| {
                 view.finish_persist(result, cx);
             });
-        })
-        .detach();
+        }));
     }
 
     fn finish_persist(&mut self, result: Result<(), StorageError>, cx: &mut Context<'_, Self>) {
@@ -243,6 +239,7 @@ impl CadenceView {
                     self.scroll_handle
                         .set_offset(pending.view_state.scroll_offset);
                     self.scroll_initialized = pending.view_state.scroll_initialized;
+                    self.scroll_initialization_scheduled = false;
                     self.pending_scroll_minutes = pending.view_state.pending_scroll_minutes;
                     self.refresh_snapshot();
                 }

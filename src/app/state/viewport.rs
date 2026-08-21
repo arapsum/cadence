@@ -38,8 +38,23 @@ impl CadenceView {
         format!("{start} – {end}")
     }
 
-    pub(in crate::app) fn initial_scroll_offset(&mut self, column_width: f32) -> (f32, f32) {
-        let pending_scroll_minutes = self.pending_scroll_minutes.take();
+    /// Calculates the initial scroll offset for the visible calendar surface.
+    ///
+    /// # Parameters
+    ///
+    /// - `column_width`: Width of one visible day column in pixels.
+    ///
+    /// # Returns
+    ///
+    /// The horizontal and vertical scroll offsets in pixels.
+    ///
+    /// # Panics
+    ///
+    /// Panics when:
+    ///
+    /// - The visible calendar contains more days than fit in a `u16`.
+    pub(in crate::app) fn initial_scroll_offset(&self, column_width: f32) -> (f32, f32) {
+        let pending_scroll_minutes = self.pending_scroll_minutes;
         let Some(snapshot) = &self.snapshot else {
             return (0.0, 0.0);
         };
@@ -70,6 +85,19 @@ impl CadenceView {
             })
         };
         (horizontal, target_minutes * PIXELS_PER_MINUTE)
+    }
+
+    /// Applies a measured initial scroll offset after the surface has been laid out.
+    ///
+    /// # Parameters
+    ///
+    /// - `offset`: Horizontal and vertical scroll offsets in pixels.
+    pub(in crate::app) fn initialize_scroll(&mut self, offset: (f32, f32)) {
+        self.scroll_handle
+            .set_offset(gpui::point(gpui::px(-offset.0), gpui::px(-offset.1)));
+        self.scroll_initialized = true;
+        self.scroll_initialization_scheduled = false;
+        self.pending_scroll_minutes = None;
     }
 
     pub(in crate::app::state) fn current_scroll_minutes(&self) -> f32 {
