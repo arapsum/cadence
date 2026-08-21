@@ -10,6 +10,7 @@ pub enum ValidationError {
     InvalidTimeZone { identifier: String },
     InvalidDayRange { start: Time, end: Time },
     InvalidSnapInterval { minutes: u16 },
+    InvalidRecurrence(String),
 }
 
 impl fmt::Display for ValidationError {
@@ -30,6 +31,7 @@ impl fmt::Display for ValidationError {
                     "Snap interval must be between 1 and 60 minutes; got {minutes}."
                 )
             }
+            Self::InvalidRecurrence(message) => f.write_str(message),
         }
     }
 }
@@ -72,6 +74,8 @@ impl std::error::Error for CalendarError {}
 pub enum RepositoryError {
     DuplicateEvent,
     EventNotFound,
+    DuplicateSeries,
+    SeriesNotFound,
     DuplicateCategory,
     CategoryNotFound,
     CategoryInUse,
@@ -84,6 +88,8 @@ impl fmt::Display for RepositoryError {
         match self {
             Self::DuplicateEvent => f.write_str("an event with this ID already exists."),
             Self::EventNotFound => f.write_str("the event could not be found."),
+            Self::DuplicateSeries => f.write_str("a recurring series with this ID already exists."),
+            Self::SeriesNotFound => f.write_str("the recurring series could not be found."),
             Self::DuplicateCategory => f.write_str("a category with this ID already exists."),
             Self::CategoryNotFound => f.write_str("the category could not be found."),
             Self::CategoryInUse => f.write_str("the category is still used by an event."),

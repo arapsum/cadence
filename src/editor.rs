@@ -3,13 +3,15 @@
 use chrono::Datelike as _;
 use jiff::civil::{Date, Time};
 
-use crate::domain::{CategoryId, Event, EventDraft, ValidationError};
+use crate::domain::{
+    CategoryId, EventDraft, EventOccurrence, OccurrenceId, RecurrenceRule, ValidationError,
+};
 
 /// The operation currently being performed by the event editor.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum EditorMode {
     Create,
-    Edit(crate::domain::EventId),
+    Edit(OccurrenceId),
 }
 
 /// Editable values held by the event form before they are committed.
@@ -21,6 +23,8 @@ pub struct FormDraft {
     pub start_time: Time,
     pub end_time: Time,
     pub category_id: Option<CategoryId>,
+    pub recurrence: Option<RecurrenceRule>,
+    pub ends_on: Option<Date>,
 }
 
 impl FormDraft {
@@ -33,7 +37,7 @@ impl FormDraft {
     /// # Returns
     ///
     /// A form draft containing the event's title, notes, date, times, and category.
-    pub fn from_event(event: &Event) -> Self {
+    pub fn from_occurrence(event: &EventOccurrence) -> Self {
         let draft = event.draft();
         Self {
             title: draft.title,
@@ -42,6 +46,8 @@ impl FormDraft {
             start_time: draft.start_time,
             end_time: draft.end_time,
             category_id: Some(draft.category_id),
+            recurrence: None,
+            ends_on: None,
         }
     }
 
@@ -58,11 +64,20 @@ impl FormDraft {
     /// - The title is empty after trimming.
     /// - No category is selected.
     /// - The end time is not later than the start time.
-    pub fn to_domain(&self) -> Result<EventDraft, FormErrors> {
-        let category_id = self.category_id.ok_or_else(|| FormErrors {
-            category: Some("Choose a category.".to_owned()),
-            ..FormErrors::default()
+    /// - A recurrence end date precedes the event date.
+    pub fn to_domain(&self) -> Result<EventDraft, Box<FormErrors>> {
+        let category_id = self.category_id.ok_or_else(|| {
+            Box::new(FormErrors {
+                category: Some("Choose a category.".to_owned()),
+                ..FormErrors::default()
+            })
         })?;
+        if self.ends_on.is_some_and(|ends_on| ends_on < self.date) {
+            return Err(Box::new(FormErrors {
+                ends_on: Some("End date must be on or after the event date.".to_owned()),
+                ..FormErrors::default()
+            }));
+        }
 
         let draft = EventDraft::new(
             self.title.clone(),
@@ -86,6 +101,8 @@ pub struct FormErrors {
     pub start_time: Option<String>,
     pub end_time: Option<String>,
     pub category: Option<String>,
+    pub recurrence: Option<String>,
+    pub ends_on: Option<String>,
 }
 
 impl FormErrors {
@@ -100,10 +117,12 @@ impl FormErrors {
             && self.start_time.is_none()
             && self.end_time.is_none()
             && self.category.is_none()
+            && self.recurrence.is_none()
+            && self.ends_on.is_none()
     }
 }
 
-fn validate_draft(draft: &EventDraft) -> Result<(), FormErrors> {
+fn validate_draft(draft: &EventDraft) -> Result<(), Box<FormErrors>> {
     let mut errors = FormErrors::default();
     if draft.title.trim().is_empty() {
         errors.title = Some(ValidationError::EmptyTitle.to_string());
@@ -119,7 +138,7 @@ fn validate_draft(draft: &EventDraft) -> Result<(), FormErrors> {
     if errors.is_empty() {
         Ok(())
     } else {
-        Err(errors)
+        Err(Box::new(errors))
     }
 }
 
@@ -299,6 +318,8 @@ mod tests {
             start_time: Time::constant(10, 0, 0, 0),
             end_time: Time::constant(9, 0, 0, 0),
             category_id: Some(category()),
+            recurrence: None,
+            ends_on: None,
         };
 
         let errors = form.to_domain().expect_err("invalid form must be rejected");
@@ -306,6 +327,29 @@ mod tests {
         assert_eq!(
             errors.end_time.as_deref(),
             Some("End time must be later than start time.")
+        );
+    }
+
+    #[test]
+    fn recurrence_end_date_cannot_precede_the_series_start() {
+        let start = Date::constant(2026, 8, 20);
+        let form = FormDraft {
+            title: "Routine".to_owned(),
+            notes: String::new(),
+            date: start,
+            start_time: Time::constant(8, 0, 0, 0),
+            end_time: Time::constant(9, 0, 0, 0),
+            category_id: Some(category()),
+            recurrence: Some(RecurrenceRule::Daily),
+            ends_on: Some(Date::constant(2026, 8, 19)),
+        };
+
+        let errors = form
+            .to_domain()
+            .expect_err("invalid recurrence bounds must be rejected");
+        assert_eq!(
+            errors.ends_on.as_deref(),
+            Some("End date must be on or after the event date.")
         );
     }
 
