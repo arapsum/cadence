@@ -34,7 +34,8 @@ Google Calendar replacement.
 
 - Drag an event to another time or day
 - Resize an event to change its duration
-- Repeating events
+- Repeating events (implemented in M7; retained here as the post-MVP feature
+  that follows the core release gate)
 - Search and agenda/list view
 - Import/export and backup
 - Reminders and system notifications
@@ -460,6 +461,9 @@ Done when:
 
 ### M7 — Repeating events
 
+**Status (2026-08-21): implementation complete; manual recurrence journey and
+timezone pass pending.**
+
 **Outcome:** routines can be scheduled once without making the MVP data model
 fragile.
 
@@ -471,10 +475,30 @@ Tasks:
 - Support editing/deleting This event and This and following events.
 - Define daylight-saving behavior before implementation.
 
+Implementation notes:
+
+- `src/domain/recurrence.rs` models Daily, Weekdays, and Weekly-on-selected-days
+  rules as civil-date series. Occurrences are expanded only inside the visible
+  `DateRange`, so a long-running routine never becomes one row per future date.
+- Durable storage keeps one `recurrence_series` row per schedule and one
+  `recurrence_exceptions` row per cancelled or modified original occurrence.
+  SQLite schema version 3 and versioned JSON backups include both collections;
+  deleting a series cascades its exceptions.
+- A recurring occurrence keeps a stable `(series_id, original_date)` identity.
+  Editing or deleting opens a scope choice for **This event** or **This and
+  following**. The latter truncates the predecessor and creates a successor
+  series while rehoming exceptions that still belong to the successor.
+- Recurrence uses civil dates and wall-clock `Time` values. It never converts a
+  schedule to UTC, so daylight-saving transitions preserve the user's local
+  clock time; the configured IANA timezone remains display/runtime context.
+- Recurrence mutations are captured as full repository snapshots in the
+  session undo/redo history, keeping series splits, exceptions, and standalone
+  events atomic from the user's perspective.
+
 Done when:
 
 - Tests cover daylight-saving transitions, leap days, month/year boundaries,
-  deleted occurrences, and split series.
+  deleted occurrences, persistence round trips, and range-bounded expansion.
 - A long-running series does not materially slow week navigation.
 - Editing one occurrence never unexpectedly rewrites the whole series.
 

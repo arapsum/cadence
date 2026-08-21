@@ -5,10 +5,10 @@ a week. Built with Rust, [GPUI](https://gpui.rs/), and [GPUI
 Component](https://longbridge.github.io/gpui-component/), it keeps the calendar
 as a quiet, spatially honest time grid rather than a dashboard.
 
-> **Project status:** Milestone 6 is implemented. Cadence stores timetable data
+> **Project status:** Milestone 7 is implemented. Cadence stores timetable data
 > in a local SQLite database, supports snap-aware event dragging and resizing,
-> and provides bounded session undo/redo plus non-destructive recovery for
-> unreadable databases.
+> repeating schedules with scoped edits, and provides bounded session undo/redo
+> plus non-destructive recovery for unreadable databases.
 
 ## What it does
 
@@ -24,8 +24,12 @@ as a quiet, spatially honest time grid rather than a dashboard.
 - Use pointer and keyboard interactions with light and dark themes.
 - Drag event bodies across time and days, resize their start or end, preview
   snapped changes, and cancel an in-progress manipulation with Escape.
+- Schedule Daily, Weekdays, or Weekly routines on selected weekdays with an
+  optional inclusive end date; edit or delete one occurrence or this and all
+  following occurrences without expanding the series into copied rows.
 - Store events, categories, settings, and calendar preferences locally with
-  transactional writes and numbered schema migrations.
+  transactional writes and numbered schema migrations, including recurring
+  series and per-occurrence exceptions.
 - Export a human-readable JSON backup or reveal the data folder from the
   toolbar.
 
@@ -125,8 +129,8 @@ After running the application, verify the following on the supported baseline:
    selectable, and event hover/focus exposes their complete details.
 5. The current-day tint and current-time line appear when today is displayed.
 6. New event, empty-slot creation, event inspection, editing, duplication,
-   deletion, dragging, resizing, undo, and redo update both Day and Week
-   immediately.
+   deletion, dragging, resizing, recurring scope edits, undo, and redo update
+   both Day and Week immediately.
 7. Invalid titles, categories, and time ranges show field-level errors without
    changing stored data; cancelling a dirty form asks for confirmation.
 8. Keyboard focus begins in the editor title, follows the form in order, and
@@ -134,8 +138,11 @@ After running the application, verify the following on the supported baseline:
 9. Restart the app and confirm events, categories, settings, mode, and filter
    survive while the selected date returns to today and the scroll position is
    fresh.
-10. Export a JSON backup and verify its version, categories, preferences, and
-    events; test recovery with a copy of an unreadable database.
+10. Create a Daily or Weekly routine, cancel one occurrence, edit This and
+    following, and verify the unaffected predecessor/exception history.
+11. Export a JSON backup and verify its version, categories, preferences,
+    events, recurring series, and exceptions; test recovery with a copy of an
+    unreadable database.
 
 ## Project documents
 

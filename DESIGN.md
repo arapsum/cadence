@@ -134,3 +134,25 @@ Undo/redo applies the inverse or forward repository operation first, then moves
 the verified entry between the stacks; a failed write leaves both storage and
 history unchanged. The toolbar keeps both controls next to the title, outside
 the notification region, and disables each control when its stack is empty.
+
+## M7 recurring schedules
+
+The editor's `Repeats` control offers only the useful first-release rules:
+Never, Daily, Weekdays, and Weekly with a Monday-first weekday toggle row. An
+optional end date is inclusive. A schedule is stored as a series template plus
+exceptions, not as a pre-expanded list of events. The repository expands only
+the active Day/Week `DateRange`, and occurrence cards use a stable series/date
+identity even when an exception moves its displayed date.
+
+Editing or deleting a recurring card presents two explicit scopes: This event,
+which writes a replacement or cancellation exception, and This and following,
+which truncates the existing series and creates a successor when needed. A
+series-start change revises the existing series; a middle-of-series change
+splits it. Exceptions that still fall in the successor's rule are rehomed so a
+series edit does not silently recreate or lose unrelated occurrence changes.
+
+Recurrence schedules use Jiff civil dates and wall-clock times. They are not
+converted to UTC for expansion, so a routine scheduled at 08:00 remains 08:00
+across daylight-saving transitions in the configured IANA timezone. This is a
+deliberate local-intent rule; timezone display and future notification behavior
+remain separate concerns.
