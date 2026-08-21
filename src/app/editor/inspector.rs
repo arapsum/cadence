@@ -2,7 +2,7 @@ use gpui::{App, Context, IntoElement, Window, div, prelude::*, px};
 use gpui_component::{
     ActiveTheme as _, StyledExt as _, WindowExt as _,
     button::{Button, ButtonVariants as _},
-    dialog::{DialogButtonProps, DialogFooter},
+    dialog::{DialogAction, DialogButtonProps, DialogClose, DialogFooter},
     notification::Notification,
     window_paddings,
 };
@@ -259,11 +259,40 @@ impl CadenceView {
                 alert
                     .title("Delete recurring event…")
                     .description("Choose whether to delete one occurrence or this and all following occurrences.")
-                    .button_props(
-                        DialogButtonProps::default()
-                            .ok_text("This event")
-                            .cancel_text("This and following")
-                            .show_cancel(true),
+                    .footer(
+                        DialogFooter::new()
+                            .child(
+                                DialogClose::new()
+                                    .child(Button::new("keep-recurring-event").outline().label("Cancel")),
+                            )
+                            .child(
+                                Button::new("delete-following-events")
+                                    .outline()
+                                    .danger()
+                                    .label("This and following")
+                                    .on_click(move |_, window, app| {
+                                        owner_following
+                                            .update(app, |view, cx| {
+                                                window.close_all_dialogs(cx);
+                                                view.delete_recurring(
+                                                    series_id,
+                                                    original_date,
+                                                    RecurrenceScope::Following,
+                                                    window,
+                                                    cx,
+                                                );
+                                            })
+                                            .ok();
+                                    }),
+                            )
+                            .child(
+                                DialogAction::new().child(
+                                    Button::new("delete-this-event")
+                                        .primary()
+                                        .danger()
+                                        .label("This event"),
+                                ),
+                            ),
                     )
                     .on_ok(move |_, window, app| {
                         owner_this
@@ -273,21 +302,6 @@ impl CadenceView {
                                     series_id,
                                     original_date,
                                     RecurrenceScope::This,
-                                    window,
-                                    cx,
-                                );
-                            })
-                            .ok();
-                        true
-                    })
-                    .on_cancel(move |_, window, app| {
-                        owner_following
-                            .update(app, |view, cx| {
-                                window.close_all_dialogs(cx);
-                                view.delete_recurring(
-                                    series_id,
-                                    original_date,
-                                    RecurrenceScope::Following,
                                     window,
                                     cx,
                                 );

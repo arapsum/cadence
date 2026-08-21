@@ -2,6 +2,7 @@
 
 use std::{
     fs,
+    io::Write,
     path::{Path, PathBuf},
     thread,
     time::{SystemTime, UNIX_EPOCH},
@@ -39,6 +40,10 @@ enum Command {
     },
     Export {
         reply: Sender<Result<String, StorageError>>,
+    },
+    ExportToPath {
+        path: PathBuf,
+        reply: Sender<Result<(), StorageError>>,
     },
     ArchiveAndStartFresh {
         reply: Sender<Result<StorageSnapshot, StorageError>>,
@@ -118,6 +123,20 @@ impl StorageClient {
         receiver
     }
 
+    /// Serializes one consistent snapshot and atomically writes a JSON backup.
+    ///
+    /// The complete export, including file creation, syncing, and replacement, runs on the
+    /// storage worker so the application executor remains responsive while a backup is written.
+    #[must_use]
+    pub fn export_to_path(&self, path: impl Into<PathBuf>) -> Receiver<Result<(), StorageError>> {
+        let (reply, receiver) = async_channel::bounded(1);
+        self.send(Command::ExportToPath {
+            path: path.into(),
+            reply,
+        });
+        receiver
+    }
+
     /// Archives the unreadable database and initializes a new one.
     #[must_use]
     pub fn archive_and_start_fresh(&self) -> Receiver<Result<StorageSnapshot, StorageError>> {
@@ -148,15 +167,17 @@ fn run_worker(path: &Path, receiver: &Receiver<Command>) {
             Command::Export { reply } => {
                 let result = repository_for(path, &mut repository)
                     .and_then(|repository| repository.load_snapshot())
-                    .and_then(|data| {
-                        serde_json::to_string_pretty(&BackupFile {
-                            format_version: 3,
-                            application_version: env!("CARGO_PKG_VERSION"),
-                            exported_at: Timestamp::now().to_string(),
-                            data,
-                        })
-                        .map_err(|error| StorageError::Io(error.to_string()))
-                    });
+                    .and_then(serialize_backup);
+                let _ = reply.send_blocking(result);
+            }
+            Command::ExportToPath {
+                path: destination,
+                reply,
+            } => {
+                let result = repository_for(path, &mut repository)
+                    .and_then(|repository| repository.load_snapshot())
+                    .and_then(serialize_backup)
+                    .and_then(|contents| write_backup_atomically(&destination, &contents));
                 let _ = reply.send_blocking(result);
             }
             Command::ArchiveAndStartFresh { reply } => {
@@ -165,6 +186,39 @@ fn run_worker(path: &Path, receiver: &Receiver<Command>) {
             }
         }
     }
+}
+
+fn serialize_backup(data: StorageSnapshot) -> Result<String, StorageError> {
+    serde_json::to_string_pretty(&BackupFile {
+        format_version: 3,
+        application_version: env!("CARGO_PKG_VERSION"),
+        exported_at: Timestamp::now().to_string(),
+        data,
+    })
+    .map_err(|error| StorageError::Io(error.to_string()))
+}
+
+fn write_backup_atomically(path: &Path, contents: &str) -> Result<(), StorageError> {
+    let temporary = path.with_file_name(format!(
+        ".{}.tmp-{}",
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("cadence-backup.json"),
+        std::process::id(),
+    ));
+    let result = (|| {
+        let mut file =
+            fs::File::create(&temporary).map_err(|error| StorageError::Io(error.to_string()))?;
+        file.write_all(contents.as_bytes())
+            .map_err(|error| StorageError::Io(error.to_string()))?;
+        file.sync_all()
+            .map_err(|error| StorageError::Io(error.to_string()))?;
+        fs::rename(&temporary, path).map_err(|error| StorageError::Io(error.to_string()))
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
 }
 
 fn repository_for<'a>(

@@ -1,8 +1,4 @@
-use std::{
-    fs,
-    io::Write,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use gpui::{Context, Window};
 use gpui_component::WindowExt as _;
@@ -134,12 +130,11 @@ impl CadenceView {
                 return;
             };
             let result = storage
-                .export_json()
+                .export_to_path(path)
                 .recv()
                 .await
                 .map_err(|_| StorageError::Io("storage worker stopped unexpectedly".to_owned()))
-                .and_then(std::convert::identity)
-                .and_then(|json| write_backup_atomically(&path, &json));
+                .and_then(std::convert::identity);
             let _ = weak_view.update(cx, |view, cx| match result {
                 Ok(()) => {
                     view.error = None;
@@ -257,27 +252,4 @@ impl CadenceView {
         }
         cx.notify();
     }
-}
-
-fn write_backup_atomically(path: &Path, contents: &str) -> Result<(), StorageError> {
-    let temporary = path.with_file_name(format!(
-        ".{}.tmp-{}",
-        path.file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("cadence-backup.json"),
-        std::process::id(),
-    ));
-    let result = (|| {
-        let mut file =
-            fs::File::create(&temporary).map_err(|error| StorageError::Io(error.to_string()))?;
-        file.write_all(contents.as_bytes())
-            .map_err(|error| StorageError::Io(error.to_string()))?;
-        file.sync_all()
-            .map_err(|error| StorageError::Io(error.to_string()))?;
-        fs::rename(&temporary, path).map_err(|error| StorageError::Io(error.to_string()))
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    result
 }

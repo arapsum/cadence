@@ -219,4 +219,14 @@ fn worker_exports_a_versioned_read_consistent_backup() {
     assert_eq!(value["format_version"], 3);
     assert_eq!(value["data"]["events"].as_array().unwrap().len(), 0);
     assert_eq!(value["data"]["categories"].as_array().unwrap().len(), 6);
+
+    let backup_path = directory.path().join("backup.json");
+    client
+        .export_to_path(&backup_path)
+        .recv_blocking()
+        .unwrap()
+        .unwrap();
+    let written = fs::read_to_string(backup_path).unwrap();
+    let written: serde_json::Value = serde_json::from_str(&written).unwrap();
+    assert_eq!(written["format_version"], 3);
 }
