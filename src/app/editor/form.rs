@@ -1,6 +1,6 @@
 use gpui::{
-    App, Context, Entity, IntoElement, Render, SharedString, StatefulInteractiveElement as _,
-    Subscription, Window, div, prelude::*, px,
+    App, Context, Entity, IntoElement, Render, ScrollHandle, SharedString,
+    StatefulInteractiveElement as _, Subscription, Window, div, prelude::*, px,
 };
 use gpui_component::{
     StyledExt as _,
@@ -118,6 +118,8 @@ pub(in crate::app::editor) struct EventEditor {
     all_time_options: Vec<TimeOption>,
     errors: FormErrors,
     focus_title: bool,
+    reveal_end_date: bool,
+    form_scroll: ScrollHandle,
     subscriptions: Vec<Subscription>,
 }
 
@@ -298,6 +300,8 @@ impl EventEditor {
             all_time_options,
             errors: FormErrors::default(),
             focus_title: true,
+            reveal_end_date: false,
+            form_scroll: ScrollHandle::new(),
             subscriptions: Vec::new(),
         }
     }
@@ -457,6 +461,7 @@ impl EventEditor {
     fn toggle_end_date(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.ends_enabled = !self.ends_enabled;
         if self.ends_enabled {
+            self.reveal_end_date = true;
             self.ends_on.update(cx, |date, cx| {
                 date.set_date(
                     chrono_date(self.initial.ends_on.unwrap_or(self.initial.date)),
@@ -546,6 +551,7 @@ impl EventEditor {
                     .child(div().text_sm().child("End date"))
                     .child(
                         Button::new("toggle-repeat-end")
+                            .debug_selector(|| "toggle-repeat-end".into())
                             .outline()
                             .label(if self.ends_enabled {
                                 "Remove end date"
@@ -562,11 +568,15 @@ impl EventEditor {
                     ),
             )
             .when(self.ends_enabled, |this| {
-                this.child(field(
-                    "Ends on",
-                    DatePicker::new(&self.ends_on).placeholder("Choose an end date"),
-                    errors.ends_on,
-                ))
+                this.child(
+                    div()
+                        .debug_selector(|| "repeat-end-date".into())
+                        .child(field(
+                            "Ends on",
+                            DatePicker::new(&self.ends_on).placeholder("Choose an end date"),
+                            errors.ends_on,
+                        )),
+                )
             })
         })
     }
@@ -581,6 +591,14 @@ impl Render for EventEditor {
                 title.update(cx, |title, cx| title.focus(window, cx));
             });
         }
+        if self.reveal_end_date {
+            self.reveal_end_date = false;
+            let form_scroll = self.form_scroll.clone();
+            window.defer(cx, move |_, cx| {
+                form_scroll.scroll_to_bottom();
+                cx.refresh_windows();
+            });
+        }
 
         let errors = self.errors.clone();
         let weekday_buttons = self.weekday_buttons(cx);
@@ -591,6 +609,7 @@ impl Render for EventEditor {
             .v_flex()
             .gap_4()
             .max_h(px(560.0))
+            .track_scroll(&self.form_scroll)
             .overflow_y_scroll()
             .child(field("Title", Input::new(&self.title), errors.title))
             .child(field("Notes", Textarea::new(&self.notes).h(px(84.0)), None))

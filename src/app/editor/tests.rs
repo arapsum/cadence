@@ -1,11 +1,18 @@
 use std::{cell::RefCell, rc::Rc};
 
-use gpui::{AppContext as _, Entity, Modifiers, TestAppContext};
+use gpui::{
+    AppContext as _, Entity, Modifiers, ScrollDelta, ScrollWheelEvent, TestAppContext, TouchPhase,
+    point, px,
+};
 use gpui_component::Root;
 use jiff::civil::Time;
 
 use super::super::state::CadenceView;
 use super::{form::TimeOption, form::end_time_options_after};
+use crate::{
+    domain::RecurrenceRule,
+    editor::{EditorMode, FormDraft},
+};
 
 #[test]
 fn end_time_options_begin_at_the_next_available_slot() {
@@ -73,4 +80,46 @@ fn event_entry_points_render_their_dialogs(cx: &mut TestAppContext) {
     });
     cx.update(|window, app| window.draw(app).clear(app));
     assert!(cx.debug_bounds("event-inspector-details").is_some());
+
+    cx.update(gpui_component::WindowExt::close_all_dialogs);
+    let recurring_draft = calendar.read_with(cx, |view, _| {
+        let event = view
+            .snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.events.first())
+            .expect("the seeded calendar contains an event");
+        let mut draft = FormDraft::from_occurrence(event);
+        draft.recurrence = Some(RecurrenceRule::Daily);
+        draft
+    });
+    calendar.update_in(cx, |view, window, app| {
+        view.open_editor(EditorMode::Create, &recurring_draft, window, app);
+    });
+    cx.update(|window, app| window.draw(app).clear(app));
+    let form = cx
+        .debug_bounds("event-editor-form")
+        .expect("recurring event form was rendered");
+    cx.simulate_event(ScrollWheelEvent {
+        position: form.center(),
+        delta: ScrollDelta::Pixels(point(px(0.0), px(-1_000.0))),
+        modifiers: Modifiers::none(),
+        touch_phase: TouchPhase::Moved,
+    });
+    cx.update(|window, app| window.draw(app).clear(app));
+    let toggle_end_date = cx
+        .debug_bounds("toggle-repeat-end")
+        .expect("repeat end-date button was rendered");
+    cx.simulate_click(toggle_end_date.center(), Modifiers::none());
+    cx.update(|window, app| window.draw(app).clear(app));
+
+    let end_date = cx
+        .debug_bounds("repeat-end-date")
+        .expect("enabling a recurrence end date should render its date picker");
+    let form = cx
+        .debug_bounds("event-editor-form")
+        .expect("event form remained rendered");
+    assert!(
+        end_date.intersects(&form),
+        "the newly rendered end-date picker should be revealed in the form viewport"
+    );
 }
