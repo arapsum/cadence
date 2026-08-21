@@ -22,7 +22,7 @@ impl FilterOption {
     pub(super) fn all() -> Self {
         Self {
             filter: CategoryFilter::All,
-            label: "All Category".into(),
+            label: "All categories".into(),
             color: None,
         }
     }
@@ -109,23 +109,7 @@ pub(super) fn render(
         .disabled(!interactive)
         .placeholder("Filter categories")
         .into_any_element();
-    let mode_control = TabBar::new("calendar-view-mode")
-        .segmented()
-        .selected_index(match view.state.view_mode() {
-            CalendarViewMode::Day => 0,
-            CalendarViewMode::Week => 1,
-        })
-        .on_click(cx.listener(|this, index: &usize, _, cx| {
-            let mode = if *index == 0 {
-                CalendarViewMode::Day
-            } else {
-                CalendarViewMode::Week
-            };
-            this.set_view_mode(mode, cx);
-        }))
-        .child(Tab::new().label("Day"))
-        .child(Tab::new().label("Week"))
-        .into_any_element();
+    let mode_control = render_mode_control(view, cx);
     let navigation = render_navigation(view, compact, cx);
     let today_button = Button::new("today")
         .outline()
@@ -151,6 +135,19 @@ pub(super) fn render(
         .tooltip("Export a JSON backup")
         .on_click(cx.listener(|this, _, window, cx| this.export_backup(window, cx)))
         .into_any_element();
+    let agenda_button = Button::new("open-agenda")
+        .outline()
+        .disabled(!interactive)
+        .label("Agenda")
+        .tooltip("Open agenda (Ctrl/Cmd+F)")
+        .on_click(cx.listener(|this, _, window, cx| this.open_agenda(window, cx)))
+        .into_any_element();
+    let settings_button = Button::new("open-settings")
+        .ghost()
+        .icon(IconName::Settings)
+        .tooltip("Settings (Ctrl/Cmd+,)")
+        .on_click(cx.listener(|this, _, window, cx| this.open_settings(window, cx)))
+        .into_any_element();
     let theme_button = Button::new("toggle-theme")
         .ghost()
         .icon(theme_icon)
@@ -175,6 +172,8 @@ pub(super) fn render(
         today_button,
         new_event_button,
         export_button,
+        agenda_button,
+        settings_button,
         navigation,
     };
     if compact {
@@ -182,6 +181,28 @@ pub(super) fn render(
     } else {
         render_wide(elements)
     }
+}
+
+fn render_mode_control(view: &CadenceView, cx: &Context<'_, CadenceView>) -> gpui::AnyElement {
+    TabBar::new("calendar-view-mode")
+        .segmented()
+        .selected_index(match view.state.view_mode() {
+            CalendarViewMode::Day => 0,
+            CalendarViewMode::Week => 1,
+        })
+        .on_click(cx.listener(|this, index: &usize, _, cx| {
+            this.set_view_mode(
+                if *index == 0 {
+                    CalendarViewMode::Day
+                } else {
+                    CalendarViewMode::Week
+                },
+                cx,
+            );
+        }))
+        .child(Tab::new().label("Day"))
+        .child(Tab::new().label("Week"))
+        .into_any_element()
 }
 
 struct ToolbarElements {
@@ -194,6 +215,8 @@ struct ToolbarElements {
     today_button: gpui::AnyElement,
     new_event_button: gpui::AnyElement,
     export_button: gpui::AnyElement,
+    agenda_button: gpui::AnyElement,
+    settings_button: gpui::AnyElement,
     navigation: gpui::AnyElement,
 }
 
@@ -208,6 +231,8 @@ fn render_compact(elements: ToolbarElements) -> gpui::AnyElement {
         today_button,
         new_event_button,
         export_button,
+        agenda_button,
+        settings_button,
         navigation,
     } = elements;
     let history_controls = div()
@@ -233,7 +258,13 @@ fn render_compact(elements: ToolbarElements) -> gpui::AnyElement {
                         .child(title)
                         .child(history_controls),
                 )
-                .child(theme_button),
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .child(settings_button)
+                        .child(theme_button),
+                ),
         )
         .child(
             div()
@@ -253,6 +284,7 @@ fn render_compact(elements: ToolbarElements) -> gpui::AnyElement {
                 .child(today_button)
                 .child(new_event_button)
                 .child(export_button)
+                .child(agenda_button)
                 .child(navigation),
         )
         .into_any_element()
@@ -269,6 +301,8 @@ fn render_wide(elements: ToolbarElements) -> gpui::AnyElement {
         today_button,
         new_event_button,
         export_button,
+        agenda_button,
+        settings_button,
         navigation,
     } = elements;
     let history_controls = div()
@@ -301,7 +335,9 @@ fn render_wide(elements: ToolbarElements) -> gpui::AnyElement {
                 .child(today_button)
                 .child(new_event_button)
                 .child(export_button)
+                .child(agenda_button)
                 .child(navigation)
+                .child(settings_button)
                 .child(theme_button),
         )
         .into_any_element()

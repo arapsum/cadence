@@ -40,6 +40,12 @@ impl Render for CadenceView {
             .on_action(cx.listener(|this, _: &actions::NewEvent, window, cx| {
                 this.new_event(window, cx);
             }))
+            .on_action(cx.listener(|this, _: &actions::OpenAgenda, window, cx| {
+                this.open_agenda(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &actions::OpenSettings, window, cx| {
+                this.open_settings(window, cx);
+            }))
             .on_action(cx.listener(|this, _: &actions::Undo, window, cx| {
                 this.undo(window, cx);
             }))

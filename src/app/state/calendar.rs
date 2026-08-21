@@ -38,7 +38,13 @@ impl CadenceView {
         let events = match self.repository.occurrences(range) {
             Ok(events) => events
                 .into_iter()
-                .filter(|event| event_matches_filter(event, self.state.category_filter()))
+                .filter(|event| {
+                    categories
+                        .iter()
+                        .find(|category| category.id() == event.category_id())
+                        .is_some_and(crate::domain::Category::is_visible)
+                        && event_matches_filter(event, self.state.category_filter())
+                })
                 .collect::<Vec<_>>(),
             Err(error) => {
                 self.error = Some(error.to_string());
