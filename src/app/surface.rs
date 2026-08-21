@@ -1,4 +1,6 @@
-use gpui::{Context, Hsla, IntoElement, Window, div, point, prelude::*, px};
+use gpui::{
+    Context, DragMoveEvent, Hsla, IntoElement, MouseButton, Window, div, point, prelude::*, px,
+};
 use gpui_component::scroll::ScrollableElement as _;
 use gpui_component::{ActiveTheme as _, StyledExt as _};
 use jiff::civil::Time;
@@ -33,6 +35,7 @@ impl SurfaceMode {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 pub(super) fn render(
     view: &mut CadenceView,
     window: &Window,
@@ -58,6 +61,9 @@ pub(super) fn render(
     }
     let scroll_offset = view.scroll_handle.offset();
     let view_id = cx.entity_id();
+    let update_view = cx.entity().downgrade();
+    let drop_view = update_view.clone();
+    let cancel_view = update_view.clone();
     let body = div()
         .id("calendar-plane-scroll")
         .absolute()
@@ -68,6 +74,35 @@ pub(super) fn render(
         .track_scroll(&view.scroll_handle)
         .overflow_scroll()
         .on_scroll_wheel(move |_, _, cx| cx.notify(view_id))
+        .on_drag_move(
+            move |event: &DragMoveEvent<super::interaction::DragPayload>, _, app| {
+                update_view
+                    .update(app, |view, cx| {
+                        view.update_manipulation(
+                            event,
+                            column_width,
+                            plane_width,
+                            column_count,
+                            cx,
+                        );
+                    })
+                    .ok();
+            },
+        )
+        .on_drop(
+            move |payload: &super::interaction::DragPayload, window, app| {
+                drop_view
+                    .update(app, |view, cx| {
+                        view.finish_manipulation(payload, window, cx);
+                    })
+                    .ok();
+            },
+        )
+        .on_mouse_up_out(MouseButton::Left, move |_, window, app| {
+            cancel_view
+                .update(app, |view, cx| view.cancel_manipulation(window, cx))
+                .ok();
+        })
         .child(grid::render_plane(
             view,
             plane_width,

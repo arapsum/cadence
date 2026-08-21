@@ -20,7 +20,9 @@ cadence_actions!(
     NextPeriod,
     GoToToday,
     NewEvent,
-    UndoDelete
+    Undo,
+    Redo,
+    CancelManipulation,
 );
 
 pub(super) fn bind(cx: &mut App) {
@@ -35,7 +37,11 @@ pub(super) fn bind(cx: &mut App) {
         KeyBinding::new("ctrl-t", GoToToday, Some(CALENDAR_CONTEXT)),
         KeyBinding::new("cmd-n", NewEvent, Some(CALENDAR_CONTEXT)),
         KeyBinding::new("ctrl-n", NewEvent, Some(CALENDAR_CONTEXT)),
-        KeyBinding::new("cmd-z", UndoDelete, Some(CALENDAR_CONTEXT)),
-        KeyBinding::new("ctrl-z", UndoDelete, Some(CALENDAR_CONTEXT)),
+        KeyBinding::new("cmd-z", Undo, Some(CALENDAR_CONTEXT)),
+        KeyBinding::new("ctrl-z", Undo, Some(CALENDAR_CONTEXT)),
+        KeyBinding::new("cmd-shift-z", Redo, Some(CALENDAR_CONTEXT)),
+        KeyBinding::new("ctrl-shift-z", Redo, Some(CALENDAR_CONTEXT)),
+        KeyBinding::new("ctrl-y", Redo, Some(CALENDAR_CONTEXT)),
+        KeyBinding::new("escape", CancelManipulation, Some(CALENDAR_CONTEXT)),
     ]);
 }

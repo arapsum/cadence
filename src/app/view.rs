@@ -40,9 +40,17 @@ impl Render for CadenceView {
             .on_action(cx.listener(|this, _: &actions::NewEvent, window, cx| {
                 this.new_event(window, cx);
             }))
-            .on_action(cx.listener(|this, _: &actions::UndoDelete, window, cx| {
-                this.undo_delete(window, cx);
+            .on_action(cx.listener(|this, _: &actions::Undo, window, cx| {
+                this.undo(window, cx);
             }))
+            .on_action(cx.listener(|this, _: &actions::Redo, window, cx| {
+                this.redo(window, cx);
+            }))
+            .on_action(
+                cx.listener(|this, _: &actions::CancelManipulation, window, cx| {
+                    this.cancel_manipulation(window, cx);
+                }),
+            )
             .v_flex()
             .size_full()
             .bg(cx.theme().background)

@@ -89,6 +89,20 @@ pub(super) fn render(
         )
         .into_any_element();
     let interactive = view.is_interactive();
+    let undo_button = Button::new("undo")
+        .ghost()
+        .icon(IconName::Undo2)
+        .disabled(!interactive || !view.history.can_undo())
+        .tooltip("Undo (Ctrl/Cmd+Z)")
+        .on_click(cx.listener(|this, _, window, cx| this.undo(window, cx)))
+        .into_any_element();
+    let redo_button = Button::new("redo")
+        .ghost()
+        .icon(IconName::Redo2)
+        .disabled(!interactive || !view.history.can_redo())
+        .tooltip("Redo (Ctrl/Cmd+Shift+Z)")
+        .on_click(cx.listener(|this, _, window, cx| this.redo(window, cx)))
+        .into_any_element();
     let filter = Select::new(&view.category_filter)
         .w(px(if compact { 190.0 } else { 210.0 }))
         .appearance(false)
@@ -151,34 +165,29 @@ pub(super) fn render(
         })
         .into_any_element();
 
+    let elements = ToolbarElements {
+        title,
+        undo_button,
+        redo_button,
+        theme_button,
+        mode_control,
+        filter,
+        today_button,
+        new_event_button,
+        export_button,
+        navigation,
+    };
     if compact {
-        render_compact(
-            title,
-            theme_button,
-            mode_control,
-            filter,
-            today_button,
-            new_event_button,
-            export_button,
-            navigation,
-        )
+        render_compact(elements)
     } else {
-        render_wide(
-            title,
-            theme_button,
-            mode_control,
-            filter,
-            today_button,
-            new_event_button,
-            export_button,
-            navigation,
-        )
+        render_wide(elements)
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn render_compact(
+struct ToolbarElements {
     title: gpui::AnyElement,
+    undo_button: gpui::AnyElement,
+    redo_button: gpui::AnyElement,
     theme_button: gpui::AnyElement,
     mode_control: gpui::AnyElement,
     filter: gpui::AnyElement,
@@ -186,7 +195,27 @@ fn render_compact(
     new_event_button: gpui::AnyElement,
     export_button: gpui::AnyElement,
     navigation: gpui::AnyElement,
-) -> gpui::AnyElement {
+}
+
+fn render_compact(elements: ToolbarElements) -> gpui::AnyElement {
+    let ToolbarElements {
+        title,
+        undo_button,
+        redo_button,
+        theme_button,
+        mode_control,
+        filter,
+        today_button,
+        new_event_button,
+        export_button,
+        navigation,
+    } = elements;
+    let history_controls = div()
+        .flex()
+        .items_center()
+        .gap_1()
+        .child(undo_button)
+        .child(redo_button);
     div()
         .v_flex()
         .gap_3()
@@ -196,7 +225,14 @@ fn render_compact(
                 .flex()
                 .items_center()
                 .justify_between()
-                .child(title)
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_3()
+                        .child(title)
+                        .child(history_controls),
+                )
                 .child(theme_button),
         )
         .child(
@@ -222,24 +258,39 @@ fn render_compact(
         .into_any_element()
 }
 
-#[allow(clippy::too_many_arguments)]
-fn render_wide(
-    title: gpui::AnyElement,
-    theme_button: gpui::AnyElement,
-    mode_control: gpui::AnyElement,
-    filter: gpui::AnyElement,
-    today_button: gpui::AnyElement,
-    new_event_button: gpui::AnyElement,
-    export_button: gpui::AnyElement,
-    navigation: gpui::AnyElement,
-) -> gpui::AnyElement {
+fn render_wide(elements: ToolbarElements) -> gpui::AnyElement {
+    let ToolbarElements {
+        title,
+        undo_button,
+        redo_button,
+        theme_button,
+        mode_control,
+        filter,
+        today_button,
+        new_event_button,
+        export_button,
+        navigation,
+    } = elements;
+    let history_controls = div()
+        .flex()
+        .items_center()
+        .gap_1()
+        .child(undo_button)
+        .child(redo_button);
     div()
         .flex()
         .items_center()
         .justify_between()
         .gap_4()
         .p_4()
-        .child(title)
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap_3()
+                .child(title)
+                .child(history_controls),
+        )
         .child(
             div()
                 .flex()

@@ -3,6 +3,8 @@ pub(super) mod day;
 pub(super) mod editor;
 pub(super) mod event_card;
 pub(super) mod grid;
+pub(super) mod history;
+pub(super) mod interaction;
 pub(super) mod presentation;
 pub(super) mod state;
 pub(super) mod style;

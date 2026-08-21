@@ -1,9 +1,12 @@
 use std::collections::HashMap;
 
 use gpui::{App, Context, IntoElement, KeyDownEvent, div, prelude::*, px};
-use gpui_component::ActiveTheme as _;
+use gpui_component::{ActiveTheme as _, StyledExt as _};
 
-use crate::{calendar::CategoryFilter, domain::time_to_offset};
+use crate::{
+    calendar::CategoryFilter,
+    domain::{format_time, time_to_offset},
+};
 use jiff::civil::Time;
 
 use super::{
@@ -34,6 +37,9 @@ pub(super) fn render_plane(
         mode,
         cx,
     ));
+    if let Some(preview) = render_manipulation_preview(view, column_width, cx) {
+        children.push(preview);
+    }
 
     div()
         .id("calendar-plane")
@@ -298,4 +304,68 @@ fn render_event_cards(
         );
     }
     cards
+}
+
+fn render_manipulation_preview(
+    view: &CadenceView,
+    column_width: f32,
+    cx: &Context<'_, CadenceView>,
+) -> Option<gpui::AnyElement> {
+    let manipulation = view.manipulation.as_ref()?;
+    let snapshot = view.snapshot.as_ref()?;
+    let position = snapshot
+        .positions
+        .iter()
+        .find(|position| position.event_id() == manipulation.event_id())?;
+    let category = snapshot
+        .categories
+        .iter()
+        .find(|category| category.id() == manipulation.event.category_id())?;
+    let dark = cx.theme().mode.is_dark();
+    let (background, foreground, border) =
+        super::style::category_palette(category.color_token(), dark);
+    let lane_count = f32::from(position.lane_count().max(1));
+    let width = column_width * f32::from(position.lane_span()) / lane_count - 8.0;
+    let lane = f32::from(position.lane());
+    let day = f32::from(u16::try_from(manipulation.target_day()).ok()?);
+    let left = day.mul_add(column_width, column_width * lane / lane_count + 4.0);
+    let top = time_to_offset(manipulation.proposed.start_time, PIXELS_PER_MINUTE).ok()? + 4.0;
+    let bottom = time_to_offset(manipulation.proposed.end_time, PIXELS_PER_MINUTE).ok()?;
+    let height = (bottom - top + 4.0).max(18.0);
+    let event_time = format!(
+        "{} – {}",
+        format_time(
+            manipulation.proposed.start_time,
+            view.settings.clock_format(),
+        ),
+        format_time(manipulation.proposed.end_time, view.settings.clock_format())
+    );
+    Some(
+        div()
+            .id("calendar-manipulation-preview")
+            .absolute()
+            .top(px(top))
+            .left(px(left))
+            .w(px(width.max(38.0)))
+            .h(px(height))
+            .v_flex()
+            .gap_1()
+            .rounded_md()
+            .border_2()
+            .border_dashed()
+            .border_color(border)
+            .bg(background.opacity(0.28))
+            .text_color(foreground)
+            .px_2()
+            .py_1()
+            .overflow_hidden()
+            .child(
+                div()
+                    .text_xs()
+                    .font_medium()
+                    .child(manipulation.event.title().to_owned()),
+            )
+            .child(div().text_xs().opacity(0.8).child(event_time))
+            .into_any_element(),
+    )
 }

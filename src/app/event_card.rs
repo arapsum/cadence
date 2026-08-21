@@ -1,6 +1,6 @@
 use gpui::{
-    Context, ElementId, Hsla, IntoElement, KeyDownEvent, StatefulInteractiveElement as _, div,
-    prelude::*, px,
+    App, Context, ElementId, Hsla, IntoElement, KeyDownEvent, MouseButton, Pixels, Point, Render,
+    StatefulInteractiveElement as _, Window, div, prelude::*, px,
 };
 use gpui_component::{ActiveTheme as _, StyledExt as _, tooltip::Tooltip};
 
@@ -9,8 +9,14 @@ use crate::{
     domain::{Category, Event, format_time},
 };
 
-use super::{state::CadenceView, style::category_palette, surface::SurfaceMode};
+use super::{
+    interaction::{DragPayload, ManipulationKind},
+    state::CadenceView,
+    style::category_palette,
+    surface::SurfaceMode,
+};
 
+#[allow(clippy::too_many_lines)]
 pub(super) fn render(
     view: &CadenceView,
     event: &Event,
@@ -52,8 +58,42 @@ pub(super) fn render(
     let show_notes = matches!(mode, SurfaceMode::Day) && position.height() >= 112.0;
     let notes = event.notes().filter(|_| show_notes).map(str::to_owned);
     let details = render_details(title, &event_time, compact, tall, roomy, notes);
+    let state = view;
     let view = cx.entity().downgrade();
     let key_view = view.clone();
+    let drag_view = view.clone();
+    let resize_start_view = view.clone();
+    let resize_end_view = view.clone();
+    let range_start = state
+        .snapshot
+        .as_ref()
+        .map_or(event_date, |snapshot| snapshot.range.start());
+    let move_payload = DragPayload {
+        event: event.clone(),
+        kind: ManipulationKind::Move,
+        original_day: position.day_offset(),
+        range_start,
+    };
+    let resize_start_payload = DragPayload {
+        event: event.clone(),
+        kind: ManipulationKind::Resize(crate::calendar::ResizeEdge::Start),
+        original_day: position.day_offset(),
+        range_start,
+    };
+    let resize_end_payload = DragPayload {
+        event: event.clone(),
+        kind: ManipulationKind::Resize(crate::calendar::ResizeEdge::End),
+        original_day: position.day_offset(),
+        range_start,
+    };
+    let avatar_title = event.title().to_owned();
+    let avatar_time = event_time;
+    let avatar_background = background;
+    let avatar_foreground = foreground;
+    let active = state
+        .manipulation
+        .as_ref()
+        .is_some_and(|manipulation| manipulation.event_id() == event_id);
     div()
         .id(ElementId::NamedInteger("event-card".into(), element_key))
         .absolute()
@@ -76,7 +116,8 @@ pub(super) fn render(
         .bg(background)
         .text_color(foreground)
         .overflow_hidden()
-        .cursor_pointer()
+        .cursor_grab()
+        .when(active, |this| this.opacity(0.34))
         .tab_index(0)
         .focus(|this| this.border_color(cx.theme().foreground))
         .hover(|this| this.opacity(0.92))
@@ -102,16 +143,172 @@ pub(super) fn render(
                 _ => {}
             },
         )
-        .on_click(move |_, window, app| {
+        .on_drag(move_payload, move |payload, offset, _, app| {
+            drag_view
+                .update(app, |view, cx| view.begin_manipulation(payload, offset, cx))
+                .ok();
+            app.new(|_| {
+                DragAvatar::new(
+                    avatar_title.clone(),
+                    avatar_time.clone(),
+                    avatar_background,
+                    avatar_foreground,
+                    offset,
+                )
+            })
+        })
+        .on_click(move |event, window, app| {
             app.stop_propagation();
             view.update(app, |this, cx| {
-                this.inspect_event(event_id, event_date, window, cx);
+                if event.standard_click() && event.click_count() >= 2 {
+                    this.inspect_event(event_id, event_date, window, cx);
+                } else {
+                    this.select_event(event_id, event_date, cx);
+                }
             })
             .ok();
         })
+        .child(resize_handle(ResizeHandleProps {
+            id: format!("event-resize-start-{element_key}"),
+            payload: resize_start_payload,
+            view: resize_start_view,
+            start: true,
+            background,
+            foreground,
+            height: position.height(),
+            clock_format: state.settings.clock_format(),
+        }))
         .child(render_category_header(category_name, foreground))
         .child(details)
+        .child(resize_handle(ResizeHandleProps {
+            id: format!("event-resize-end-{element_key}"),
+            payload: resize_end_payload,
+            view: resize_end_view,
+            start: false,
+            background,
+            foreground,
+            height: position.height(),
+            clock_format: state.settings.clock_format(),
+        }))
         .into_any_element()
+}
+
+struct ResizeHandleProps {
+    id: String,
+    payload: DragPayload,
+    view: gpui::WeakEntity<CadenceView>,
+    start: bool,
+    background: Hsla,
+    foreground: Hsla,
+    height: f32,
+    clock_format: crate::domain::ClockFormat,
+}
+
+fn resize_handle(props: ResizeHandleProps) -> gpui::AnyElement {
+    let ResizeHandleProps {
+        id,
+        payload,
+        view,
+        start,
+        background,
+        foreground,
+        height,
+        clock_format,
+    } = props;
+    let handle_view = view;
+    div()
+        .id(id)
+        .absolute()
+        .left(px(0.0))
+        .right(px(0.0))
+        .when(start, |this| this.top(px(0.0)))
+        .when(!start, |this| this.bottom(px(0.0)))
+        .h(px(8.0_f32.min((height - 4.0).max(3.0))))
+        .cursor_ns_resize()
+        .bg(foreground.opacity(0.08))
+        .hover(|this| this.bg(foreground.opacity(0.2)))
+        .on_mouse_down(
+            MouseButton::Left,
+            |_: &gpui::MouseDownEvent, _: &mut Window, app: &mut App| {
+                app.stop_propagation();
+            },
+        )
+        .on_drag(payload, move |payload, offset, _, app| {
+            handle_view
+                .update(app, |view, cx| view.begin_manipulation(payload, offset, cx))
+                .ok();
+            app.new(|_| {
+                DragAvatar::new(
+                    payload.event.title().to_owned(),
+                    format!(
+                        "{} – {}",
+                        format_time(payload.event.start_time(), clock_format,),
+                        format_time(payload.event.end_time(), clock_format,),
+                    ),
+                    background,
+                    foreground,
+                    offset,
+                )
+            })
+        })
+        .into_any_element()
+}
+
+struct DragAvatar {
+    title: String,
+    event_time: String,
+    background: Hsla,
+    foreground: Hsla,
+    offset: Point<Pixels>,
+}
+
+impl DragAvatar {
+    const fn new(
+        title: String,
+        event_time: String,
+        background: Hsla,
+        foreground: Hsla,
+        offset: Point<Pixels>,
+    ) -> Self {
+        Self {
+            title,
+            event_time,
+            background,
+            foreground,
+            offset,
+        }
+    }
+}
+
+impl Render for DragAvatar {
+    fn render(&mut self, _: &mut Window, _: &mut Context<'_, Self>) -> impl IntoElement {
+        let width = px(220.0);
+        let height = px(56.0);
+        div()
+            .absolute()
+            .left(self.offset.x - width / 2.0)
+            .top(self.offset.y - height / 2.0)
+            .w(width)
+            .h(height)
+            .v_flex()
+            .justify_center()
+            .gap_1()
+            .rounded_md()
+            .border_1()
+            .border_color(self.foreground.opacity(0.5))
+            .bg(self.background.opacity(0.9))
+            .text_color(self.foreground)
+            .px_2()
+            .shadow_md()
+            .child(
+                div()
+                    .text_sm()
+                    .font_medium()
+                    .truncate()
+                    .child(self.title.clone()),
+            )
+            .child(div().text_xs().opacity(0.8).child(self.event_time.clone()))
+    }
 }
 
 fn render_category_header(category_name: String, foreground: Hsla) -> gpui::AnyElement {

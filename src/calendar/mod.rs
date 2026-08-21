@@ -4,8 +4,10 @@
 //! therefore be tested with ordinary Rust tests while the application layer
 //! remains focused on translating those primitives into pixels and interactions.
 
+mod interaction;
 mod layout;
 mod state;
 
+pub(crate) use interaction::{ResizeEdge, propose_move, propose_resize};
 pub use layout::{LayoutError, LayoutMetrics, PositionedEvent, layout_events};
 pub use state::{CalendarState, CalendarViewMode, CategoryFilter};

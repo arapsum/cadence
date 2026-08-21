@@ -24,7 +24,11 @@ use crate::{
     store::TimetableRepository,
 };
 
-use super::{state::CadenceView, style::category_dot};
+use super::{
+    history::{ChangeKind, EventChange},
+    state::CadenceView,
+    style::category_dot,
+};
 
 #[derive(Clone)]
 pub(super) struct CategoryOption {
@@ -80,6 +84,7 @@ pub(super) struct EventEditor {
     pub(super) start_time: Entity<SelectState<Vec<TimeOption>>>,
     pub(super) end_time: Entity<SelectState<Vec<TimeOption>>>,
     pub(super) category: Entity<SelectState<Vec<CategoryOption>>>,
+    all_time_options: Vec<TimeOption>,
     pub(super) errors: FormErrors,
     focus_title: bool,
     subscriptions: Vec<Subscription>,
@@ -112,6 +117,7 @@ impl EventEditor {
 
         let raw_times = time_options(
             settings.snap_interval().minutes(),
+            settings.day_start(),
             &[draft.start_time, draft.end_time],
         );
         let time_items = |times: &[Time]| {
@@ -124,8 +130,9 @@ impl EventEditor {
                 })
                 .collect::<Vec<_>>()
         };
-        let start_options = time_items(&raw_times);
-        let end_options = start_options.clone();
+        let all_time_options = time_items(&raw_times);
+        let start_options = all_time_options.clone();
+        let end_options = end_time_options_after(&all_time_options, draft.start_time);
         let start_index = start_options
             .iter()
             .position(|option| option.time == draft.start_time)
@@ -168,13 +175,14 @@ impl EventEditor {
             start_time,
             end_time,
             category,
+            all_time_options,
             errors: FormErrors::default(),
             focus_title: true,
             subscriptions: Vec::new(),
         }
     }
 
-    pub(super) fn subscribe(&mut self, cx: &mut Context<'_, Self>) {
+    pub(super) fn subscribe(&mut self, window: &Window, cx: &mut Context<'_, Self>) {
         let title = self.title.clone();
         self.subscriptions
             .push(cx.subscribe(&title, |this, _, _: &InputEvent, cx| {
@@ -193,11 +201,15 @@ impl EventEditor {
                 cx.notify();
             }));
         let start_time = self.start_time.clone();
-        self.subscriptions.push(cx.subscribe(
+        self.subscriptions.push(cx.subscribe_in(
             &start_time,
-            |this, _, _: &gpui_component::select::SelectEvent<Vec<TimeOption>>, cx| {
+            window,
+            |this, _, event: &gpui_component::select::SelectEvent<Vec<TimeOption>>, window, cx| {
                 this.errors.start_time = None;
                 this.errors.end_time = None;
+                if let gpui_component::select::SelectEvent::Confirm(Some(start_time)) = event {
+                    this.update_end_time_options(*start_time, window, cx);
+                }
                 cx.notify();
             },
         ));
@@ -248,6 +260,36 @@ impl EventEditor {
     pub(super) fn is_dirty(&self, cx: &App) -> bool {
         self.form(cx) != self.initial
     }
+
+    fn update_end_time_options(
+        &self,
+        start_time: Time,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let current_end_time = self.end_time.read(cx).selected_value().copied();
+        let options = end_time_options_after(&self.all_time_options, start_time);
+        let selected_end_time = current_end_time
+            .filter(|end_time| *end_time > start_time)
+            .or_else(|| options.first().map(|option| option.time));
+
+        self.end_time.update(cx, |end_time, cx| {
+            end_time.set_items(options, window, cx);
+            if let Some(selected_end_time) = selected_end_time {
+                end_time.set_selected_value(&selected_end_time, window, cx);
+            } else {
+                end_time.set_selected_index(None, window, cx);
+            }
+        });
+    }
+}
+
+fn end_time_options_after(options: &[TimeOption], start_time: Time) -> Vec<TimeOption> {
+    options
+        .iter()
+        .filter(|option| option.time > start_time)
+        .cloned()
+        .collect()
 }
 
 impl Render for EventEditor {
@@ -459,7 +501,7 @@ impl CadenceView {
         };
         let settings = self.settings.clone();
         let editor = cx.new(|cx| EventEditor::new(mode, draft, categories, &settings, window, cx));
-        editor.update(cx, EventEditor::subscribe);
+        editor.update(cx, |editor, cx| editor.subscribe(window, cx));
         let owner = cx.entity().downgrade();
         let content_editor = editor.clone();
         let ok_editor = editor.clone();
@@ -573,6 +615,7 @@ impl CadenceView {
                 return false;
             }
         };
+        let rollback = self.rollback_view_state();
         let before = match self.repository.snapshot() {
             Ok(snapshot) => snapshot,
             Err(error) => {
@@ -588,10 +631,13 @@ impl CadenceView {
                 Event::new(id, draft.clone(), timestamp)
                     .map_err(|error| error.to_string())
                     .and_then(|event| {
+                        let change = EventChange::Create {
+                            event: event.clone(),
+                        };
                         self.repository
                             .create_event(event)
                             .map_err(|error| error.to_string())
-                            .map(|()| id)
+                            .map(|()| (id, change))
                     })
             }
             EditorMode::Edit(id) => self
@@ -602,17 +648,29 @@ impl CadenceView {
                     event.ok_or_else(|| "That event is no longer available.".to_owned())
                 })
                 .and_then(|mut event| {
+                    let before = event.draft();
                     event
                         .revise(draft.clone(), timestamp)
                         .map_err(|error| error.to_string())?;
+                    let after = event.draft();
                     self.repository
                         .update_event(event)
                         .map_err(|error| error.to_string())
-                        .map(|()| id)
+                        .map(|()| {
+                            (
+                                id,
+                                EventChange::Update {
+                                    id,
+                                    before,
+                                    after,
+                                    kind: ChangeKind::Edit,
+                                },
+                            )
+                        })
                 }),
         };
-        let id = match result {
-            Ok(id) => id,
+        let (id, change) = match result {
+            Ok(result) => result,
             Err(error) => {
                 self.show_error(error, window, cx);
                 return false;
@@ -624,7 +682,12 @@ impl CadenceView {
         self.pending_scroll_minutes = None;
         self.scroll_initialized = false;
         self.refresh_snapshot();
-        self.persist_snapshot(before, cx);
+        self.persist_snapshot(
+            before,
+            rollback,
+            super::state::HistoryEffect::Record(change),
+            cx,
+        );
         window.push_notification(
             Notification::success(match mode {
                 EditorMode::Create => "Event created",
@@ -795,6 +858,7 @@ impl CadenceView {
     }
 
     fn delete_event(&mut self, event_id: EventId, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let rollback = self.rollback_view_state();
         let before = match self.repository.snapshot() {
             Ok(snapshot) => snapshot,
             Err(error) => {
@@ -804,10 +868,14 @@ impl CadenceView {
         };
         match self.repository.delete_event(event_id) {
             Ok(event) => {
-                self.last_deleted = Some(event);
                 self.state.clear_selection();
                 self.refresh_snapshot();
-                self.persist_snapshot(before, cx);
+                self.persist_snapshot(
+                    before,
+                    rollback,
+                    super::state::HistoryEffect::Record(EventChange::Delete { event }),
+                    cx,
+                );
                 let owner = cx.entity().downgrade();
                 window.push_notification(
                     Notification::new()
@@ -818,7 +886,7 @@ impl CadenceView {
                                 move |_, window, app| {
                                     owner
                                         .update(app, |view, cx| {
-                                            view.undo_delete(window, cx);
+                                            view.undo(window, cx);
                                         })
                                         .ok();
                                 },
@@ -832,13 +900,34 @@ impl CadenceView {
         }
     }
 
-    pub(super) fn undo_delete(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
-        if !self.is_interactive() {
+    pub(super) fn undo(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        if !self.is_interactive() || window.has_active_dialog(cx) {
             return;
         }
-        let Some(event) = self.last_deleted.clone() else {
+        let Some(change) = self.history.peek_undo().cloned() else {
             return;
         };
+        self.apply_history_change(&change, false, window, cx);
+    }
+
+    pub(super) fn redo(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        if !self.is_interactive() || window.has_active_dialog(cx) {
+            return;
+        }
+        let Some(change) = self.history.peek_redo().cloned() else {
+            return;
+        };
+        self.apply_history_change(&change, true, window, cx);
+    }
+
+    fn apply_history_change(
+        &mut self,
+        change: &EventChange,
+        forward: bool,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let rollback = self.rollback_view_state();
         let before = match self.repository.snapshot() {
             Ok(snapshot) => snapshot,
             Err(error) => {
@@ -846,17 +935,80 @@ impl CadenceView {
                 return;
             }
         };
-        match self.repository.create_event(event.clone()) {
-            Ok(()) => {
-                self.last_deleted = None;
-                self.state.select_event(event.id(), event.date());
-                self.refresh_snapshot();
-                self.persist_snapshot(before, cx);
-                window.push_notification(Notification::success("Event restored"), cx);
-                cx.notify();
+        let result = match &change {
+            EventChange::Create { event } if forward => self.repository.create_event(event.clone()),
+            EventChange::Create { event } => self.repository.delete_event(event.id()).map(|_| ()),
+            EventChange::Update {
+                id, before, after, ..
+            } => self.revise_event(*id, if forward { after } else { before }),
+            EventChange::Delete { event } if forward => {
+                self.repository.delete_event(event.id()).map(|_| ())
             }
-            Err(error) => self.show_error(error.to_string(), window, cx),
+            EventChange::Delete { event } => self.repository.create_event(event.clone()),
+        };
+        if let Err(error) = result {
+            self.show_error(error.to_string(), window, cx);
+            return;
         }
+
+        match &change {
+            EventChange::Create { event } => {
+                if forward {
+                    self.state.select_event(event.id(), event.date());
+                    self.last_category = Some(event.category_id());
+                } else {
+                    self.state.clear_selection();
+                }
+            }
+            EventChange::Update {
+                id, before, after, ..
+            } => {
+                let draft = if forward { after } else { before };
+                self.state.select_event(*id, draft.date);
+                self.last_category = Some(draft.category_id);
+            }
+            EventChange::Delete { event } => {
+                if forward {
+                    self.state.clear_selection();
+                } else {
+                    self.state.select_event(event.id(), event.date());
+                    self.last_category = Some(event.category_id());
+                }
+            }
+        }
+        self.pending_scroll_minutes = None;
+        self.scroll_initialized = false;
+        self.refresh_snapshot();
+        let effect = if forward {
+            super::state::HistoryEffect::Redo(change.clone())
+        } else {
+            super::state::HistoryEffect::Undo(change.clone())
+        };
+        self.persist_snapshot(before, rollback, effect, cx);
+        window.push_notification(
+            Notification::success(format!(
+                "{} {}",
+                if forward { "Redid" } else { "Undid" },
+                change.kind().label()
+            )),
+            cx,
+        );
+        cx.notify();
+    }
+
+    fn revise_event(
+        &mut self,
+        event_id: EventId,
+        draft: &crate::domain::EventDraft,
+    ) -> Result<(), crate::domain::RepositoryError> {
+        let mut event = self
+            .repository
+            .event(event_id)?
+            .ok_or(crate::domain::RepositoryError::EventNotFound)?;
+        event
+            .revise(draft.clone(), Timestamp::now())
+            .map_err(|error| crate::domain::RepositoryError::InvalidEntity(error.to_string()))?;
+        self.repository.update_event(event)
     }
 
     fn show_error(
@@ -878,8 +1030,34 @@ mod tests {
 
     use gpui::{AppContext as _, Entity, Modifiers, TestAppContext};
     use gpui_component::Root;
+    use jiff::civil::Time;
 
-    use super::CadenceView;
+    use super::{CadenceView, TimeOption, end_time_options_after};
+
+    #[test]
+    fn end_time_options_begin_at_the_next_available_slot() {
+        let options = [
+            TimeOption {
+                time: Time::constant(11, 0, 0, 0),
+                label: "11:00 AM".into(),
+            },
+            TimeOption {
+                time: Time::constant(11, 15, 0, 0),
+                label: "11:15 AM".into(),
+            },
+            TimeOption {
+                time: Time::constant(11, 30, 0, 0),
+                label: "11:30 AM".into(),
+            },
+        ];
+
+        let end_options = end_time_options_after(&options, Time::constant(11, 15, 0, 0));
+
+        assert_eq!(
+            end_options.first().map(|option| option.time),
+            Some(Time::constant(11, 30, 0, 0))
+        );
+    }
 
     #[gpui::test]
     fn event_entry_points_render_their_dialogs(cx: &mut TestAppContext) {

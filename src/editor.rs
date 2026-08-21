@@ -196,11 +196,14 @@ pub fn snap_up(time: Time, snap_minutes: u16) -> Time {
 /// # Parameters
 ///
 /// - `snap_minutes`: Snap interval in minutes; values below one use one minute.
+/// - `preferred_start`: Time at which the options should begin.
 /// - `extra`: Existing event times that must remain selectable.
 ///
 /// # Returns
 ///
-/// Sorted, deduplicated times covering the day and every value in `extra`.
+/// Deduplicated times covering the day and every value in `extra`, ordered from
+/// `preferred_start` through the end of the day and then wrapped through the
+/// earlier times.
 ///
 /// # Panics
 ///
@@ -208,7 +211,7 @@ pub fn snap_up(time: Time, snap_minutes: u16) -> Time {
 ///
 /// - The snap interval cannot fit the platform's `usize` step size.
 /// - A generated time component cannot fit in Jiff's supported `i8` fields.
-pub fn time_options(snap_minutes: u16, extra: &[Time]) -> Vec<Time> {
+pub fn time_options(snap_minutes: u16, preferred_start: Time, extra: &[Time]) -> Vec<Time> {
     let snap = i64::from(snap_minutes.max(1));
     let mut options = (0_i64..24 * 60)
         .step_by(usize::try_from(snap).expect("snap interval fits usize"))
@@ -224,6 +227,9 @@ pub fn time_options(snap_minutes: u16, extra: &[Time]) -> Vec<Time> {
     options.extend(extra.iter().copied());
     options.sort_unstable();
     options.dedup();
+    if let Some(pivot) = options.iter().position(|time| *time >= preferred_start) {
+        options.rotate_left(pivot);
+    }
     options
 }
 
@@ -322,11 +328,22 @@ mod tests {
     fn time_options_keep_off_grid_values_for_existing_events() {
         let options = time_options(
             15,
+            Time::constant(6, 0, 0, 0),
             &[Time::constant(8, 7, 0, 0), Time::constant(9, 7, 0, 0)],
         );
         assert!(options.contains(&Time::constant(8, 7, 0, 0)));
         assert!(options.contains(&Time::constant(9, 7, 0, 0)));
-        assert_eq!(options.first(), Some(&Time::constant(0, 0, 0, 0)));
+        assert_eq!(options.first(), Some(&Time::constant(6, 0, 0, 0)));
+        assert_eq!(options.last(), Some(&Time::constant(5, 45, 0, 0)));
+    }
+
+    #[test]
+    fn time_options_wrap_midnight_after_the_preferred_day() {
+        let options = time_options(60, Time::constant(7, 0, 0, 0), &[]);
+
+        assert_eq!(options.first(), Some(&Time::constant(7, 0, 0, 0)));
+        assert_eq!(options[16], Time::constant(23, 0, 0, 0));
+        assert_eq!(options[17], Time::constant(0, 0, 0, 0));
     }
 
     #[test]
