@@ -3,6 +3,7 @@ pub(super) mod day;
 pub(super) mod editor;
 pub(super) mod event_card;
 pub(super) mod grid;
+pub(super) mod guidance;
 pub(super) mod history;
 pub(super) mod interaction;
 pub(super) mod presentation;
@@ -29,6 +30,7 @@ pub fn run() {
     let app = gpui_platform::application().with_assets(gpui_component_assets::Assets);
 
     app.run(|cx: &mut App| {
+        cx.set_app_identity("io.github.arapsum.Cadence", "Cadence");
         gpui_component::init(cx);
         actions::bind(cx);
 

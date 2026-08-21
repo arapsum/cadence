@@ -7,7 +7,7 @@ mod viewport;
 pub(in crate::app) use persistence::{HistoryEffect, PersistenceState};
 pub(in crate::app) use viewport::RollbackViewState;
 
-use std::path::PathBuf;
+use std::{collections::HashSet, path::PathBuf};
 
 use gpui::{Entity, ScrollHandle, Subscription};
 use gpui_component::select::SelectState;
@@ -45,5 +45,8 @@ pub(super) struct CadenceView {
     pub(super) pending_scroll_minutes: Option<f32>,
     pub(super) error: Option<String>,
     pub(super) last_category: Option<crate::domain::CategoryId>,
+    pub(super) notifications_enabled: bool,
+    pub(super) reduce_motion: bool,
+    pub(super) delivered_reminders: HashSet<String>,
     pub(super) subscriptions: Vec<Subscription>,
 }

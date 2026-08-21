@@ -164,6 +164,8 @@ impl CadenceView {
                 CategoryFilter::All => None,
                 CategoryFilter::Only(id) => Some(id),
             },
+            notifications_enabled: self.notifications_enabled,
+            reduce_motion: self.reduce_motion,
         }
     }
 
@@ -225,6 +227,9 @@ impl CadenceView {
                     && let Ok(repository) = InMemoryRepository::from_snapshot(&pending.rollback)
                 {
                     self.settings = pending.rollback.settings.clone();
+                    self.notifications_enabled = pending.rollback.preferences.notifications_enabled;
+                    self.reduce_motion = pending.rollback.preferences.reduce_motion;
+                    cx.set_reduce_motion(self.reduce_motion);
                     self.repository = repository;
                     self.state.set_category_filter(
                         pending

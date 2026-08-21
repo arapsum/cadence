@@ -1,14 +1,17 @@
-use std::{path::PathBuf, time::Duration};
+use std::{collections::HashSet, path::PathBuf, time::Duration};
 
-use gpui::{AppContext as _, Context, ScrollHandle, Window};
+use gpui::{
+    AppContext as _, Context, ScrollHandle, SystemNotification, SystemNotificationAction, Window,
+};
 use gpui_component::{
     IndexPath,
     select::{SelectEvent, SelectState},
 };
-use jiff::Timestamp;
+use jiff::{SignedDuration, Timestamp, tz::TimeZone};
 
 use crate::{
     calendar::{CalendarState, CalendarViewMode, CategoryFilter},
+    domain::DateRange,
     domain::Settings,
     store::{
         CalendarViewModePreference, InMemoryRepository, StorageClient, StorageError,
@@ -72,6 +75,9 @@ impl CadenceView {
             pending_scroll_minutes: None,
             error: None,
             last_category: None,
+            notifications_enabled: false,
+            reduce_motion: false,
+            delivered_reminders: HashSet::new(),
             subscriptions: Vec::new(),
         };
 
@@ -106,7 +112,7 @@ impl CadenceView {
                     .await;
                 if weak_view
                     .update(cx, |view, cx| {
-                        view.now = Timestamp::now();
+                        view.tick_clock(cx);
                         cx.notify();
                     })
                     .is_err()
@@ -118,6 +124,61 @@ impl CadenceView {
         .detach();
 
         this
+    }
+
+    fn tick_clock(&mut self, cx: &mut Context<'_, Self>) {
+        self.now = Timestamp::now();
+        self.deliver_due_reminders(cx);
+        cx.notify();
+    }
+
+    fn deliver_due_reminders(&mut self, cx: &Context<'_, Self>) {
+        if !self.notifications_enabled || !self.is_interactive() {
+            return;
+        }
+        let (today, _) = local_date_time(self.now, &self.settings);
+        let end = today
+            .tomorrow()
+            .and_then(jiff::civil::Date::tomorrow)
+            .unwrap_or(today);
+        let Ok(range) = DateRange::new(today, end) else {
+            return;
+        };
+        let Ok(events) = self.repository.occurrences(range) else {
+            return;
+        };
+        let timezone = TimeZone::get(self.settings.time_zone().as_str()).unwrap_or(TimeZone::UTC);
+        for event in events {
+            let Some(reminder) = event.draft().reminder else {
+                continue;
+            };
+            let Ok(start) = event
+                .date()
+                .to_datetime(event.start_time())
+                .to_zoned(timezone.clone())
+            else {
+                continue;
+            };
+            let Ok(due) = start
+                .timestamp()
+                .checked_sub(SignedDuration::from_mins(i64::from(reminder.minutes())))
+            else {
+                continue;
+            };
+            let tag = format!("cadence-reminder-{:?}-{}", event.id(), event.date());
+            if due <= self.now && self.delivered_reminders.insert(tag.clone()) {
+                cx.show_system_notification(SystemNotification {
+                    tag: tag.into(),
+                    title: event.title().into(),
+                    body: format!("{} starts at {}.", event.category_id(), event.start_time())
+                        .into(),
+                    actions: vec![SystemNotificationAction {
+                        id: "open".into(),
+                        label: "Open Cadence".into(),
+                    }],
+                });
+            }
+        }
     }
 
     fn subscribe_category_filter(&mut self, cx: &mut Context<'_, Self>) {
@@ -163,6 +224,9 @@ impl CadenceView {
         match InMemoryRepository::from_snapshot(&snapshot) {
             Ok(repository) => {
                 self.settings = snapshot.settings.clone();
+                self.notifications_enabled = snapshot.preferences.notifications_enabled;
+                self.reduce_motion = snapshot.preferences.reduce_motion;
+                cx.set_reduce_motion(self.reduce_motion);
                 self.repository = repository;
                 let (today, _) = local_date_time(self.now, &self.settings);
                 self.state = CalendarState::new(
