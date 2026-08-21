@@ -1,14 +1,18 @@
 use gpui::{Context, IntoElement, Window, div, prelude::*, px};
 use gpui_component::{
-    ActiveTheme as _, Placement, StyledExt as _, WindowExt as _,
+    ActiveTheme as _, Icon, IconName, Placement, Sizable as _, StyledExt as _, WindowExt as _,
     button::{Button, ButtonVariants as _},
+    group_box::GroupBoxVariant,
+    setting::{SettingField, SettingGroup, SettingItem, SettingPage, Settings},
+    switch::Switch,
+    window_paddings,
 };
 
 use crate::{domain::format_time, store::TimetableRepository};
 
 use super::{
     state::{CadenceView, HistoryEffect},
-    style::category_dot,
+    style::{category_dot, dialog_margin_top},
     toolbar::FilterOption,
 };
 
@@ -101,75 +105,43 @@ impl CadenceView {
 
     /// Opens the persisted application-preferences dialog.
     pub(in crate::app) fn open_settings(&self, window: &mut Window, cx: &mut Context<'_, Self>) {
-        let notifications_enabled = self.notifications_enabled;
-        let reduce_motion = self.reduce_motion;
         let categories = self.repository.categories().unwrap_or_default();
-        let general_description = format!(
-            "Week starts on {:?} · {} clock",
-            self.settings.week_starts_on(),
-            match self.settings.clock_format() {
-                crate::domain::ClockFormat::TwelveHour => "12-hour",
-                crate::domain::ClockFormat::TwentyFourHour => "24-hour",
-            }
-        );
+        let week_start = format!("{:?}", self.settings.week_starts_on());
+        let clock_format = match self.settings.clock_format() {
+            crate::domain::ClockFormat::TwelveHour => "12-hour",
+            crate::domain::ClockFormat::TwentyFourHour => "24-hour",
+        };
         let owner = cx.entity().downgrade();
-        window.open_dialog(cx, move |dialog, _, cx| {
-            let notification_owner = owner.clone();
-            let motion_owner = owner.clone();
+        window.open_dialog(cx, move |dialog, dialog_window, _| {
+            let viewport = dialog_window.viewport_size();
+            let padding = window_paddings(dialog_window);
+            let available_width = viewport.width - padding.left - padding.right;
+            let available_height = viewport.height - padding.top - padding.bottom;
+            let dialog_width = (available_width - px(48.0)).clamp(px(560.0), px(900.0));
+            let dialog_height = (available_height - px(96.0)).clamp(px(440.0), px(620.0));
+            let margin_top = dialog_margin_top(available_height, dialog_height);
+
+            let general_page = general_settings_page(&owner, week_start.clone(), clock_format);
+            let notifications_page = notifications_settings_page(&owner);
+            let categories_page = categories_settings_page(&owner, &categories);
+
+            let settings = Settings::new("cadence-settings")
+                .sidebar_width(px(190.0))
+                .with_group_variant(GroupBoxVariant::Outline)
+                .pages([general_page, notifications_page, categories_page]);
+
             dialog
+                .margin_top(margin_top)
                 .title("Settings")
-                .w(px(520.0))
-                .child(
-                    div()
-                        .v_flex()
-                        .gap_5()
-                        .p_1()
-                        .child(settings_section(
-                            "General",
-                            general_description.clone(),
-                            Button::new("toggle-reduce-motion")
-                                .outline()
-                                .label(if reduce_motion { "Reduce motion: On" } else { "Reduce motion: Off" })
-                                .on_click(move |_, _, cx| {
-                                    notification_owner.update(cx, |view, cx| view.set_reduce_motion(!view.reduce_motion, cx)).ok();
-                                }),
-                        ))
-                        .child(settings_section(
-                            "Notifications",
-                            "Reminders are delivered only while Cadence is running. Operating-system permissions still apply.".to_owned(),
-                            Button::new("toggle-notifications")
-                                .outline()
-                                .label(if notifications_enabled { "Desktop reminders: On" } else { "Desktop reminders: Off" })
-                                .on_click(move |_, _, cx| {
-                                    motion_owner.update(cx, |view, cx| view.set_notifications(!view.notifications_enabled, cx)).ok();
-                                }),
-                        ))
-                        .child(
-                            div()
-                                .v_flex()
-                                .gap_2()
-                                .child(div().font_medium().child("Categories"))
-                                .child(div().text_sm().text_color(cx.theme().muted_foreground).child("Categories carry a text label as well as a color."))
-                                .children(categories.iter().map(|category| {
-                                    let category_id = category.id();
-                                    let category_owner = owner.clone();
-                                    div().flex().items_center().gap_2()
-                                        .child(category_dot(Some(category.color_token())))
-                                        .child(div().flex_1().child(category.name().to_owned()))
-                                        .child(
-                                            Button::new(format!("toggle-category-{category_id}"))
-                                                .outline()
-                                                .label(if category.is_visible() { "Hide" } else { "Show" })
-                                                .on_click(move |_, window, cx| {
-                                                    category_owner.update(cx, |view, cx| view.toggle_category_visibility(category_id, window, cx)).ok();
-                                                }),
-                                        )
-                                })),
-                        ),
-                )
+                .w(dialog_width)
+                .h(dialog_height)
+                .child(div().size_full().overflow_hidden().child(settings))
                 .footer(
                     div().flex().justify_end().child(
-                        Button::new("settings-close").primary().label("Done").on_click(|_, window, cx| window.close_dialog(cx)),
+                        Button::new("settings-close")
+                            .primary()
+                            .label("Done")
+                            .on_click(|_, window, cx| window.close_dialog(cx)),
                     ),
                 )
         });
@@ -196,9 +168,10 @@ impl CadenceView {
         cx.notify();
     }
 
-    fn toggle_category_visibility(
+    fn set_category_visibility(
         &mut self,
         id: crate::domain::CategoryId,
+        visible: bool,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
@@ -215,7 +188,8 @@ impl CadenceView {
         else {
             return;
         };
-        if category.is_visible()
+        if !visible
+            && category.is_visible()
             && categories
                 .iter()
                 .filter(|category| category.is_visible())
@@ -225,7 +199,7 @@ impl CadenceView {
             self.show_error("Keep at least one category visible.", window, cx);
             return;
         }
-        category.set_visible(!category.is_visible());
+        category.set_visible(visible);
         if self.repository.update_category(category).is_err() {
             return;
         }
@@ -265,11 +239,162 @@ impl CadenceView {
     }
 }
 
-fn settings_section(title: &'static str, description: String, control: Button) -> impl IntoElement {
-    div()
-        .v_flex()
-        .gap_2()
-        .child(div().font_medium().child(title))
-        .child(div().text_sm().child(description))
-        .child(control)
+fn general_settings_page(
+    owner: &gpui::WeakEntity<CadenceView>,
+    week_start: String,
+    clock_format: &'static str,
+) -> SettingPage {
+    let motion_reader = owner.clone();
+    let motion_writer = owner.clone();
+    SettingPage::new("General")
+        .icon(Icon::new(IconName::Settings2))
+        .default_open(true)
+        .resettable(false)
+        .description("Calendar display and accessibility preferences.")
+        .groups([
+            SettingGroup::new().title("Calendar").items([
+                SettingItem::new(
+                    "Week starts on",
+                    SettingField::render(move |_, _, cx| {
+                        div()
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(week_start.clone())
+                    }),
+                )
+                .description("The first column shown in week view."),
+                SettingItem::new(
+                    "Clock format",
+                    SettingField::render(move |_, _, cx| {
+                        div()
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(clock_format)
+                    }),
+                )
+                .description("How event and time-grid labels are displayed."),
+            ]),
+            SettingGroup::new().title("Accessibility").item(
+                SettingItem::new(
+                    "Reduce motion",
+                    SettingField::switch(
+                        move |cx| {
+                            motion_reader
+                                .read_with(cx, |view, _| view.reduce_motion)
+                                .unwrap_or(false)
+                        },
+                        move |enabled, cx| {
+                            motion_writer
+                                .update(cx, |view, cx| {
+                                    view.set_reduce_motion(enabled, cx);
+                                })
+                                .ok();
+                        },
+                    ),
+                )
+                .description("Minimise non-essential interface animation."),
+            ),
+        ])
+}
+
+fn notifications_settings_page(owner: &gpui::WeakEntity<CadenceView>) -> SettingPage {
+    let notification_reader = owner.clone();
+    let notification_writer = owner.clone();
+    SettingPage::new("Notifications")
+        .icon(Icon::new(IconName::Bell))
+        .resettable(false)
+        .description("Control reminders delivered while Cadence is running.")
+        .group(
+            SettingGroup::new().title("Desktop reminders").item(
+                SettingItem::new(
+                    "Enable notifications",
+                    SettingField::switch(
+                        move |cx| {
+                            notification_reader
+                                .read_with(cx, |view, _| view.notifications_enabled)
+                                .unwrap_or(false)
+                        },
+                        move |enabled, cx| {
+                            notification_writer
+                                .update(cx, |view, cx| {
+                                    view.set_notifications(enabled, cx);
+                                })
+                                .ok();
+                        },
+                    ),
+                )
+                .description("Operating-system notification permissions still apply to reminders."),
+            ),
+        )
+}
+
+fn categories_settings_page(
+    owner: &gpui::WeakEntity<CadenceView>,
+    categories: &[crate::domain::Category],
+) -> SettingPage {
+    SettingPage::new("Categories")
+        .icon(Icon::new(IconName::Palette))
+        .resettable(false)
+        .description("Choose which event categories are visible.")
+        .group(
+            SettingGroup::new().title("Calendar categories").items(
+                categories
+                    .iter()
+                    .map(|category| category_settings_item(owner, category)),
+            ),
+        )
+}
+
+fn category_settings_item(
+    owner: &gpui::WeakEntity<CadenceView>,
+    category: &crate::domain::Category,
+) -> SettingItem {
+    let category_id = category.id();
+    let category_name = category.name().to_owned();
+    let category_color = category.color_token();
+    let initial_visibility = category.is_visible();
+    let category_reader = owner.clone();
+    let category_writer = owner.clone();
+    let tooltip = format!("Show {category_name} events");
+    let keyword = category_name.clone();
+    SettingItem::new(
+        category_name,
+        SettingField::render(move |options, _, cx| {
+            let visible = category_reader
+                .read_with(cx, |view, _| {
+                    view.repository
+                        .categories()
+                        .ok()
+                        .and_then(|categories| {
+                            categories
+                                .iter()
+                                .find(|category| category.id() == category_id)
+                                .map(crate::domain::Category::is_visible)
+                        })
+                        .unwrap_or(initial_visibility)
+                })
+                .unwrap_or(initial_visibility);
+            let writer = category_writer.clone();
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(category_dot(Some(category_color)))
+                .child(
+                    Switch::new(format!("category-visibility-{category_id}"))
+                        .checked(visible)
+                        .with_size(options.size())
+                        .tooltip(tooltip.clone())
+                        .on_click(move |visible, window, cx| {
+                            writer
+                                .update(cx, |view, cx| {
+                                    view.set_category_visibility(category_id, *visible, window, cx);
+                                })
+                                .ok();
+                        }),
+                )
+        }),
+    )
+    .description("Include this category in calendar views and filters.")
+    .keywords([keyword])
 }
