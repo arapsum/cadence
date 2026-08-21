@@ -24,6 +24,7 @@ use crate::{
 use super::super::{
     history::{ChangeKind, EventChange},
     state::CadenceView,
+    style::dialog_margin_top,
 };
 use super::{form::EventEditor, recurrence::RecurrenceScope};
 
@@ -139,7 +140,7 @@ impl CadenceView {
             let available_height = viewport.height - padding.top - padding.bottom;
             let dialog_height = px(520.0);
 
-            let margin_top = ((available_height - dialog_height) / 2.0).max(px(0.0));
+            let margin_top = dialog_margin_top(available_height, dialog_height);
 
             let owner_ok = owner.clone();
             let owner_cancel = owner.clone();
@@ -188,7 +189,7 @@ impl CadenceView {
                         let available_height = viewport.height - padding.top - padding.bottom;
                         let dialog_height = px(240.0);
 
-                        let margin_top = ((available_height - dialog_height) / 2.0).max(px(0.0));
+                        let margin_top = dialog_margin_top(available_height, dialog_height);
 
                         alert
                             .title("Discard changes?")

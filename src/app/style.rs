@@ -1,4 +1,4 @@
-use gpui::{Hsla, div, hsla, prelude::*, px, rgb};
+use gpui::{Hsla, Pixels, div, hsla, prelude::*, px, rgb};
 
 use crate::domain::CategoryColor;
 
@@ -7,6 +7,12 @@ pub(super) const TIME_GUTTER_WIDTH: f32 = 78.0;
 pub(super) const MIN_COLUMN_WIDTH: f32 = 132.0;
 pub(super) const PIXELS_PER_MINUTE: f32 = 1.5;
 pub(super) const PLANE_HEIGHT: f32 = 24.0 * 60.0 * PIXELS_PER_MINUTE;
+
+const DIALOG_CENTER_NUDGE: Pixels = px(20.0);
+
+pub(super) fn dialog_margin_top(available_height: Pixels, dialog_height: Pixels) -> Pixels {
+    ((available_height - dialog_height) / 2.0 - DIALOG_CENTER_NUDGE).max(px(0.0))
+}
 
 pub(super) fn category_dot(color: Option<CategoryColor>) -> impl IntoElement {
     div()

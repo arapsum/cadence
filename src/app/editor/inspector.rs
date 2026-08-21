@@ -14,7 +14,7 @@ use crate::{
     store::TimetableRepository,
 };
 
-use super::super::{history::EventChange, state::CadenceView};
+use super::super::{history::EventChange, state::CadenceView, style::dialog_margin_top};
 use super::recurrence::RecurrenceScope;
 
 fn inspector_details(
@@ -83,7 +83,7 @@ fn open_inspector_dialog(
         let padding = window_paddings(dialog_window);
         let available_height = viewport.height - padding.top - padding.bottom;
         let dialog_height = px(420.0);
-        let margin_top = ((available_height - dialog_height) / 2.0).max(px(0.0));
+        let margin_top = dialog_margin_top(available_height, dialog_height);
 
         let edit_owner = owner.clone();
         let duplicate_owner = owner.clone();
