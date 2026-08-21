@@ -1,4 +1,7 @@
-use gpui::{Context, DragMoveEvent, Hsla, IntoElement, MouseButton, Window, div, prelude::*, px};
+use gpui::{
+    Context, DragMoveEvent, Hsla, IntoElement, KeyDownEvent, MouseButton, Window, div, prelude::*,
+    px,
+};
 use gpui_component::scroll::ScrollableElement as _;
 use gpui_component::{ActiveTheme as _, StyledExt as _};
 use jiff::civil::Time;
@@ -175,8 +178,12 @@ fn render_header(
         };
         let day_number = date.strftime("%-d").to_string();
         let view = cx.entity().downgrade();
+        let key_view = view.clone();
         div()
             .id(format!("calendar-day-header-{date}"))
+            .role(gpui::Role::Button)
+            .aria_label(format!("{day_name} {day_number}"))
+            .aria_selected(is_selected)
             .tab_index(0)
             .cursor_pointer()
             .w(px(column_width))
@@ -204,6 +211,14 @@ fn render_header(
             })
             .on_click(move |_, _, app| {
                 view.update(app, |this, cx| this.select_date(date, cx)).ok();
+            })
+            .on_key_down(move |event: &KeyDownEvent, _, app| {
+                if matches!(event.keystroke.key.as_str(), "enter" | "return" | "space") {
+                    app.stop_propagation();
+                    key_view
+                        .update(app, |this, cx| this.select_date(date, cx))
+                        .ok();
+                }
             })
             .child(
                 div()

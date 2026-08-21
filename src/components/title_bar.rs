@@ -114,6 +114,15 @@ impl ControlKind {
         }
     }
 
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Minimize => "Minimize window",
+            Self::Restore => "Restore window",
+            Self::Maximize => "Maximize window",
+            Self::Close => "Close window",
+        }
+    }
+
     const fn control_area(self) -> WindowControlArea {
         match self {
             Self::Minimize => WindowControlArea::Min,
@@ -160,6 +169,8 @@ impl RenderOnce for WindowControl {
 
         div()
             .id(kind.id())
+            .role(gpui::Role::Button)
+            .aria_label(kind.label())
             .group("window-control")
             .flex()
             .items_center()

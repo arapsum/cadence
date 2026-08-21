@@ -43,6 +43,9 @@ impl Render for CadenceView {
             .on_action(cx.listener(|this, _: &actions::OpenAgenda, window, cx| {
                 this.open_agenda(window, cx);
             }))
+            .on_action(cx.listener(|this, _: &actions::ExportBackup, window, cx| {
+                this.export_backup(window, cx);
+            }))
             .on_action(cx.listener(|this, _: &actions::OpenSettings, window, cx| {
                 this.open_settings(window, cx);
             }))

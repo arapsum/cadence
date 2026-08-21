@@ -1,7 +1,5 @@
-use std::hash::{Hash, Hasher};
-
 use gpui::{
-    App, Context, ElementId, Hsla, IntoElement, KeyDownEvent, MouseButton, Pixels, Point, Render,
+    App, Context, Hsla, IntoElement, KeyDownEvent, MouseButton, Pixels, Point, Render,
     StatefulInteractiveElement as _, Window, div, prelude::*, px,
 };
 use gpui_component::{ActiveTheme as _, StyledExt as _, tooltip::Tooltip};
@@ -48,8 +46,9 @@ pub(super) fn render(
         || format!("{title}\n{category_name} · {event_time}"),
         |notes| format!("{title}\n{category_name} · {event_time}\n{notes}"),
     );
-    let element_key = occurrence_id_hash(occurrence_id);
+    let element_key = format!("{occurrence_id:?}");
     let event_date = event.date();
+    let accessibility_label = format!("{title}, {category_name}, {event_date}, {event_time}");
     let compact = position.height() < 42.0;
     let tall = position.height() >= 68.0;
     let roomy = position.height() >= 96.0;
@@ -93,7 +92,10 @@ pub(super) fn render(
         .as_ref()
         .is_some_and(|manipulation| manipulation.occurrence_id() == occurrence_id);
     div()
-        .id(ElementId::NamedInteger("event-card".into(), element_key))
+        .id(format!("event-card-{element_key}"))
+        .role(gpui::Role::Button)
+        .aria_label(accessibility_label)
+        .aria_selected(selected)
         .absolute()
         .top(px(position.top() + 4.0))
         .left(px(left))
@@ -191,12 +193,6 @@ pub(super) fn render(
         .into_any_element()
 }
 
-fn occurrence_id_hash(id: crate::domain::OccurrenceId) -> u64 {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    id.hash(&mut hasher);
-    hasher.finish()
-}
-
 struct ResizeHandleProps {
     id: String,
     payload: DragPayload,
@@ -222,6 +218,12 @@ fn resize_handle(props: ResizeHandleProps) -> gpui::AnyElement {
     let handle_view = view;
     div()
         .id(id)
+        .role(gpui::Role::Button)
+        .aria_label(if start {
+            "Resize event start"
+        } else {
+            "Resize event end"
+        })
         .absolute()
         .left(px(0.0))
         .right(px(0.0))

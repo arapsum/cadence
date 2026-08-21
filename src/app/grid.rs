@@ -147,12 +147,9 @@ fn render_empty_slots(
                         .ok();
                     (6_u8..22).filter_map(move |hour| {
                         let day_date = day_date?;
-                        let slot_key = u64::try_from(day)
-                            .expect("slot day fits in u64")
-                            .saturating_mul(32)
-                            .saturating_add(u64::from(hour));
                         let day_number = day;
                         let hour = i32::from(hour);
+                        let clock_format = view.settings.clock_format();
                         let has_event = snapshot.events.iter().any(|event| {
                             let start_minutes = i32::from(event.start_time().hour()) * 60
                                 + i32::from(event.start_time().minute());
@@ -173,6 +170,10 @@ fn render_empty_slots(
                             0,
                             0,
                         );
+                        let slot_label = format!(
+                            "Add event on {day_date} at {}",
+                            format_time(slot_time, clock_format),
+                        );
                         let top = (f32::from(u16::try_from(hour).expect("hour fits in u16"))
                             * 60.0)
                             .mul_add(PIXELS_PER_MINUTE, 4.0);
@@ -182,7 +183,9 @@ fn render_empty_slots(
                         let left = day.mul_add(column_width, 4.0);
                         Some(
                             div()
-                                .id(("empty-slot", slot_key))
+                                .id(format!("empty-slot-{day_date}-{hour}"))
+                                .role(gpui::Role::Button)
+                                .aria_label(slot_label)
                                 .absolute()
                                 .top(px(top))
                                 .left(px(left))
