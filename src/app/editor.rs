@@ -6,7 +6,7 @@ use gpui_component::{
     ActiveTheme as _, StyledExt as _, WindowExt as _,
     button::{Button, ButtonVariants as _},
     date_picker::{DatePicker, DatePickerEvent, DatePickerState},
-    dialog::{DialogButtonProps, DialogFooter},
+    dialog::{DialogAction, DialogButtonProps, DialogClose, DialogFooter},
     input::{Input, InputEvent, InputState, Textarea, TextareaState},
     notification::Notification,
     select::{Select, SelectItem, SelectState},
@@ -465,7 +465,7 @@ impl CadenceView {
             let padding = window_paddings(dialog_window);
 
             let available_height = viewport.height - padding.top - padding.bottom;
-            let dialog_height = px(468.0);
+            let dialog_height = px(520.0);
 
             let margin_top = ((available_height - dialog_height) / 2.0).max(px(0.0));
 
@@ -484,18 +484,24 @@ impl CadenceView {
                 .title(title)
                 .overlay_closable(false)
                 .content(move |content, _, _| content.child(content_editor.clone()))
-                .button_props(
-                    DialogButtonProps::default()
-                        .ok_text("Save")
-                        .cancel_text("Cancel")
-                        .show_cancel(true)
-                        .on_ok(move |_, window, app| {
-                            let ok_editor = ok_editor.clone();
-                            owner_ok
-                                .update(app, |view, cx| view.commit_editor(&ok_editor, window, cx))
-                                .unwrap_or(false)
-                        }),
+                .footer(
+                    DialogFooter::new()
+                        .pb_4()
+                        .child(
+                            DialogClose::new()
+                                .child(Button::new("event-cancel").outline().label("Cancel")),
+                        )
+                        .child(
+                            DialogAction::new()
+                                .child(Button::new("event-save").primary().label("Save")),
+                        ),
                 )
+                .on_ok(move |_, window, app| {
+                    let ok_editor = ok_editor.clone();
+                    owner_ok
+                        .update(app, |view, cx| view.commit_editor(&ok_editor, window, cx))
+                        .unwrap_or(false)
+                })
                 .on_cancel(move |_, window, app| {
                     let cancel_editor = cancel_editor.clone();
                     let dirty = cancel_editor.read(app).is_dirty(app);
