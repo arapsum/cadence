@@ -333,8 +333,7 @@ impl CadenceView {
         self.last_category = Some(draft.category_id);
         self.state.select_event(id, draft.date);
         self.pending_scroll_minutes = None;
-        self.scroll_initialized = false;
-        self.scroll_initialization_scheduled = false;
+        self.scroll_initialization = super::super::state::ScrollInitialization::Pending;
         self.refresh_snapshot();
         self.persist_snapshot(
             before,

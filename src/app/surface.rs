@@ -4,7 +4,7 @@ use gpui::{
 };
 use gpui_component::scroll::ScrollableElement as _;
 use gpui_component::{ActiveTheme as _, StyledExt as _};
-use jiff::civil::Time;
+use jiff::civil::{Date, Time};
 
 use crate::domain::format_time;
 
@@ -54,9 +54,12 @@ pub(super) fn render(
     let column_width =
         plane_width / f32::from(u16::try_from(column_count).expect("surface columns fit in u16"));
 
-    if !view.scroll_initialized && !view.scroll_initialization_scheduled {
+    if matches!(
+        view.scroll_initialization,
+        super::state::ScrollInitialization::Pending
+    ) {
         let initial = view.initial_scroll_offset(column_width);
-        view.scroll_initialization_scheduled = true;
+        view.scroll_initialization = super::state::ScrollInitialization::Scheduled;
         let scroll_view = cx.entity().downgrade();
         window.defer(cx, move |_, cx| {
             scroll_view
@@ -168,85 +171,25 @@ fn render_header(
     let (today, _) = local_date_time(view.now, &view.settings);
     let selected_date = view.state.selected_date();
     let dates = dates_in_range(snapshot.range);
-    let cells = dates.into_iter().map(|date| {
-        let is_today = date == today;
-        let is_selected = date == selected_date;
+    let owner = cx.entity().downgrade();
+    let cells = dates.into_iter().map(move |date| {
         let day_name = if matches!(mode, SurfaceMode::Day) {
             date.strftime("%A").to_string()
         } else {
             date.strftime("%a").to_string()
         };
-        let day_number = date.strftime("%-d").to_string();
-        let view = cx.entity().downgrade();
-        let key_view = view.clone();
-        div()
-            .id(format!("calendar-day-header-{date}"))
-            .role(gpui::Role::Button)
-            .aria_label(format!("{day_name} {day_number}"))
-            .aria_selected(is_selected)
-            .tab_index(0)
-            .cursor_pointer()
-            .w(px(column_width))
-            .h(px(DAY_HEADER_HEIGHT))
-            .flex()
-            .flex_col()
-            .items_center()
-            .justify_center()
-            .gap_1()
-            .border_l_1()
-            .border_color(if is_selected {
-                cx.theme().primary
-            } else {
-                cx.theme().border.opacity(0.7)
-            })
-            .when(is_today, |this| {
-                this.bg(cx.theme().primary.opacity(if cx.theme().mode.is_dark() {
-                    0.08
-                } else {
-                    0.04
-                }))
-            })
-            .when(is_selected, |this| {
-                this.border_b_2().border_color(cx.theme().primary)
-            })
-            .on_click(move |_, _, app| {
-                view.update(app, |this, cx| this.select_date(date, cx)).ok();
-            })
-            .on_key_down(move |event: &KeyDownEvent, _, app| {
-                if matches!(event.keystroke.key.as_str(), "enter" | "return" | "space") {
-                    app.stop_propagation();
-                    key_view
-                        .update(app, |this, cx| this.select_date(date, cx))
-                        .ok();
-                }
-            })
-            .child(
-                div()
-                    .text_xl()
-                    .font_semibold()
-                    .text_color(if is_selected {
-                        cx.theme().primary
-                    } else {
-                        cx.theme().foreground
-                    })
-                    .child(day_number),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(if is_today || is_selected {
-                        cx.theme().primary
-                    } else {
-                        cx.theme().muted_foreground
-                    })
-                    .child(day_name),
-            )
-            .child(div().w(px(5.0)).h(px(5.0)).rounded_full().bg(if is_today {
-                cx.theme().success
-            } else {
-                Hsla::transparent_black()
-            }))
-            .into_any_element()
+        render_header_cell(
+            HeaderCell {
+                date,
+                is_today: date == today,
+                is_selected: date == selected_date,
+                day_name,
+                day_number: date.strftime("%-d").to_string(),
+                column_width,
+                owner: owner.clone(),
+            },
+            cx,
+        )
     });
     div()
         .absolute()
@@ -268,6 +211,99 @@ fn render_header(
                 .flex()
                 .children(cells),
         )
+        .into_any_element()
+}
+
+struct HeaderCell {
+    date: Date,
+    is_today: bool,
+    is_selected: bool,
+    day_name: String,
+    day_number: String,
+    column_width: f32,
+    owner: gpui::WeakEntity<CadenceView>,
+}
+
+fn render_header_cell(cell: HeaderCell, cx: &Context<'_, CadenceView>) -> gpui::AnyElement {
+    let HeaderCell {
+        date,
+        is_today,
+        is_selected,
+        day_name,
+        day_number,
+        column_width,
+        owner,
+    } = cell;
+    let key_owner = owner.clone();
+    div()
+        .id(format!("calendar-day-header-{date}"))
+        .role(gpui::Role::Button)
+        .aria_label(format!("{day_name} {day_number}"))
+        .aria_selected(is_selected)
+        .tab_index(0)
+        .cursor_pointer()
+        .w(px(column_width))
+        .h(px(DAY_HEADER_HEIGHT))
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .gap_1()
+        .border_l_1()
+        .border_color(if is_selected {
+            cx.theme().primary
+        } else {
+            cx.theme().border.opacity(0.7)
+        })
+        .when(is_today, |this| {
+            this.bg(cx.theme().primary.opacity(if cx.theme().mode.is_dark() {
+                0.08
+            } else {
+                0.04
+            }))
+        })
+        .when(is_selected, |this| {
+            this.border_b_2().border_color(cx.theme().primary)
+        })
+        .on_click(move |_, _, app| {
+            owner
+                .update(app, |this, cx| this.select_date(date, cx))
+                .ok();
+        })
+        .on_key_down(move |event: &KeyDownEvent, _, app| {
+            if matches!(event.keystroke.key.as_str(), "enter" | "return" | "space") {
+                app.stop_propagation();
+                key_owner
+                    .update(app, |this, cx| this.select_date(date, cx))
+                    .ok();
+            }
+        })
+        .child(
+            div()
+                .text_xl()
+                .font_semibold()
+                .text_color(if is_selected {
+                    cx.theme().primary
+                } else {
+                    cx.theme().foreground
+                })
+                .child(day_number),
+        )
+        .child(
+            div()
+                .text_xs()
+                .text_color(if is_today || is_selected {
+                    cx.theme().primary
+                } else {
+                    cx.theme().muted_foreground
+                })
+                .child(day_name),
+        )
+        .child(div().w(px(5.0)).h(px(5.0)).rounded_full().bg(if is_today {
+            cx.theme().success
+        } else {
+            Hsla::transparent_black()
+        }))
         .into_any_element()
 }
 

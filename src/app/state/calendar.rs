@@ -78,8 +78,7 @@ impl CadenceView {
         let (today, _) = local_date_time(self.now, &self.settings);
         self.state.go_to_today(today);
         self.pending_scroll_minutes = None;
-        self.scroll_initialized = false;
-        self.scroll_initialization_scheduled = false;
+        self.scroll_initialization = super::ScrollInitialization::Pending;
         self.refresh_snapshot();
         cx.notify();
     }
@@ -97,8 +96,7 @@ impl CadenceView {
             self.error = Some(error.to_string());
         } else {
             self.pending_scroll_minutes = None;
-            self.scroll_initialized = false;
-            self.scroll_initialization_scheduled = false;
+            self.scroll_initialization = super::ScrollInitialization::Pending;
             self.refresh_snapshot();
         }
         cx.notify();
@@ -115,8 +113,7 @@ impl CadenceView {
         }
         self.state.select_date(date);
         self.pending_scroll_minutes = Some(self.current_scroll_minutes());
-        self.scroll_initialized = false;
-        self.scroll_initialization_scheduled = false;
+        self.scroll_initialization = super::ScrollInitialization::Pending;
         self.refresh_snapshot();
         cx.notify();
     }
@@ -149,8 +146,7 @@ impl CadenceView {
         let before = self.repository.snapshot().ok();
         self.pending_scroll_minutes = Some(self.current_scroll_minutes());
         self.state.set_view_mode(view_mode);
-        self.scroll_initialized = false;
-        self.scroll_initialization_scheduled = false;
+        self.scroll_initialization = super::ScrollInitialization::Pending;
         self.refresh_snapshot();
         let _ = self.repository.replace_preferences(self.preferences());
         if let Some(before) = before {

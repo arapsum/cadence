@@ -32,7 +32,7 @@ impl CadenceView {
         };
         self.manipulation_rollback = Some(self.rollback_view_state());
         self.state.select_event(event.id(), event.date());
-        self.manipulation = Some(Manipulation::new(payload, event, cursor_offset));
+        self.manipulation = Some(Manipulation::new(payload, &event, cursor_offset));
         let owner = cx.entity().downgrade();
         cx.spawn(async move |_, cx| {
             loop {
@@ -189,8 +189,7 @@ impl CadenceView {
         );
         self.last_category = Some(after_draft.category_id);
         self.pending_scroll_minutes = None;
-        self.scroll_initialized = false;
-        self.scroll_initialization_scheduled = false;
+        self.scroll_initialization = super::ScrollInitialization::Pending;
         self.refresh_snapshot();
         let kind = match manipulation.kind {
             ManipulationKind::Move => ChangeKind::Move,

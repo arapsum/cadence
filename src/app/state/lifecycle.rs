@@ -21,7 +21,7 @@ use crate::{
 
 use super::super::{presentation::local_date_time, toolbar::FilterOption};
 
-use super::{CadenceView, EventHistory, HistoryEffect, PersistenceState};
+use super::{CadenceView, EventHistory, HistoryEffect, PersistenceState, ScrollInitialization};
 
 impl CadenceView {
     pub(in crate::app) fn new(window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
@@ -75,8 +75,7 @@ impl CadenceView {
             scroll_handle: ScrollHandle::new(),
             snapshot: None,
             now,
-            scroll_initialized: false,
-            scroll_initialization_scheduled: false,
+            scroll_initialization: ScrollInitialization::Pending,
             pending_scroll_minutes: None,
             error: None,
             last_category: None,
@@ -199,8 +198,7 @@ impl CadenceView {
                     let before = this.repository.snapshot().ok();
                     this.state.set_category_filter(*filter);
                     this.state.clear_selection();
-                    this.scroll_initialized = false;
-                    this.scroll_initialization_scheduled = false;
+                    this.scroll_initialization = ScrollInitialization::Pending;
                     this.refresh_snapshot();
                     let _ = this.repository.replace_preferences(this.preferences());
                     if let Some(before) = before {
@@ -267,8 +265,7 @@ impl CadenceView {
                 });
                 self.persistence_state = PersistenceState::Ready;
                 self.error = None;
-                self.scroll_initialized = false;
-                self.scroll_initialization_scheduled = false;
+                self.scroll_initialization = ScrollInitialization::Pending;
                 self.pending_scroll_minutes = None;
                 self.refresh_snapshot();
             }

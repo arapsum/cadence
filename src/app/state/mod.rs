@@ -5,7 +5,7 @@ mod persistence;
 mod viewport;
 
 pub(in crate::app) use persistence::{HistoryEffect, PersistenceState};
-pub(in crate::app) use viewport::RollbackViewState;
+pub(in crate::app) use viewport::{RollbackViewState, ScrollInitialization};
 
 use std::{collections::HashSet, path::PathBuf};
 
@@ -45,8 +45,7 @@ pub(super) struct CadenceView {
     pub(super) scroll_handle: ScrollHandle,
     pub(super) snapshot: Option<CalendarSnapshot>,
     pub(super) now: Timestamp,
-    pub(super) scroll_initialized: bool,
-    pub(super) scroll_initialization_scheduled: bool,
+    pub(super) scroll_initialization: ScrollInitialization,
     pub(super) pending_scroll_minutes: Option<f32>,
     pub(super) error: Option<String>,
     pub(super) last_category: Option<crate::domain::CategoryId>,

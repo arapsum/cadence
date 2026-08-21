@@ -57,7 +57,7 @@ impl Manipulation {
     #[allow(clippy::cast_possible_truncation)]
     pub(super) fn new(
         payload: &DragPayload,
-        event: EventOccurrence,
+        event: &EventOccurrence,
         cursor_offset: Point<Pixels>,
     ) -> Self {
         let grab_offset_minutes = match payload.kind {

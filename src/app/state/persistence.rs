@@ -63,7 +63,7 @@ impl CadenceView {
     }
 
     pub(in crate::app) fn archive_and_start_fresh(
-        &mut self,
+        &self,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
@@ -238,8 +238,7 @@ impl CadenceView {
                     self.last_category = pending.view_state.last_category;
                     self.scroll_handle
                         .set_offset(pending.view_state.scroll_offset);
-                    self.scroll_initialized = pending.view_state.scroll_initialized;
-                    self.scroll_initialization_scheduled = false;
+                    self.scroll_initialization = pending.view_state.scroll_initialization;
                     self.pending_scroll_minutes = pending.view_state.pending_scroll_minutes;
                     self.refresh_snapshot();
                 }

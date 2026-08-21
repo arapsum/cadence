@@ -7,12 +7,23 @@ use super::super::{
 
 use super::CadenceView;
 
+/// State of the one-time scroll position applied after surface layout.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(in crate::app) enum ScrollInitialization {
+    /// The surface needs its initial position.
+    Pending,
+    /// A deferred layout callback will apply the initial position.
+    Scheduled,
+    /// The initial position has been applied.
+    Initialized,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(in crate::app) struct RollbackViewState {
     pub(in crate::app::state) calendar_state: crate::calendar::CalendarState,
     pub(in crate::app::state) last_category: Option<crate::domain::CategoryId>,
     pub(in crate::app::state) scroll_offset: gpui::Point<gpui::Pixels>,
-    pub(in crate::app::state) scroll_initialized: bool,
+    pub(in crate::app::state) scroll_initialization: ScrollInitialization,
     pub(in crate::app::state) pending_scroll_minutes: Option<f32>,
 }
 
@@ -95,8 +106,7 @@ impl CadenceView {
     pub(in crate::app) fn initialize_scroll(&mut self, offset: (f32, f32)) {
         self.scroll_handle
             .set_offset(gpui::point(gpui::px(-offset.0), gpui::px(-offset.1)));
-        self.scroll_initialized = true;
-        self.scroll_initialization_scheduled = false;
+        self.scroll_initialization = ScrollInitialization::Initialized;
         self.pending_scroll_minutes = None;
     }
 
@@ -109,7 +119,7 @@ impl CadenceView {
             calendar_state: self.state,
             last_category: self.last_category,
             scroll_offset: self.scroll_handle.offset(),
-            scroll_initialized: self.scroll_initialized,
+            scroll_initialization: self.scroll_initialization,
             pending_scroll_minutes: self.pending_scroll_minutes,
         }
     }
@@ -118,7 +128,7 @@ impl CadenceView {
         self.state = view_state.calendar_state;
         self.last_category = view_state.last_category;
         self.scroll_handle.set_offset(view_state.scroll_offset);
-        self.scroll_initialized = view_state.scroll_initialized;
+        self.scroll_initialization = view_state.scroll_initialization;
         self.pending_scroll_minutes = view_state.pending_scroll_minutes;
         self.refresh_snapshot();
     }
