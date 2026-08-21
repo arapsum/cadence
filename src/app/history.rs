@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::domain::{Event, EventDraft, EventId};
+use crate::store::PersistenceSnapshot;
 
 const HISTORY_LIMIT: usize = 100;
 
@@ -50,6 +51,12 @@ pub(super) enum EventChange {
     },
     /// An event was removed from the repository.
     Delete { event: Event },
+    /// A recurring-series or cross-entity mutation captured as a state patch.
+    Snapshot {
+        before: PersistenceSnapshot,
+        after: PersistenceSnapshot,
+        kind: ChangeKind,
+    },
 }
 
 impl EventChange {
@@ -61,7 +68,7 @@ impl EventChange {
     pub(super) const fn kind(&self) -> ChangeKind {
         match self {
             Self::Create { .. } => ChangeKind::Create,
-            Self::Update { kind, .. } => *kind,
+            Self::Update { kind, .. } | Self::Snapshot { kind, .. } => *kind,
             Self::Delete { .. } => ChangeKind::Delete,
         }
     }

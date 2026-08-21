@@ -1,8 +1,8 @@
 use jiff::civil::Date;
 
 use crate::domain::{
-    CalendarError, CategoryId, DateRange, EventId, WeekStart, next_day, next_week, previous_day,
-    previous_week,
+    CalendarError, CategoryId, DateRange, OccurrenceId, WeekStart, next_day, next_week,
+    previous_day, previous_week,
 };
 
 /// The category selector shown above a calendar surface.
@@ -34,7 +34,7 @@ pub struct CalendarState {
     week_start: WeekStart,
     view_mode: CalendarViewMode,
     category_filter: CategoryFilter,
-    selected_event: Option<EventId>,
+    selected_event: Option<OccurrenceId>,
 }
 
 impl CalendarState {
@@ -117,7 +117,7 @@ impl CalendarState {
 
     /// Returns the selected event, when one exists.
     #[must_use]
-    pub const fn selected_event(self) -> Option<EventId> {
+    pub const fn selected_event(self) -> Option<OccurrenceId> {
         self.selected_event
     }
 
@@ -153,9 +153,9 @@ impl CalendarState {
     ///
     /// # Parameters
     ///
-    /// - `event_id`: Identifier of the event to select.
+    /// - `event_id`: Identifier of the occurrence to select.
     /// - `date`: Date on which the event occurs.
-    pub const fn select_event(&mut self, event_id: EventId, date: Date) {
+    pub const fn select_event(&mut self, event_id: OccurrenceId, date: Date) {
         self.selected_date = date;
         self.selected_event = Some(event_id);
     }

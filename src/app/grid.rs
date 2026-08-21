@@ -265,7 +265,7 @@ fn render_event_cards(
             let event = snapshot
                 .events
                 .iter()
-                .find(|event| event.id() == position.event_id())?;
+                .find(|event| event.id() == position.occurrence_id())?;
             let category = categories.get(&event.category_id())?;
             Some(event_card::render(
                 view,
@@ -316,7 +316,7 @@ fn render_manipulation_preview(
     let position = snapshot
         .positions
         .iter()
-        .find(|position| position.event_id() == manipulation.event_id())?;
+        .find(|position| position.occurrence_id() == manipulation.occurrence_id())?;
     let category = snapshot
         .categories
         .iter()

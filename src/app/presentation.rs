@@ -6,13 +6,13 @@ use jiff::{
 
 use crate::{
     calendar::{CategoryFilter, LayoutMetrics, PositionedEvent},
-    domain::{Category, DateRange, Event, Settings},
+    domain::{Category, DateRange, EventOccurrence, Settings},
 };
 
 #[derive(Clone)]
 pub(super) struct CalendarSnapshot {
     pub(super) range: DateRange,
-    pub(super) events: Vec<Event>,
+    pub(super) events: Vec<EventOccurrence>,
     pub(super) positions: Vec<PositionedEvent>,
     pub(super) categories: Vec<Category>,
 }
@@ -50,13 +50,13 @@ pub(super) fn dates_in_range(range: DateRange) -> Vec<Date> {
 }
 
 pub(super) fn layout_events(
-    events: &[Event],
+    events: &[EventOccurrence],
     range: DateRange,
 ) -> Result<Vec<PositionedEvent>, crate::calendar::LayoutError> {
     crate::calendar::layout_events(events, range, LayoutMetrics::default())
 }
 
-pub(super) fn event_matches_filter(event: &Event, filter: CategoryFilter) -> bool {
+pub(super) fn event_matches_filter(event: &EventOccurrence, filter: CategoryFilter) -> bool {
     match filter {
         CategoryFilter::All => true,
         CategoryFilter::Only(category_id) => event.category_id() == category_id,

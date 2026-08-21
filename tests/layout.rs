@@ -1,6 +1,8 @@
 use cadence::{
     calendar::{CalendarState, CalendarViewMode, CategoryFilter, LayoutMetrics, layout_events},
-    domain::{CategoryId, DateRange, Event, EventDraft, EventId, WeekStart},
+    domain::{
+        CategoryId, DateRange, Event, EventDraft, EventId, EventOccurrence, OccurrenceId, WeekStart,
+    },
 };
 use jiff::{
     Timestamp,
@@ -16,8 +18,8 @@ const fn time(hour: i8, minute: i8) -> Time {
     Time::constant(hour, minute, 0, 0)
 }
 
-fn event(id: u128, day: Date, start: (i8, i8), end: (i8, i8)) -> Event {
-    Event::new(
+fn event(id: u128, day: Date, start: (i8, i8), end: (i8, i8)) -> EventOccurrence {
+    let event = Event::new(
         EventId::from_uuid(Uuid::from_u128(id)),
         EventDraft::new(
             format!("Event {id}"),
@@ -29,7 +31,8 @@ fn event(id: u128, day: Date, start: (i8, i8), end: (i8, i8)) -> Event {
         ),
         Timestamp::from_second(0).unwrap(),
     )
-    .unwrap()
+    .unwrap();
+    EventOccurrence::standalone(&event)
 }
 
 #[test]
@@ -69,15 +72,21 @@ fn overlapping_events_get_lanes_and_expand_when_space_is_free() {
 
     let first = placements
         .iter()
-        .find(|item| item.event_id() == EventId::from_uuid(Uuid::from_u128(1)))
+        .find(|item| {
+            item.occurrence_id() == OccurrenceId::Standalone(EventId::from_uuid(Uuid::from_u128(1)))
+        })
         .unwrap();
     let second = placements
         .iter()
-        .find(|item| item.event_id() == EventId::from_uuid(Uuid::from_u128(2)))
+        .find(|item| {
+            item.occurrence_id() == OccurrenceId::Standalone(EventId::from_uuid(Uuid::from_u128(2)))
+        })
         .unwrap();
     let third = placements
         .iter()
-        .find(|item| item.event_id() == EventId::from_uuid(Uuid::from_u128(3)))
+        .find(|item| {
+            item.occurrence_id() == OccurrenceId::Standalone(EventId::from_uuid(Uuid::from_u128(3)))
+        })
         .unwrap();
     assert_eq!(first.lane_count(), 2);
     assert_eq!(second.lane(), 1);
@@ -152,7 +161,10 @@ fn calendar_state_navigates_and_resets_selection_on_week_change() {
     let mut state = CalendarState::new(monday, WeekStart::Monday, CalendarViewMode::Week);
     let category = CategoryId::from_uuid(Uuid::from_u128(5));
     state.set_category_filter(CategoryFilter::Only(category));
-    state.select_event(EventId::from_uuid(Uuid::from_u128(8)), monday);
+    state.select_event(
+        OccurrenceId::Standalone(EventId::from_uuid(Uuid::from_u128(8))),
+        monday,
+    );
 
     state.next_period().unwrap();
     assert_eq!(state.selected_date(), date(2024, 3, 11));
@@ -174,7 +186,7 @@ fn calendar_state_day_mode_navigates_by_day_and_derives_one_day_ranges() {
 
     let event_id = EventId::from_uuid(Uuid::from_u128(9));
     let tuesday = date(2024, 3, 5);
-    state.select_event(event_id, tuesday);
+    state.select_event(OccurrenceId::Standalone(event_id), tuesday);
     assert_eq!(state.selected_date(), tuesday);
     assert_eq!(
         state.visible_range().unwrap(),

@@ -305,7 +305,7 @@ impl CadenceView {
                 return;
             }
         };
-        let events = match self.repository.events(range) {
+        let events = match self.repository.occurrences(range) {
             Ok(events) => events
                 .into_iter()
                 .filter(|event| event_matches_filter(event, self.state.category_filter()))
@@ -499,12 +499,17 @@ impl CadenceView {
                 return;
             }
         };
-        let Some(mut event) = self
-            .repository
-            .event(manipulation.event.id())
-            .ok()
-            .flatten()
-        else {
+        if manipulation.event.id().recurring().is_some() {
+            Self::open_manipulation_scope_prompt(manipulation, before, rollback, window, cx);
+            return;
+        }
+        let Some(event_id) = manipulation.event.id().standalone() else {
+            self.restore_view_state(rollback);
+            self.error = Some("Recurring events are edited from the event form.".to_owned());
+            cx.notify();
+            return;
+        };
+        let Some(mut event) = self.repository.event(event_id).ok().flatten() else {
             self.restore_view_state(rollback);
             self.error = Some("That event is no longer available.".to_owned());
             self.refresh_snapshot();
@@ -525,8 +530,10 @@ impl CadenceView {
             cx.notify();
             return;
         }
-        self.state
-            .select_event(manipulation.event.id(), after_draft.date);
+        self.state.select_event(
+            crate::domain::OccurrenceId::Standalone(event_id),
+            after_draft.date,
+        );
         self.last_category = Some(after_draft.category_id);
         self.pending_scroll_minutes = None;
         self.scroll_initialized = false;
@@ -539,9 +546,136 @@ impl CadenceView {
             before,
             rollback,
             HistoryEffect::Record(EventChange::Update {
-                id: manipulation.event.id(),
+                id: event_id,
                 before: before_draft,
                 after: after_draft,
+                kind,
+            }),
+            cx,
+        );
+        cx.notify();
+    }
+
+    fn open_manipulation_scope_prompt(
+        manipulation: Manipulation,
+        before: crate::store::PersistenceSnapshot,
+        rollback: RollbackViewState,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let owner = cx.entity().downgrade();
+        window.open_alert_dialog(cx, move |alert, _, _| {
+            let owner_this = owner.clone();
+            let owner_following = owner.clone();
+            let manipulation_this = manipulation.clone();
+            let manipulation_following = manipulation.clone();
+            let before_this = before.clone();
+            let before_following = before.clone();
+            alert
+                .title("Apply recurring change to…")
+                .description("Choose whether this move or resize affects one occurrence or this and all following occurrences.")
+                .button_props(
+                    gpui_component::dialog::DialogButtonProps::default()
+                        .ok_text("This event")
+                        .cancel_text("This and following")
+                        .show_cancel(true),
+                )
+                .on_ok(move |_, window, app| {
+                    owner_this
+                        .update(app, |view, cx| {
+                            window.close_all_dialogs(cx);
+                            view.apply_manipulation_scope(
+                                &manipulation_this,
+                                before_this.clone(),
+                                rollback,
+                                super::editor::RecurrenceScope::This,
+                                window,
+                                cx,
+                            );
+                        })
+                        .ok();
+                    true
+                })
+                .on_cancel(move |_, window, app| {
+                    owner_following
+                        .update(app, |view, cx| {
+                            window.close_all_dialogs(cx);
+                            view.apply_manipulation_scope(
+                                &manipulation_following,
+                                before_following.clone(),
+                                rollback,
+                                super::editor::RecurrenceScope::Following,
+                                window,
+                                cx,
+                            );
+                        })
+                        .ok();
+                    true
+                })
+        });
+    }
+
+    fn apply_manipulation_scope(
+        &mut self,
+        manipulation: &Manipulation,
+        before: crate::store::PersistenceSnapshot,
+        rollback: RollbackViewState,
+        scope: super::editor::RecurrenceScope,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let Some((series_id, original_date)) = manipulation.event.id().recurring() else {
+            self.restore_view_state(rollback);
+            return;
+        };
+        let Some(series) = self.repository.series(series_id).ok().flatten() else {
+            self.restore_view_state(rollback);
+            self.show_error("That recurring series is no longer available.", window, cx);
+            return;
+        };
+        let proposed = manipulation.proposed.clone();
+        let form = crate::editor::FormDraft {
+            title: proposed.title.clone(),
+            notes: proposed.notes.clone().unwrap_or_default(),
+            date: proposed.date,
+            start_time: proposed.start_time,
+            end_time: proposed.end_time,
+            category_id: Some(proposed.category_id),
+            recurrence: Some(series.rule()),
+            ends_on: series.ends_on(),
+        };
+        let result = self
+            .apply_recurring_edit(series_id, original_date, &form, scope, Timestamp::now())
+            .map_err(crate::domain::RepositoryError::InvalidEntity);
+        let kind = match manipulation.kind {
+            ManipulationKind::Move => ChangeKind::Move,
+            ManipulationKind::Resize(_) => ChangeKind::Resize,
+        };
+        let selected_id = match result {
+            Ok(id) => id,
+            Err(error) => {
+                self.restore_view_state(rollback);
+                self.show_error(error.to_string(), window, cx);
+                return;
+            }
+        };
+        let after = match self.repository.snapshot() {
+            Ok(after) => after,
+            Err(error) => {
+                self.restore_view_state(rollback);
+                self.show_error(error.to_string(), window, cx);
+                return;
+            }
+        };
+        self.state.select_event(selected_id, proposed.date);
+        self.last_category = Some(proposed.category_id);
+        self.refresh_snapshot();
+        self.persist_snapshot(
+            before.clone(),
+            rollback,
+            HistoryEffect::Record(EventChange::Snapshot {
+                before,
+                after,
                 kind,
             }),
             cx,
@@ -562,7 +696,7 @@ impl CadenceView {
 
     pub(super) fn select_event(
         &mut self,
-        event_id: crate::domain::EventId,
+        event_id: crate::domain::OccurrenceId,
         date: Date,
         cx: &mut Context<'_, Self>,
     ) {

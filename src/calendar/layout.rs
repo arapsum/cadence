@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use jiff::civil::{Date, Time};
 
-use crate::domain::{DateRange, Event, EventId};
+use crate::domain::{DateRange, EventOccurrence, OccurrenceId};
 
 const MINUTES_PER_DAY: f32 = 24.0 * 60.0;
 
@@ -104,7 +104,7 @@ pub enum LayoutError {
 ///
 /// # Fields
 ///
-/// - `event_id`: Identifier of the positioned event.
+/// - `occurrence_id`: Identifier of the positioned occurrence.
 /// - `day_offset`: Zero-based day offset from the layout range start.
 /// - `top`: Vertical offset in pixels.
 /// - `height`: Visual event height in pixels.
@@ -113,7 +113,7 @@ pub enum LayoutError {
 /// - `lane_count`: Total lanes in the event's overlap cluster.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PositionedEvent {
-    event_id: EventId,
+    occurrence_id: OccurrenceId,
     day_offset: u8,
     top: f32,
     height: f32,
@@ -125,8 +125,8 @@ pub struct PositionedEvent {
 impl PositionedEvent {
     /// Returns the positioned event identifier.
     #[must_use]
-    pub const fn event_id(self) -> EventId {
-        self.event_id
+    pub const fn occurrence_id(self) -> OccurrenceId {
+        self.occurrence_id
     }
 
     /// Returns the zero-based day offset.
@@ -168,7 +168,7 @@ impl PositionedEvent {
 
 #[derive(Debug, Clone, Copy)]
 struct WorkingEvent {
-    event_id: EventId,
+    occurrence_id: OccurrenceId,
     start: f32,
     actual_end: f32,
     occupied_end: f32,
@@ -205,7 +205,7 @@ struct Placement {
 /// - The range contains more days than the layout can address.
 /// - An overlap cluster contains more lanes than the layout can address.
 pub fn layout_events(
-    events: &[Event],
+    events: &[EventOccurrence],
     range: DateRange,
     metrics: LayoutMetrics,
 ) -> Result<Vec<PositionedEvent>, LayoutError> {
@@ -229,7 +229,7 @@ pub fn layout_events(
             .max(actual_end)
             .min(MINUTES_PER_DAY);
         by_day[day_offset].push(WorkingEvent {
-            event_id: event.id(),
+            occurrence_id: event.id(),
             start,
             actual_end,
             occupied_end,
@@ -247,7 +247,7 @@ pub fn layout_events(
                         .partial_cmp(&right.occupied_end)
                         .unwrap_or(Ordering::Equal)
                 })
-                .then_with(|| left.event_id.cmp(&right.event_id))
+                .then_with(|| left.occurrence_id.cmp(&right.occurrence_id))
         });
 
         let mut cursor = 0;
@@ -299,7 +299,7 @@ pub fn layout_events(
                     .max(metrics.minimum_event_height)
                     .min(MINUTES_PER_DAY.mul_add(metrics.pixels_per_minute, -top));
                 result.push(PositionedEvent {
-                    event_id: placement.event.event_id,
+                    occurrence_id: placement.event.occurrence_id,
                     day_offset: u8::try_from(day_offset).map_err(|_| LayoutError::RangeTooWide)?,
                     top,
                     height,
@@ -315,7 +315,7 @@ pub fn layout_events(
         left.day_offset
             .cmp(&right.day_offset)
             .then_with(|| left.top.partial_cmp(&right.top).unwrap_or(Ordering::Equal))
-            .then_with(|| left.event_id.cmp(&right.event_id))
+            .then_with(|| left.occurrence_id.cmp(&right.occurrence_id))
     });
     Ok(result)
 }

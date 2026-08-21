@@ -3,7 +3,7 @@ use jiff::civil::Date;
 
 use crate::{
     calendar::{ResizeEdge, propose_move, propose_resize},
-    domain::{DateRange, Event, EventDraft, EventId},
+    domain::{DateRange, EventDraft, EventOccurrence, OccurrenceId},
 };
 
 use super::style::PIXELS_PER_MINUTE;
@@ -19,7 +19,7 @@ pub(super) enum ManipulationKind {
 
 #[derive(Debug, Clone)]
 pub(super) struct DragPayload {
-    pub(super) event: Event,
+    pub(super) event: EventOccurrence,
     pub(super) kind: ManipulationKind,
     pub(super) original_day: u8,
     pub(super) range_start: Date,
@@ -27,7 +27,7 @@ pub(super) struct DragPayload {
 
 #[derive(Debug, Clone)]
 pub(super) struct Manipulation {
-    pub(super) event: Event,
+    pub(super) event: EventOccurrence,
     pub(super) kind: ManipulationKind,
     pub(super) proposed: EventDraft,
     pub(super) original_day: u8,
@@ -165,7 +165,7 @@ impl Manipulation {
         )
     }
 
-    pub(super) const fn event_id(&self) -> EventId {
+    pub(super) const fn occurrence_id(&self) -> OccurrenceId {
         self.event.id()
     }
 }

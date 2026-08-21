@@ -1,3 +1,5 @@
+use std::hash::{Hash, Hasher};
+
 use gpui::{
     App, Context, ElementId, Hsla, IntoElement, KeyDownEvent, MouseButton, Pixels, Point, Render,
     StatefulInteractiveElement as _, Window, div, prelude::*, px,
@@ -6,7 +8,7 @@ use gpui_component::{ActiveTheme as _, StyledExt as _, tooltip::Tooltip};
 
 use crate::{
     calendar::PositionedEvent,
-    domain::{Category, Event, format_time},
+    domain::{Category, EventOccurrence, format_time},
 };
 
 use super::{
@@ -19,7 +21,7 @@ use super::{
 #[allow(clippy::too_many_lines)]
 pub(super) fn render(
     view: &CadenceView,
-    event: &Event,
+    event: &EventOccurrence,
     category: &Category,
     position: PositionedEvent,
     column_width: f32,
@@ -34,7 +36,7 @@ pub(super) fn render(
     let day_offset = f32::from(position.day_offset());
     let lane = f32::from(position.lane());
     let left = day_offset.mul_add(column_width, column_width * lane / lane_count + 4.0);
-    let event_id = event.id();
+    let occurrence_id = event.id();
     let title = event.title().to_owned();
     let category_name = category.name().to_owned();
     let event_time = format!(
@@ -46,11 +48,7 @@ pub(super) fn render(
         || format!("{title}\n{category_name} · {event_time}"),
         |notes| format!("{title}\n{category_name} · {event_time}\n{notes}"),
     );
-    let element_key = u64::from_le_bytes(
-        event_id.as_uuid().as_bytes()[..8]
-            .try_into()
-            .expect("UUID has at least eight bytes"),
-    );
+    let element_key = occurrence_id_hash(occurrence_id);
     let event_date = event.date();
     let compact = position.height() < 42.0;
     let tall = position.height() >= 68.0;
@@ -93,7 +91,7 @@ pub(super) fn render(
     let active = state
         .manipulation
         .as_ref()
-        .is_some_and(|manipulation| manipulation.event_id() == event_id);
+        .is_some_and(|manipulation| manipulation.occurrence_id() == occurrence_id);
     div()
         .id(ElementId::NamedInteger("event-card".into(), element_key))
         .absolute()
@@ -128,7 +126,7 @@ pub(super) fn render(
                     app.stop_propagation();
                     key_view
                         .update(app, |view, cx| {
-                            view.inspect_event(event_id, event_date, window, cx);
+                            view.inspect_event(occurrence_id, event_date, window, cx);
                         })
                         .ok();
                 }
@@ -161,9 +159,9 @@ pub(super) fn render(
             app.stop_propagation();
             view.update(app, |this, cx| {
                 if event.standard_click() && event.click_count() >= 2 {
-                    this.inspect_event(event_id, event_date, window, cx);
+                    this.inspect_event(occurrence_id, event_date, window, cx);
                 } else {
-                    this.select_event(event_id, event_date, cx);
+                    this.select_event(occurrence_id, event_date, cx);
                 }
             })
             .ok();
@@ -191,6 +189,12 @@ pub(super) fn render(
             clock_format: state.settings.clock_format(),
         }))
         .into_any_element()
+}
+
+fn occurrence_id_hash(id: crate::domain::OccurrenceId) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    id.hash(&mut hasher);
+    hasher.finish()
 }
 
 struct ResizeHandleProps {
