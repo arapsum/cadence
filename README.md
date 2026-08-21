@@ -5,9 +5,10 @@ a week. Built with Rust, [GPUI](https://gpui.rs/), and [GPUI
 Component](https://longbridge.github.io/gpui-component/), it keeps the calendar
 as a quiet, spatially honest time grid rather than a dashboard.
 
-> **Project status:** Milestone 4 is implemented. Cadence currently uses seeded,
-> in-memory data; durable local persistence and restart behavior are planned for
-> Milestone 5.
+> **Project status:** Milestone 5 is implemented. Cadence stores timetable data
+> in a local SQLite database, restores mode/filter preferences on restart, and
+> offers versioned JSON export plus non-destructive recovery for unreadable
+> databases.
 
 ## What it does
 
@@ -20,6 +21,10 @@ as a quiet, spatially honest time grid rather than a dashboard.
 - Validate event titles, categories, and time ranges before changing the
   timetable.
 - Use pointer and keyboard interactions with light and dark themes.
+- Store events, categories, settings, and calendar preferences locally with
+  transactional writes and numbered schema migrations.
+- Export a human-readable JSON backup or reveal the data folder from the
+  toolbar.
 
 ## Requirements
 
@@ -72,6 +77,26 @@ builds reuse Cargo's cache.
 
 In Day mode, previous and next move one day; in Week mode, they move one week.
 
+## Local data
+
+On Linux, Cadence stores its database at:
+
+```text
+$CADENCE_DATA_DIR/cadence.sqlite3
+```
+
+when `CADENCE_DATA_DIR` is set. Otherwise it uses
+`$XDG_DATA_HOME/cadence/cadence.sqlite3`, falling back to
+`$HOME/.local/share/cadence/cadence.sqlite3`. The first run creates the six
+default categories and no sample events. The Export action produces a
+versioned, pretty-printed JSON backup without changing the database.
+
+If the database cannot be opened or migrated, Cadence keeps the original file
+untouched and shows a recovery screen. Retry, reveal the data folder, or
+explicitly confirm Archive and start fresh; the latter moves the database and
+rollback journal into a timestamped `cadence-recovery-*` folder before creating
+a new one.
+
 ## Validate
 
 Run these checks before completing a milestone or submitting a change:
@@ -101,6 +126,11 @@ After running the application, verify the following on the supported baseline:
    changing stored data; cancelling a dirty form asks for confirmation.
 8. Keyboard focus begins in the editor title, follows the form in order, and
    returns to the invoking card or slot when the dialog closes.
+9. Restart the app and confirm events, categories, settings, mode, and filter
+   survive while the selected date returns to today and the scroll position is
+   fresh.
+10. Export a JSON backup and verify its version, categories, preferences, and
+    events; test recovery with a copy of an unreadable database.
 
 ## Project documents
 

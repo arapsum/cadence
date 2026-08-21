@@ -86,3 +86,28 @@ confirmation. Delete first requires confirmation, then offers a persistent
 session-scoped Undo notification and Cmd/Ctrl+Z. Dialog focus starts in the
 title field and GPUI Component restores the invoking card or slot when the
 dialog stack closes.
+
+## M5 persistence and recovery surfaces
+
+Persistence is deliberately quiet during normal planning. The toolbar keeps
+calendar navigation primary and adds a secondary Export action. While a write
+is in flight, the title shows `Saving…` and calendar mutations are temporarily
+inert; the committed in-memory snapshot remains visible. A failed transaction
+restores that snapshot and places a retryable message in the existing error
+banner.
+
+Opening a database is a distinct state rather than a blocking render path. The
+window opens immediately with a calendar-shaped skeleton and a centered
+`Opening timetable…` message, then restores the saved Day/Week mode and category
+filter while anchoring the active range on today and resetting scroll. A fresh database contains the six default
+categories and an intentional empty timetable, so the empty state teaches the
+next action instead of presenting seeded sample work.
+
+An unreadable, incompatible, or invalid database replaces the calendar with a
+focused recovery panel. It explains the problem in user language, shows the
+exact path, and offers Retry, Reveal data folder, and a confirmed Archive and
+start fresh action. Archiving moves the original database and rollback journal
+to a timestamped recovery folder before a new database is created; Cadence
+never overwrites an unreadable file automatically. JSON export is versioned,
+pretty-printed, and written through a temporary sibling file followed by a
+rename so an interrupted export cannot leave a partial backup.

@@ -368,6 +368,9 @@ Implementation notes:
 
 ### M5 — Durable local persistence
 
+**Status (2026-08-21): implementation complete; manual restart, export, and
+recovery pass pending.**
+
 **Outcome:** real data survives restarts and schema evolution.
 
 Tasks:
@@ -385,6 +388,27 @@ Done when:
 - Migration tests upgrade a fixture from every supported schema version.
 - Simulated failed writes preserve the last valid data.
 - The user can locate and export their data from the UI.
+
+Implementation notes:
+
+- `src/store/sqlite.rs` owns the numbered `PRAGMA user_version` migrations,
+  foreign-key/integrity checks, canonical civil date/time encoding, and the
+  repository contract implementation. A fresh database creates the six
+  categories but no sample events.
+- `src/store/worker.rs` owns one SQLite connection on a dedicated worker
+  thread. The GPUI view receives asynchronous load/write results and keeps the
+  last committed in-memory snapshot when a transaction fails.
+- On Linux the database is `$CADENCE_DATA_DIR/cadence.sqlite3` when the
+  override is set, otherwise `$XDG_DATA_HOME/cadence/cadence.sqlite3`, falling
+  back to `$HOME/.local/share/cadence/cadence.sqlite3`.
+- The toolbar's Export action writes a versioned, pretty-printed JSON backup
+  through the native save dialog. Recovery presents Retry, Reveal data folder,
+  and an explicitly confirmed Archive and start fresh action; unreadable files
+  are moved into a timestamped recovery directory before a new database is
+  created.
+- Startup restores the Day/Week mode and category filter, then anchors the
+  calendar on today with a fresh scroll position. Scroll, selection, dialogs,
+  and undo state remain transient.
 
 **MVP release gate:** M0–M5 are complete, the acceptance journey below passes,
 and no known issue can silently lose or shift an event.
