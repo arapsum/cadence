@@ -97,7 +97,7 @@ fn event_lifecycle_supports_edit_duplicate_delete_and_restore() {
     let created = event(21, category_id, date(2024, 3, 4), 9, 10);
     repository.create_event(created.clone()).unwrap();
 
-    let mut revised = created.clone();
+    let mut revised = created;
     revised
         .revise(
             EventDraft::new(
@@ -124,7 +124,7 @@ fn event_lifecycle_supports_edit_duplicate_delete_and_restore() {
         Timestamp::from_second(120).unwrap(),
     )
     .unwrap();
-    repository.create_event(duplicate.clone()).unwrap();
+    repository.create_event(duplicate).unwrap();
     assert_eq!(
         repository
             .events(DateRange::day(date(2024, 3, 5)).unwrap())

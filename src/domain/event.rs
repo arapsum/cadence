@@ -203,6 +203,36 @@ impl Event {
         })
     }
 
+    /// Reconstructs an event loaded from durable storage.
+    ///
+    /// # Parameters
+    ///
+    /// - `id`: Stable event identifier.
+    /// - `draft`: Persisted editable event values.
+    /// - `created_at`: Original creation timestamp.
+    /// - `updated_at`: Timestamp of the latest persisted revision.
+    ///
+    /// # Returns
+    ///
+    /// A validated event retaining both persisted timestamps.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when:
+    ///
+    /// - The persisted title is empty.
+    /// - The persisted end time is not later than the start time.
+    pub fn from_persisted(
+        id: EventId,
+        draft: EventDraft,
+        created_at: Timestamp,
+        updated_at: Timestamp,
+    ) -> Result<Self, ValidationError> {
+        let mut event = Self::new(id, draft, created_at)?;
+        event.updated_at = updated_at;
+        Ok(event)
+    }
+
     /// Applies revised editable values to an existing event.
     ///
     /// # Parameters

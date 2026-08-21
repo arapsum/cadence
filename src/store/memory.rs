@@ -11,7 +11,7 @@ use crate::domain::{
     Settings, WeekStart,
 };
 
-use super::TimetableRepository;
+use super::{AppPreferences, PersistenceSnapshot, TimetableRepository};
 
 /// In-memory implementation of the timetable repository contract.
 ///
@@ -25,6 +25,7 @@ pub struct InMemoryRepository {
     events: HashMap<EventId, Event>,
     categories: HashMap<CategoryId, Category>,
     settings: Settings,
+    preferences: AppPreferences,
 }
 
 impl InMemoryRepository {
@@ -43,6 +44,7 @@ impl InMemoryRepository {
             events: HashMap::new(),
             categories: HashMap::new(),
             settings,
+            preferences: AppPreferences::default(),
         }
     }
 
@@ -64,6 +66,33 @@ impl InMemoryRepository {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.events.is_empty() && self.categories.is_empty()
+    }
+
+    /// Rebuilds an in-memory cache from a persisted snapshot.
+    ///
+    /// # Parameters
+    ///
+    /// - `snapshot`: Complete state loaded from durable storage.
+    ///
+    /// # Returns
+    ///
+    /// An in-memory repository containing the snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when:
+    ///
+    /// - A category or event violates the repository contract.
+    pub fn from_snapshot(snapshot: &PersistenceSnapshot) -> Result<Self, RepositoryError> {
+        let mut repository = Self::new(snapshot.settings.clone());
+        repository.preferences = snapshot.preferences;
+        for category in snapshot.categories.iter().cloned() {
+            repository.create_category(category)?;
+        }
+        for event in snapshot.events.iter().cloned() {
+            repository.create_event(event)?;
+        }
+        Ok(repository)
     }
 }
 
@@ -157,6 +186,63 @@ impl TimetableRepository for InMemoryRepository {
         self.settings = settings;
         Ok(())
     }
+
+    fn preferences(&self) -> Result<AppPreferences, RepositoryError> {
+        Ok(self.preferences)
+    }
+
+    fn replace_preferences(&mut self, preferences: AppPreferences) -> Result<(), RepositoryError> {
+        self.preferences = preferences;
+        Ok(())
+    }
+
+    fn snapshot(&self) -> Result<PersistenceSnapshot, RepositoryError> {
+        let mut categories = self.categories()?.into_iter().collect::<Vec<_>>();
+        categories.sort_by_key(Category::id);
+        let mut events = self.events(crate::domain::DateRange::new(
+            jiff::civil::Date::MIN,
+            jiff::civil::Date::MAX,
+        )?)?;
+        events.sort_by_key(Event::id);
+        Ok(PersistenceSnapshot {
+            settings: self.settings.clone(),
+            preferences: self.preferences,
+            categories,
+            events,
+        })
+    }
+}
+
+/// Returns the six categories created for a new Cadence database.
+///
+/// # Returns
+///
+/// Stable default categories with no events.
+///
+/// # Panics
+///
+/// Panics when:
+///
+/// - A built-in category definition is invalid.
+#[must_use]
+pub fn default_categories() -> Vec<Category> {
+    [
+        ("Routine", CategoryColor::Lime),
+        ("Focus", CategoryColor::Violet),
+        ("Break", CategoryColor::Yellow),
+        ("Career", CategoryColor::Cyan),
+        ("Interview", CategoryColor::Coral),
+        ("Planning", CategoryColor::Blue),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(index, (name, color))| {
+        let id = CategoryId::from_uuid(Uuid::from_u128(
+            u128::from(u16::try_from(index).expect("category index fits in u16")) + 1,
+        ));
+        Category::new(id, name, color, true).expect("built-in category is valid")
+    })
+    .collect()
 }
 
 impl InMemoryRepository {
@@ -259,23 +345,10 @@ pub fn seed_sample_week(
     let week_start = crate::domain::start_of_week(date, WeekStart::Sunday)
         .map_err(|error| RepositoryError::InvalidEntity(error.to_string()))?;
 
-    let categories = [
-        ("Routine", CategoryColor::Lime),
-        ("Focus", CategoryColor::Violet),
-        ("Break", CategoryColor::Yellow),
-        ("Career", CategoryColor::Cyan),
-        ("Interview", CategoryColor::Coral),
-        ("Planning", CategoryColor::Blue),
-    ];
-    let category_ids = categories
-        .iter()
-        .enumerate()
-        .map(|(index, (name, color))| {
-            let id = CategoryId::from_uuid(Uuid::from_u128(
-                u128::from(u16::try_from(index).expect("category index fits in u16")) + 1,
-            ));
-            let category = Category::new(id, *name, *color, true)
-                .map_err(|error| RepositoryError::InvalidEntity(error.to_string()))?;
+    let category_ids = default_categories()
+        .into_iter()
+        .map(|category| {
+            let id = category.id();
             repository.create_category(category)?;
             Ok::<_, RepositoryError>(id)
         })

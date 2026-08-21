@@ -76,6 +76,7 @@ pub enum RepositoryError {
     CategoryNotFound,
     CategoryInUse,
     InvalidEntity(String),
+    Storage(String),
 }
 
 impl fmt::Display for RepositoryError {
@@ -86,12 +87,18 @@ impl fmt::Display for RepositoryError {
             Self::DuplicateCategory => f.write_str("a category with this ID already exists."),
             Self::CategoryNotFound => f.write_str("the category could not be found."),
             Self::CategoryInUse => f.write_str("the category is still used by an event."),
-            Self::InvalidEntity(message) => f.write_str(message),
+            Self::InvalidEntity(message) | Self::Storage(message) => f.write_str(message),
         }
     }
 }
 
 impl std::error::Error for RepositoryError {}
+
+impl From<CalendarError> for RepositoryError {
+    fn from(error: CalendarError) -> Self {
+        Self::InvalidEntity(error.to_string())
+    }
+}
 
 impl From<jiff::Error> for CalendarError {
     fn from(_: jiff::Error) -> Self {

@@ -23,6 +23,10 @@ chrono = "0.4.45"
 uuid = { version = "1.24.1", features = ["serde", "v7"] }
 jiff = { version = "0.2.35", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.145"
+async-channel = "2.5.0"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
 
 [dev-dependencies]
 gpui = { git = "https://github.com/zed-industries/zed", features = ["test-support"] }
+tempfile = "3.23.0"
