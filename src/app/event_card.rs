@@ -66,25 +66,25 @@ pub(super) fn render(
         .as_ref()
         .map_or(event_date, |snapshot| snapshot.range.start());
     let move_payload = DragPayload {
-        event: event.clone(),
+        occurrence_id,
         kind: ManipulationKind::Move,
         original_day: position.day_offset(),
         range_start,
     };
     let resize_start_payload = DragPayload {
-        event: event.clone(),
+        occurrence_id,
         kind: ManipulationKind::Resize(crate::calendar::ResizeEdge::Start),
         original_day: position.day_offset(),
         range_start,
     };
     let resize_end_payload = DragPayload {
-        event: event.clone(),
+        occurrence_id,
         kind: ManipulationKind::Resize(crate::calendar::ResizeEdge::End),
         original_day: position.day_offset(),
         range_start,
     };
     let avatar_title = event.title().to_owned();
-    let avatar_time = event_time;
+    let avatar_time = event_time.clone();
     let avatar_background = background;
     let avatar_foreground = foreground;
     let active = state
@@ -176,7 +176,8 @@ pub(super) fn render(
             background,
             foreground,
             height: position.height(),
-            clock_format: state.settings.clock_format(),
+            event_title: event.title().to_owned(),
+            event_time: event_time.clone(),
         }))
         .child(render_category_header(category_name, foreground))
         .child(details)
@@ -188,7 +189,8 @@ pub(super) fn render(
             background,
             foreground,
             height: position.height(),
-            clock_format: state.settings.clock_format(),
+            event_title: event.title().to_owned(),
+            event_time,
         }))
         .into_any_element()
 }
@@ -201,7 +203,8 @@ struct ResizeHandleProps {
     background: Hsla,
     foreground: Hsla,
     height: f32,
-    clock_format: crate::domain::ClockFormat,
+    event_title: String,
+    event_time: String,
 }
 
 fn resize_handle(props: ResizeHandleProps) -> gpui::AnyElement {
@@ -213,7 +216,8 @@ fn resize_handle(props: ResizeHandleProps) -> gpui::AnyElement {
         background,
         foreground,
         height,
-        clock_format,
+        event_title,
+        event_time,
     } = props;
     let handle_view = view;
     div()
@@ -245,12 +249,8 @@ fn resize_handle(props: ResizeHandleProps) -> gpui::AnyElement {
                 .ok();
             app.new(|_| {
                 DragAvatar::new(
-                    payload.event.title().to_owned(),
-                    format!(
-                        "{} – {}",
-                        format_time(payload.event.start_time(), clock_format,),
-                        format_time(payload.event.end_time(), clock_format,),
-                    ),
+                    event_title.clone(),
+                    event_time.clone(),
                     background,
                     foreground,
                     offset,

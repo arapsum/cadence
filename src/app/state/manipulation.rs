@@ -22,10 +22,17 @@ impl CadenceView {
         if !self.is_interactive() {
             return;
         }
+        let Some(event) = self
+            .repository
+            .occurrence(payload.occurrence_id)
+            .ok()
+            .flatten()
+        else {
+            return;
+        };
         self.manipulation_rollback = Some(self.rollback_view_state());
-        self.state
-            .select_event(payload.event.id(), payload.event.date());
-        self.manipulation = Some(Manipulation::new(payload, cursor_offset));
+        self.state.select_event(event.id(), event.date());
+        self.manipulation = Some(Manipulation::new(payload, event, cursor_offset));
         let owner = cx.entity().downgrade();
         cx.spawn(async move |_, cx| {
             loop {
@@ -131,7 +138,7 @@ impl CadenceView {
             .take()
             .unwrap_or_else(|| self.rollback_view_state());
         cx.stop_active_drag(window);
-        if manipulation.event.id() != payload.event.id() || !manipulation.changed() {
+        if manipulation.event.id() != payload.occurrence_id || !manipulation.changed() {
             self.restore_view_state(rollback);
             cx.notify();
             return;

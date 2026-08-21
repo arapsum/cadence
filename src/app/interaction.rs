@@ -19,7 +19,7 @@ pub(super) enum ManipulationKind {
 
 #[derive(Debug, Clone)]
 pub(super) struct DragPayload {
-    pub(super) event: EventOccurrence,
+    pub(super) occurrence_id: OccurrenceId,
     pub(super) kind: ManipulationKind,
     pub(super) original_day: u8,
     pub(super) range_start: Date,
@@ -55,15 +55,19 @@ pub(super) struct ManipulationUpdate {
 
 impl Manipulation {
     #[allow(clippy::cast_possible_truncation)]
-    pub(super) fn new(payload: &DragPayload, cursor_offset: Point<Pixels>) -> Self {
+    pub(super) fn new(
+        payload: &DragPayload,
+        event: EventOccurrence,
+        cursor_offset: Point<Pixels>,
+    ) -> Self {
         let grab_offset_minutes = match payload.kind {
             ManipulationKind::Move => (cursor_offset.y.as_f32() / PIXELS_PER_MINUTE).round() as i32,
             ManipulationKind::Resize(_) => 0,
         };
         Self {
-            event: payload.event.clone(),
+            event: event.clone(),
             kind: payload.kind,
-            proposed: payload.event.draft(),
+            proposed: event.draft(),
             original_day: payload.original_day,
             range_start: payload.range_start,
             pointer: Point::default(),
