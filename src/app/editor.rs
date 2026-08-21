@@ -509,12 +509,21 @@ impl CadenceView {
                         return true;
                     }
                     let owner = owner_cancel.clone();
-                    window.open_alert_dialog(app, move |alert, _, _| {
+                    window.open_alert_dialog(app, move |alert, alert_window, _| {
+                        let viewport = alert_window.viewport_size();
+                        let padding = window_paddings(alert_window);
+
+                        let available_height = viewport.height - padding.top - padding.bottom;
+                        let dialog_height = px(240.0);
+
+                        let margin_top = ((available_height - dialog_height) / 2.0).max(px(0.0));
+
                         alert
                             .title("Discard changes?")
                             .description(
                                 "Your unsaved changes will be lost if you leave this form.",
                             )
+                            .mt(margin_top)
                             .button_props(
                                 DialogButtonProps::default()
                                     .ok_text("Discard")
@@ -610,6 +619,7 @@ impl CadenceView {
         true
     }
 
+    #[allow(clippy::too_many_lines)]
     fn open_inspector(
         &self,
         event: &Event,
@@ -632,11 +642,21 @@ impl CadenceView {
         );
         let notes = event.notes().map(str::to_owned);
         let duplicate = FormDraft::from_event(event);
-        window.open_dialog(cx, move |dialog, _, _| {
+        window.open_dialog(cx, move |dialog, dialog_window, _| {
+            let viewport = dialog_window.viewport_size();
+            let padding = window_paddings(dialog_window);
+
+            let available_height = viewport.height - padding.top - padding.bottom;
+            let dialog_height = px(420.0);
+
+            let margin_top = ((available_height - dialog_height) / 2.0).max(px(0.0));
+
             let edit_owner = owner.clone();
             let duplicate_owner = owner.clone();
             let delete_owner = owner.clone();
+
             dialog
+                .margin_top(margin_top)
                 .w(px(420.0))
                 .title(title.clone())
                 .overlay_closable(false)
