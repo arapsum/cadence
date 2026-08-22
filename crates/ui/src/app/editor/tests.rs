@@ -73,6 +73,13 @@ fn event_entry_points_render_their_dialogs(cx: &mut TestAppContext) {
     cx.update(|window, app| window.draw(app).clear(app));
     assert!(cx.update(gpui_component::WindowExt::has_active_dialog));
     cx.update(gpui_component::WindowExt::close_all_dialogs);
+    calendar.update_in(cx, |_, window, app| {
+        CadenceView::open_about(window, app);
+    });
+    assert!(cx.update(gpui_component::WindowExt::has_active_dialog));
+    assert!(cx.update(|window, app| Root::render_dialog_layer(window, app).is_some()));
+
+    cx.update(gpui_component::WindowExt::close_all_dialogs);
 
     let (event_id, event_date) = calendar.read_with(cx, |view, _| {
         let event = view

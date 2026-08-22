@@ -46,6 +46,9 @@ impl Render for CadenceView {
             .on_action(cx.listener(|this, _: &actions::OpenSettings, window, cx| {
                 this.open_settings(window, cx);
             }))
+            .on_action(cx.listener(|_, _: &actions::OpenAbout, window, cx| {
+                Self::open_about(window, cx);
+            }))
             .on_action(cx.listener(|this, _: &actions::Undo, window, cx| {
                 this.undo(window, cx);
             }))

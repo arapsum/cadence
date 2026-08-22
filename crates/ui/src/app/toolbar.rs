@@ -335,6 +335,7 @@ fn add_secondary_items(
     let export_owner = owner.clone();
     let appearance_owner = owner.clone();
     let settings_owner = owner.clone();
+    let about_owner = owner.clone();
     let menu = menu
         .separator()
         .item(
@@ -366,6 +367,15 @@ fn add_secondary_items(
                         .ok();
                 }),
         );
+    let menu = menu.item(
+        PopupMenuItem::new("About Cadence")
+            .icon(IconName::Info)
+            .on_click(move |_, window, cx| {
+                about_owner
+                    .update(cx, |_, cx| CadenceView::open_about(window, cx))
+                    .ok();
+            }),
+    );
     menu.submenu_with_icon(
         Some(Icon::new(IconName::Palette)),
         "Appearance",

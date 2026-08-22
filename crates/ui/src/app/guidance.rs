@@ -7,6 +7,7 @@ use gpui_component::{
     window_paddings,
 };
 
+use crate::{APPLICATION_NAME, BuildInfo};
 use crate::{domain::format_time, store::TimetableRepository};
 
 use super::{
@@ -150,6 +151,53 @@ impl CadenceView {
                 .footer(
                     div().flex().justify_end().child(
                         Button::new("settings-close")
+                            .primary()
+                            .label("Done")
+                            .on_click(|_, window, cx| window.close_dialog(cx)),
+                    ),
+                )
+        });
+    }
+
+    /// Opens the application identity and support-information dialog.
+    pub(in crate::app) fn open_about(window: &mut Window, cx: &mut Context<'_, Self>) {
+        let build = BuildInfo::current();
+        window.open_dialog(cx, move |dialog, _, cx| {
+            dialog
+                .title(format!("About {APPLICATION_NAME}"))
+                .w(px(420.0))
+                .child(
+                    div()
+                        .id("about-cadence-details")
+                        .v_flex()
+                        .items_center()
+                        .gap_3()
+                        .p_6()
+                        .child(crate::components::app_icon::render(px(72.0)))
+                        .child(div().text_xl().font_semibold().child(APPLICATION_NAME))
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .text_center()
+                                .child("A local-first timetable for planning a day and understanding a week."),
+                        )
+                        .child(
+                            div()
+                                .v_flex()
+                                .items_center()
+                                .gap_1()
+                                .pt_2()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!("Version {}", build.version))
+                                .child(format!("Build {}", build.commit))
+                                .child(format!("GPUI {}", build.gpui_revision)),
+                        ),
+                )
+                .footer(
+                    div().flex().justify_end().child(
+                        Button::new("about-close")
                             .primary()
                             .label("Done")
                             .on_click(|_, window, cx| window.close_dialog(cx)),

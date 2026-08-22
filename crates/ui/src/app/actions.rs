@@ -22,6 +22,7 @@ cadence_actions!(
     NewEvent,
     OpenAgenda,
     OpenSettings,
+    OpenAbout,
     Undo,
     Redo,
     CancelManipulation,
