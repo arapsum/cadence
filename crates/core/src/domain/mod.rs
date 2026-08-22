@@ -1,4 +1,5 @@
 mod category;
+mod conflict;
 mod errors;
 mod event;
 mod recurrence;
@@ -6,6 +7,10 @@ mod settings;
 mod time;
 
 pub use category::{Category, CategoryColor, CategoryId};
+pub use conflict::{
+    OccurrenceConflict, ScheduleConflict, find_event_conflict, find_exception_conflict,
+    find_occurrence_conflicts, find_series_conflict,
+};
 pub use errors::{CalendarError, RepositoryError, ValidationError};
 pub use event::{Event, EventDraft, EventId, ReminderOffset};
 pub use recurrence::{

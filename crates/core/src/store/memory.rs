@@ -9,7 +9,8 @@ use uuid::Uuid;
 use crate::domain::{
     Category, CategoryColor, CategoryId, DateRange, Event, EventDraft, EventId,
     RecurrenceException, RecurrenceExceptionKind, RecurrenceSeries, RecurrenceSeriesId,
-    RepositoryError, Settings, WeekStart,
+    RepositoryError, Settings, WeekStart, find_event_conflict, find_exception_conflict,
+    find_series_conflict,
 };
 
 use super::{AppPreferences, PersistenceSnapshot, TimetableRepository};
@@ -97,7 +98,9 @@ impl InMemoryRepository {
     ///
     /// Returns an error when:
     ///
-    /// - A category or event violates the repository contract.
+    /// - A category or event is duplicated.
+    /// - An event references an unknown category.
+    /// - A recurring series or exception references an unknown entity.
     pub fn from_snapshot(snapshot: &PersistenceSnapshot) -> Result<Self, RepositoryError> {
         let mut repository = Self::new(snapshot.settings.clone());
         repository.preferences = snapshot.preferences.clone();
@@ -105,15 +108,120 @@ impl InMemoryRepository {
             repository.create_category(category)?;
         }
         for event in snapshot.events.iter().cloned() {
-            repository.create_event(event)?;
+            if !repository.categories.contains_key(&event.category_id()) {
+                return Err(RepositoryError::CategoryNotFound);
+            }
+            if repository.events.insert(event.id(), event).is_some() {
+                return Err(RepositoryError::DuplicateEvent);
+            }
         }
         for series in snapshot.recurrence_series.iter().cloned() {
-            repository.create_series(series)?;
+            if repository
+                .categories
+                .contains_key(&series.template().category_id)
+                && repository
+                    .recurrence_series
+                    .insert(series.id(), series)
+                    .is_none()
+            {
+                continue;
+            }
+            return Err(RepositoryError::InvalidEntity(
+                "snapshot references an unknown or duplicate recurring series".to_owned(),
+            ));
         }
         for exception in snapshot.recurrence_exceptions.iter().cloned() {
-            repository.upsert_exception(exception)?;
+            let valid_series = repository
+                .recurrence_series
+                .contains_key(&exception.series_id());
+            let valid_category = match exception.kind() {
+                RecurrenceExceptionKind::Cancelled => true,
+                RecurrenceExceptionKind::Modified(draft) => {
+                    repository.categories.contains_key(&draft.category_id)
+                }
+            };
+            if !valid_series || !valid_category {
+                return Err(RepositoryError::InvalidEntity(
+                    "snapshot references an unknown recurring exception entity".to_owned(),
+                ));
+            }
+            if repository
+                .recurrence_exceptions
+                .insert(
+                    (exception.series_id(), exception.original_date()),
+                    exception,
+                )
+                .is_some()
+            {
+                return Err(RepositoryError::InvalidEntity(
+                    "snapshot contains duplicate recurring exceptions".to_owned(),
+                ));
+            }
         }
         Ok(repository)
+    }
+
+    fn schedule_conflict_for_event(&self, event: &Event) -> Option<RepositoryError> {
+        let events = self.events.values().cloned().collect::<Vec<_>>();
+        let series = self.recurrence_series.values().cloned().collect::<Vec<_>>();
+        let exceptions = self
+            .recurrence_exceptions
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        find_event_conflict(event, &events, &series, &exceptions)
+            .map(RepositoryError::ScheduleConflict)
+    }
+
+    fn schedule_conflict_for_series(
+        &self,
+        candidate: &RecurrenceSeries,
+    ) -> Option<RepositoryError> {
+        let events = self.events.values().cloned().collect::<Vec<_>>();
+        let series = self.recurrence_series.values().cloned().collect::<Vec<_>>();
+        let exceptions = self
+            .recurrence_exceptions
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        let candidate_exceptions = exceptions
+            .iter()
+            .filter(|exception| exception.series_id() == candidate.id())
+            .cloned()
+            .collect::<Vec<_>>();
+        find_series_conflict(
+            candidate,
+            &candidate_exceptions,
+            &events,
+            &series,
+            &exceptions,
+        )
+        .map(RepositoryError::ScheduleConflict)
+    }
+
+    fn schedule_conflict_for_exception(
+        &self,
+        candidate: &RecurrenceException,
+    ) -> Result<Option<RepositoryError>, RepositoryError> {
+        let series = self
+            .recurrence_series
+            .get(&candidate.series_id())
+            .ok_or(RepositoryError::SeriesNotFound)?;
+        let events = self.events.values().cloned().collect::<Vec<_>>();
+        let series_list = self.recurrence_series.values().cloned().collect::<Vec<_>>();
+        let exceptions = self
+            .recurrence_exceptions
+            .values()
+            .filter(|exception| {
+                (exception.series_id(), exception.original_date())
+                    != (candidate.series_id(), candidate.original_date())
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        Ok(
+            find_exception_conflict(candidate, series, &events, &series_list, &exceptions)
+                .map(RepositoryError::ScheduleConflict),
+        )
     }
 }
 
@@ -165,6 +273,9 @@ impl TimetableRepository for InMemoryRepository {
             return Err(RepositoryError::DuplicateSeries);
         }
         self.ensure_category(series.template().category_id)?;
+        if let Some(error) = self.schedule_conflict_for_series(&series) {
+            return Err(error);
+        }
         self.recurrence_series.insert(series.id(), series);
         Ok(())
     }
@@ -174,6 +285,9 @@ impl TimetableRepository for InMemoryRepository {
             return Err(RepositoryError::SeriesNotFound);
         }
         self.ensure_category(series.template().category_id)?;
+        if let Some(error) = self.schedule_conflict_for_series(&series) {
+            return Err(error);
+        }
         self.recurrence_series.insert(series.id(), series);
         Ok(())
     }
@@ -198,6 +312,9 @@ impl TimetableRepository for InMemoryRepository {
         if let RecurrenceExceptionKind::Modified(draft) = exception.kind() {
             self.ensure_category(draft.category_id)?;
         }
+        if let Some(error) = self.schedule_conflict_for_exception(&exception)? {
+            return Err(error);
+        }
         self.recurrence_exceptions.insert(
             (exception.series_id(), exception.original_date()),
             exception,
@@ -220,6 +337,9 @@ impl TimetableRepository for InMemoryRepository {
             return Err(RepositoryError::DuplicateEvent);
         }
         self.ensure_category(event.category_id())?;
+        if let Some(error) = self.schedule_conflict_for_event(&event) {
+            return Err(error);
+        }
         self.events.insert(event.id(), event);
         Ok(())
     }
@@ -229,6 +349,9 @@ impl TimetableRepository for InMemoryRepository {
             return Err(RepositoryError::EventNotFound);
         }
         self.ensure_category(event.category_id())?;
+        if let Some(error) = self.schedule_conflict_for_event(&event) {
+            return Err(error);
+        }
         self.events.insert(event.id(), event);
         Ok(())
     }

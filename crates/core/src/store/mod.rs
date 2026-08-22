@@ -269,16 +269,16 @@ pub trait TimetableRepository {
     ///
     /// # Errors
     ///
-    /// Returns an error when the series already exists, references an unknown category, or
-    /// cannot be written.
+    /// Returns an error when the series already exists, references an unknown category, overlaps
+    /// another scheduled occurrence, or cannot be written.
     fn create_series(&mut self, series: RecurrenceSeries) -> Result<(), RepositoryError>;
 
     /// Replaces an existing recurring series.
     ///
     /// # Errors
     ///
-    /// Returns an error when the series does not exist, references an unknown category, or
-    /// cannot be written.
+    /// Returns an error when the series does not exist, references an unknown category, overlaps
+    /// another scheduled occurrence, or cannot be written.
     fn update_series(&mut self, series: RecurrenceSeries) -> Result<(), RepositoryError>;
 
     /// Removes a recurring series and its exceptions.
@@ -295,7 +295,8 @@ pub trait TimetableRepository {
     ///
     /// # Errors
     ///
-    /// Returns an error when the owning series does not exist or the exception cannot be written.
+    /// Returns an error when the owning series does not exist, the replacement overlaps another
+    /// scheduled occurrence, or the exception cannot be written.
     fn upsert_exception(&mut self, exception: RecurrenceException) -> Result<(), RepositoryError>;
 
     /// Removes one recurring exception, returning it when present.
@@ -325,6 +326,7 @@ pub trait TimetableRepository {
     ///
     /// - An event with the same identifier already exists.
     /// - The event references a category that is not stored.
+    /// - The event overlaps another scheduled occurrence.
     /// - The repository cannot write its event store.
     fn create_event(&mut self, event: Event) -> Result<(), RepositoryError>;
 
@@ -344,6 +346,7 @@ pub trait TimetableRepository {
     ///
     /// - The event does not exist.
     /// - The event references a category that is not stored.
+    /// - The revised event overlaps another scheduled occurrence.
     /// - The repository cannot write its event store.
     fn update_event(&mut self, event: Event) -> Result<(), RepositoryError>;
 

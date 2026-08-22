@@ -119,6 +119,36 @@ fn sqlite_round_trip_preserves_entities_and_preferences() {
 }
 
 #[test]
+fn sqlite_rejects_overlapping_events_but_keeps_adjacent_boundaries() {
+    let directory = tempdir().unwrap();
+    let mut repository = SqliteRepository::open(directory.path().join("cadence.sqlite3")).unwrap();
+    let category = category(110);
+    let category_id = category.id();
+    repository.create_category(category).unwrap();
+    repository.create_event(event(111, category_id)).unwrap();
+
+    let adjacent = Event::new(
+        EventId::from_uuid(Uuid::from_u128(112)),
+        EventDraft::new(
+            "Adjacent",
+            date(2026, 8, 21),
+            time(10, 30),
+            time(11, 0),
+            category_id,
+            None,
+        ),
+        Timestamp::from_second(11).unwrap(),
+    )
+    .unwrap();
+    repository.create_event(adjacent).unwrap();
+
+    assert!(matches!(
+        repository.create_event(event(113, category_id)),
+        Err(cadence_core::domain::RepositoryError::ScheduleConflict(_))
+    ));
+}
+
+#[test]
 fn sqlite_round_trip_preserves_the_expanded_category_palette() {
     let directory = tempdir().unwrap();
     let path = directory.path().join("cadence.sqlite3");

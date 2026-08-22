@@ -196,6 +196,39 @@ impl SqliteRepository {
         Ok(())
     }
 
+    fn validate_event_change(&self, event: &Event, update: bool) -> Result<(), RepositoryError> {
+        let snapshot = self.load_snapshot().map_err(RepositoryError::from)?;
+        let mut repository = InMemoryRepository::from_snapshot(&snapshot)?;
+        if update {
+            repository.update_event(event.clone())
+        } else {
+            repository.create_event(event.clone())
+        }
+    }
+
+    fn validate_series_change(
+        &self,
+        series: &RecurrenceSeries,
+        update: bool,
+    ) -> Result<(), RepositoryError> {
+        let snapshot = self.load_snapshot().map_err(RepositoryError::from)?;
+        let mut repository = InMemoryRepository::from_snapshot(&snapshot)?;
+        if update {
+            repository.update_series(series.clone())
+        } else {
+            repository.create_series(series.clone())
+        }
+    }
+
+    fn validate_exception_change(
+        &self,
+        exception: &RecurrenceException,
+    ) -> Result<(), RepositoryError> {
+        let snapshot = self.load_snapshot().map_err(RepositoryError::from)?;
+        let mut repository = InMemoryRepository::from_snapshot(&snapshot)?;
+        repository.upsert_exception(exception.clone())
+    }
+
     /// Reads all persisted entities in a deterministic order.
     ///
     /// # Returns
@@ -238,7 +271,8 @@ impl SqliteRepository {
     ///
     /// Returns an error when:
     ///
-    /// - A snapshot entity is invalid or violates a foreign key.
+    /// - A snapshot entity is invalid or violates a foreign key. Existing
+    ///   overlapping records are retained so they can be resolved explicitly.
     /// - The transaction cannot commit.
     pub fn replace_snapshot(&mut self, snapshot: &PersistenceSnapshot) -> Result<(), StorageError> {
         InMemoryRepository::from_snapshot(snapshot)
@@ -476,12 +510,14 @@ impl TimetableRepository for SqliteRepository {
     }
 
     fn create_series(&mut self, series: RecurrenceSeries) -> Result<(), RepositoryError> {
+        self.validate_series_change(&series, false)?;
         let tx = self.connection.transaction().map_err(sqlite_error)?;
         insert_series(&tx, std::slice::from_ref(&series)).map_err(map_repository_error)?;
         tx.commit().map_err(sqlite_error).map_err(Into::into)
     }
 
     fn update_series(&mut self, series: RecurrenceSeries) -> Result<(), RepositoryError> {
+        self.validate_series_change(&series, true)?;
         let data = serde_json::to_string(&series)
             .map_err(|error| RepositoryError::InvalidEntity(error.to_string()))?;
         let changed = self
@@ -519,6 +555,7 @@ impl TimetableRepository for SqliteRepository {
     }
 
     fn upsert_exception(&mut self, exception: RecurrenceException) -> Result<(), RepositoryError> {
+        self.validate_exception_change(&exception)?;
         let data = serde_json::to_string(&exception)
             .map_err(|error| RepositoryError::InvalidEntity(error.to_string()))?;
         let Some(_series) = self.series(exception.series_id())? else {
@@ -556,12 +593,14 @@ impl TimetableRepository for SqliteRepository {
     }
 
     fn create_event(&mut self, event: Event) -> Result<(), RepositoryError> {
+        self.validate_event_change(&event, false)?;
         let tx = self.connection.transaction().map_err(sqlite_error)?;
         insert_event(&tx, &event).map_err(map_repository_error)?;
         tx.commit().map_err(sqlite_error).map_err(Into::into)
     }
 
     fn update_event(&mut self, event: Event) -> Result<(), RepositoryError> {
+        self.validate_event_change(&event, true)?;
         let tx = self.connection.transaction().map_err(sqlite_error)?;
         let changed = tx
             .execute(

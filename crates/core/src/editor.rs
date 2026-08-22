@@ -108,6 +108,7 @@ pub struct FormErrors {
     pub category: Option<String>,
     pub recurrence: Option<String>,
     pub ends_on: Option<String>,
+    pub conflict: Option<String>,
 }
 
 impl FormErrors {
@@ -125,6 +126,7 @@ impl FormErrors {
             && self.category.is_none()
             && self.recurrence.is_none()
             && self.ends_on.is_none()
+            && self.conflict.is_none()
     }
 }
 

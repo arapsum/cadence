@@ -4,7 +4,10 @@ use cadence_core::{
         RecurrenceException, RecurrenceRule, RecurrenceSeries, RecurrenceSeriesId, Settings,
         WeekStart, WeekdaySet,
     },
-    store::{InMemoryRepository, TimetableRepository, seed_sample_week},
+    store::{
+        AppPreferences, InMemoryRepository, PersistenceSnapshot, TimetableRepository,
+        seed_sample_week,
+    },
 };
 use jiff::{
     Timestamp,
@@ -202,13 +205,16 @@ fn event_lifecycle_supports_edit_duplicate_delete_and_restore() {
         Timestamp::from_second(120).unwrap(),
     )
     .unwrap();
-    repository.create_event(duplicate).unwrap();
+    assert!(matches!(
+        repository.create_event(duplicate),
+        Err(cadence_core::domain::RepositoryError::ScheduleConflict(_))
+    ));
     assert_eq!(
         repository
             .events(DateRange::day(date(2024, 3, 5)).unwrap())
             .unwrap()
             .len(),
-        2
+        1
     );
 
     let deleted = repository.delete_event(event_id).unwrap();
@@ -217,6 +223,121 @@ fn event_lifecycle_supports_edit_duplicate_delete_and_restore() {
 
     repository.create_event(deleted.clone()).unwrap();
     assert_eq!(repository.event(event_id).unwrap(), Some(deleted));
+}
+
+#[test]
+fn adjacent_events_are_allowed_but_partial_overlap_is_rejected() {
+    let mut repository = InMemoryRepository::with_defaults();
+    let category_id = category(30, "Schedule").id();
+    repository
+        .create_category(category(30, "Schedule"))
+        .unwrap();
+    let day = date(2026, 8, 17);
+    repository
+        .create_event(event(31, category_id, day, 9, 10))
+        .unwrap();
+    repository
+        .create_event(event(32, category_id, day, 10, 11))
+        .unwrap();
+    assert!(matches!(
+        repository.create_event(event(33, category_id, day, 9, 10)),
+        Err(cadence_core::domain::RepositoryError::ScheduleConflict(_))
+    ));
+    assert!(matches!(
+        repository.create_event(event(34, category_id, day, 9, 11)),
+        Err(cadence_core::domain::RepositoryError::ScheduleConflict(_))
+    ));
+}
+
+#[test]
+fn recurring_series_conflicts_are_checked_beyond_the_visible_week() {
+    let mut repository = InMemoryRepository::with_defaults();
+    let category_id = category(40, "Recurring").id();
+    repository
+        .create_category(category(40, "Recurring"))
+        .unwrap();
+    let start = date(2026, 8, 17);
+    let first = RecurrenceSeries::new(
+        RecurrenceSeriesId::from_uuid(Uuid::from_u128(41)),
+        EventDraft::new("First", start, time(8, 0), time(9, 0), category_id, None),
+        RecurrenceRule::Daily,
+        None,
+        Timestamp::from_second(0).unwrap(),
+    )
+    .unwrap();
+    repository.create_series(first).unwrap();
+
+    let second = RecurrenceSeries::new(
+        RecurrenceSeriesId::from_uuid(Uuid::from_u128(42)),
+        EventDraft::new(
+            "Second",
+            date(2027, 1, 1),
+            time(8, 30),
+            time(9, 30),
+            category_id,
+            None,
+        ),
+        RecurrenceRule::Daily,
+        None,
+        Timestamp::from_second(0).unwrap(),
+    )
+    .unwrap();
+    assert!(matches!(
+        repository.create_series(second),
+        Err(cadence_core::domain::RepositoryError::ScheduleConflict(_))
+    ));
+}
+
+#[test]
+fn legacy_overlaps_load_and_only_resolving_edits_are_allowed() {
+    let category = category(50, "Legacy");
+    let category_id = category.id();
+    let first = event(51, category_id, date(2026, 8, 17), 9, 10);
+    let second = event(52, category_id, date(2026, 8, 17), 9, 10);
+    let snapshot = PersistenceSnapshot {
+        settings: Settings::default(),
+        preferences: AppPreferences::default(),
+        categories: vec![category],
+        events: vec![first.clone(), second],
+        recurrence_series: Vec::new(),
+        recurrence_exceptions: Vec::new(),
+    };
+    let mut repository = InMemoryRepository::from_snapshot(&snapshot).unwrap();
+
+    let mut unchanged = first.clone();
+    unchanged
+        .revise(
+            EventDraft::new(
+                "Renamed only",
+                first.date(),
+                first.start_time(),
+                first.end_time(),
+                category_id,
+                None,
+            ),
+            Timestamp::from_second(1).unwrap(),
+        )
+        .unwrap();
+    assert!(matches!(
+        repository.update_event(unchanged),
+        Err(cadence_core::domain::RepositoryError::ScheduleConflict(_))
+    ));
+
+    let mut resolved = first;
+    resolved
+        .revise(
+            EventDraft::new(
+                "Moved away",
+                date(2026, 8, 17),
+                time(10, 0),
+                time(11, 0),
+                category_id,
+                None,
+            ),
+            Timestamp::from_second(2).unwrap(),
+        )
+        .unwrap();
+    repository.update_event(resolved).unwrap();
 }
 
 #[test]

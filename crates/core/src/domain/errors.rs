@@ -101,6 +101,7 @@ pub enum RepositoryError {
     CategoryNotFound,
     CategoryInUse,
     LastCategory,
+    ScheduleConflict(crate::domain::ScheduleConflict),
     InvalidEntity(String),
     Storage(String),
 }
@@ -117,6 +118,14 @@ impl fmt::Display for RepositoryError {
             Self::CategoryNotFound => f.write_str("the category could not be found."),
             Self::CategoryInUse => f.write_str("the category is still used by scheduled items."),
             Self::LastCategory => f.write_str("keep at least one category."),
+            Self::ScheduleConflict(conflict) => write!(
+                f,
+                "'{title}' already occupies {start}–{end} on {date}.",
+                title = conflict.title(),
+                start = conflict.start_time(),
+                end = conflict.end_time(),
+                date = conflict.date(),
+            ),
             Self::InvalidEntity(message) | Self::Storage(message) => f.write_str(message),
         }
     }
