@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use gpui::{Context, IntoElement, div, prelude::*, px};
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, StyledExt as _,
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt as _,
+    button::{Button, ButtonVariants as _},
+    menu::{DropdownMenu as _, PopupMenuItem},
     sidebar::{Sidebar, SidebarCollapsible, SidebarGroup, SidebarMenu, SidebarMenuItem},
 };
 
@@ -30,6 +32,7 @@ pub(super) fn render(
         .snapshot
         .as_ref()
         .map_or(&[][..], |snapshot| snapshot.categories.as_slice());
+    let only_category = categories.len() == 1;
     let summary = DailySummary::from_view(view);
 
     let navigation = SidebarGroup::new("Views").child(
@@ -81,33 +84,86 @@ pub(super) fn render(
             ),
     );
 
-    let category_items = categories
-        .iter()
-        .filter(|category| category.is_visible())
-        .map(|category| {
-            let filter_owner = owner.clone();
-            let filter = CategoryFilter::Only(category.id());
-            let next_filter = if view.state.category_filter() == filter {
-                CategoryFilter::All
-            } else {
-                filter
-            };
-            SidebarMenuItem::new(category.name().to_owned())
-                .icon(Icon::new(IconName::Minus).text_color(
-                    category_palette(category.color_token(), cx.theme().mode.is_dark()).2,
-                ))
-                .active(view.state.category_filter() == filter)
-                .disable(!interactive)
-                .on_click(move |_, window, app| {
-                    filter_owner
-                        .update(app, |view, cx| {
-                            view.category_filter.update(cx, |select, cx| {
-                                select.set_selected_value(&next_filter, window, cx);
-                            });
-                        })
-                        .ok();
-                })
-        });
+    let new_category_owner = owner.clone();
+    let category_items = std::iter::once(
+        SidebarMenuItem::new("New category")
+            .icon(IconName::Plus)
+            .disable(!interactive)
+            .on_click(move |_, window, app| {
+                new_category_owner
+                    .update(app, |view, cx| view.new_category(window, cx))
+                    .ok();
+            }),
+    )
+    .chain(
+        categories
+            .iter()
+            .filter(|category| category.is_visible())
+            .map(|category| {
+                let category_id = category.id();
+                let filter_owner = owner.clone();
+                let edit_owner = owner.clone();
+                let delete_owner = owner.clone();
+                let filter = CategoryFilter::Only(category.id());
+                let next_filter = if view.state.category_filter() == filter {
+                    CategoryFilter::All
+                } else {
+                    filter
+                };
+                SidebarMenuItem::new(category.name().to_owned())
+                    .icon(Icon::new(IconName::Minus).text_color(
+                        category_palette(category.color_token(), cx.theme().mode.is_dark()).2,
+                    ))
+                    .active(view.state.category_filter() == filter)
+                    .disable(!interactive)
+                    .suffix(move |_, _| {
+                        let edit_owner = edit_owner.clone();
+                        let delete_owner = delete_owner.clone();
+                        Button::new(format!("sidebar-category-actions-{category_id}"))
+                            .ghost()
+                            .xsmall()
+                            .icon(IconName::Ellipsis)
+                            .tooltip("Category actions")
+                            .dropdown_menu(move |menu, _, _| {
+                                let edit_owner = edit_owner.clone();
+                                let delete_owner = delete_owner.clone();
+                                menu.item(PopupMenuItem::new("Edit category").on_click(
+                                    move |_, window, app| {
+                                        edit_owner
+                                            .update(app, |view, cx| {
+                                                view.edit_category(category_id, window, cx);
+                                            })
+                                            .ok();
+                                    },
+                                ))
+                                .item(
+                                    PopupMenuItem::new("Delete category")
+                                        .disabled(only_category)
+                                        .on_click(move |_, window, app| {
+                                            delete_owner
+                                                .update(app, |view, cx| {
+                                                    view.confirm_delete_category(
+                                                        category_id,
+                                                        window,
+                                                        cx,
+                                                    );
+                                                })
+                                                .ok();
+                                        }),
+                                )
+                            })
+                    })
+                    .on_click(move |_, window, app| {
+                        filter_owner
+                            .update(app, |view, cx| {
+                                view.category_filter.update(cx, |select, cx| {
+                                    select.set_selected_value(&next_filter, window, cx);
+                                });
+                            })
+                            .ok();
+                    })
+            }),
+    );
     let categories_group =
         SidebarGroup::new("Categories").child(SidebarMenu::new().children(category_items));
 

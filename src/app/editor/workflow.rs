@@ -22,7 +22,7 @@ use crate::{
 };
 
 use super::super::{
-    history::{ChangeKind, EventChange},
+    history::{CalendarChange, ChangeKind},
     state::CadenceView,
     style::dialog_margin_top,
 };
@@ -358,7 +358,7 @@ impl CadenceView {
         draft: &EventDraft,
         before: &crate::store::PersistenceSnapshot,
         timestamp: Timestamp,
-    ) -> Result<(OccurrenceId, EventChange), String> {
+    ) -> Result<(OccurrenceId, CalendarChange), String> {
         if let Some(rule) = form.recurrence {
             let series = RecurrenceSeries::new(
                 RecurrenceSeriesId::new(),
@@ -381,7 +381,7 @@ impl CadenceView {
                     series_id: id,
                     original_date: draft.date,
                 },
-                EventChange::Snapshot {
+                CalendarChange::Snapshot {
                     before: before.clone(),
                     after,
                     kind: ChangeKind::Create,
@@ -392,7 +392,7 @@ impl CadenceView {
             Event::new(id, draft.clone(), timestamp)
                 .map_err(|error| error.to_string())
                 .and_then(|event| {
-                    let change = EventChange::Create {
+                    let change = CalendarChange::Create {
                         event: event.clone(),
                     };
                     self.repository
@@ -411,7 +411,7 @@ impl CadenceView {
         scope: Option<RecurrenceScope>,
         before: &crate::store::PersistenceSnapshot,
         timestamp: Timestamp,
-    ) -> Result<(OccurrenceId, EventChange), String> {
+    ) -> Result<(OccurrenceId, CalendarChange), String> {
         match occurrence_id {
             OccurrenceId::Standalone(id) if form.recurrence.is_some() => {
                 self.convert_standalone_to_series(id, form, draft, before, timestamp)
@@ -441,7 +441,7 @@ impl CadenceView {
         draft: &EventDraft,
         before: &crate::store::PersistenceSnapshot,
         timestamp: Timestamp,
-    ) -> Result<(OccurrenceId, EventChange), String> {
+    ) -> Result<(OccurrenceId, CalendarChange), String> {
         let event = self
             .repository
             .delete_event(id)
@@ -468,7 +468,7 @@ impl CadenceView {
                 series_id,
                 original_date: event.date(),
             },
-            EventChange::Snapshot {
+            CalendarChange::Snapshot {
                 before: before.clone(),
                 after,
                 kind: ChangeKind::Edit,
@@ -481,7 +481,7 @@ impl CadenceView {
         id: EventId,
         draft: &EventDraft,
         timestamp: Timestamp,
-    ) -> Result<(OccurrenceId, EventChange), String> {
+    ) -> Result<(OccurrenceId, CalendarChange), String> {
         let mut event = self
             .repository
             .event(id)
@@ -497,7 +497,7 @@ impl CadenceView {
             .map_err(|error| error.to_string())?;
         Ok((
             OccurrenceId::Standalone(id),
-            EventChange::Update {
+            CalendarChange::Update {
                 id,
                 before: event_before,
                 after,
@@ -514,7 +514,7 @@ impl CadenceView {
         scope: RecurrenceScope,
         before: &crate::store::PersistenceSnapshot,
         timestamp: Timestamp,
-    ) -> Result<(OccurrenceId, EventChange), String> {
+    ) -> Result<(OccurrenceId, CalendarChange), String> {
         let id = self.apply_recurring_edit(series_id, original_date, form, scope, timestamp)?;
         let after = self
             .repository
@@ -522,7 +522,7 @@ impl CadenceView {
             .map_err(|error| error.to_string())?;
         Ok((
             id,
-            EventChange::Snapshot {
+            CalendarChange::Snapshot {
                 before: before.clone(),
                 after,
                 kind: ChangeKind::Edit,

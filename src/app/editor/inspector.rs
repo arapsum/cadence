@@ -14,7 +14,7 @@ use crate::{
     store::TimetableRepository,
 };
 
-use super::super::{history::EventChange, state::CadenceView, style::dialog_margin_top};
+use super::super::{history::CalendarChange, state::CadenceView, style::dialog_margin_top};
 use super::recurrence::RecurrenceScope;
 
 fn inspector_details(
@@ -371,7 +371,7 @@ impl CadenceView {
                 self.persist_snapshot(
                     before,
                     rollback,
-                    super::super::state::HistoryEffect::Record(EventChange::Delete { event }),
+                    super::super::state::HistoryEffect::Record(CalendarChange::Delete { event }),
                     cx,
                 );
                 let owner = cx.entity().downgrade();

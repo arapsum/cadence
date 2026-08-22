@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::super::{
-    history::{ChangeKind, EventChange},
+    history::{CalendarChange, ChangeKind},
     state::CadenceView,
 };
 
@@ -267,7 +267,7 @@ impl CadenceView {
         self.persist_snapshot(
             before.clone(),
             rollback,
-            super::super::state::HistoryEffect::Record(EventChange::Snapshot {
+            super::super::state::HistoryEffect::Record(CalendarChange::Snapshot {
                 before,
                 after,
                 kind: ChangeKind::Delete,

@@ -4,7 +4,7 @@ use gpui::{Context, Window};
 use gpui_component::WindowExt as _;
 
 use crate::{
-    app::history::EventChange,
+    app::history::CalendarChange,
     calendar::{CalendarViewMode, CategoryFilter},
     store::{
         AppPreferences, CalendarViewModePreference, InMemoryRepository, StorageError,
@@ -17,9 +17,9 @@ use super::{CadenceView, RollbackViewState};
 #[derive(Debug, Clone)]
 pub(in crate::app) enum HistoryEffect {
     None,
-    Record(EventChange),
-    Undo(EventChange),
-    Redo(EventChange),
+    Record(CalendarChange),
+    Undo(CalendarChange),
+    Redo(CalendarChange),
 }
 
 #[derive(Debug, Clone)]

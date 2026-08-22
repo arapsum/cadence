@@ -20,7 +20,7 @@ use crate::{
 use super::super::{presentation::local_date_time, toolbar::FilterOption};
 
 use super::{
-    CadenceView, EventHistory, HistoryEffect, PersistenceState, viewport::SurfaceViewportState,
+    CadenceView, CalendarHistory, HistoryEffect, PersistenceState, viewport::SurfaceViewportState,
 };
 
 impl CadenceView {
@@ -68,7 +68,7 @@ impl CadenceView {
             clock_task: None,
             manipulation: None,
             manipulation_rollback: None,
-            history: EventHistory::new(),
+            history: CalendarHistory::new(),
             settings,
             state,
             category_filter,

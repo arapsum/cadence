@@ -8,7 +8,7 @@ use crate::{
     store::{InMemoryRepository, TimetableRepository},
 };
 
-use super::super::{history::EventChange, state::CadenceView};
+use super::super::{history::CalendarChange, state::CadenceView};
 
 impl CadenceView {
     pub(in crate::app) fn undo(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
@@ -33,11 +33,19 @@ impl CadenceView {
 
     fn apply_history_change(
         &mut self,
-        change: &EventChange,
+        change: &CalendarChange,
         forward: bool,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
+        let snapshot_preferences = match change {
+            CalendarChange::Snapshot { before, after, .. } => {
+                Some(if forward { after } else { before })
+            }
+            CalendarChange::Create { .. }
+            | CalendarChange::Update { .. }
+            | CalendarChange::Delete { .. } => None,
+        };
         let rollback = self.rollback_view_state();
         let before = match self.repository.snapshot() {
             Ok(snapshot) => snapshot,
@@ -47,16 +55,20 @@ impl CadenceView {
             }
         };
         let result = match &change {
-            EventChange::Create { event } if forward => self.repository.create_event(event.clone()),
-            EventChange::Create { event } => self.repository.delete_event(event.id()).map(|_| ()),
-            EventChange::Update {
-                id, before, after, ..
-            } => self.revise_event(*id, if forward { after } else { before }),
-            EventChange::Delete { event } if forward => {
+            CalendarChange::Create { event } if forward => {
+                self.repository.create_event(event.clone())
+            }
+            CalendarChange::Create { event } => {
                 self.repository.delete_event(event.id()).map(|_| ())
             }
-            EventChange::Delete { event } => self.repository.create_event(event.clone()),
-            EventChange::Snapshot { before, after, .. } => {
+            CalendarChange::Update {
+                id, before, after, ..
+            } => self.revise_event(*id, if forward { after } else { before }),
+            CalendarChange::Delete { event } if forward => {
+                self.repository.delete_event(event.id()).map(|_| ())
+            }
+            CalendarChange::Delete { event } => self.repository.create_event(event.clone()),
+            CalendarChange::Snapshot { before, after, .. } => {
                 let snapshot = if forward { after } else { before };
                 InMemoryRepository::from_snapshot(snapshot).map(|repository| {
                     self.repository = repository;
@@ -68,8 +80,12 @@ impl CadenceView {
             return;
         }
 
+        if let Some(snapshot) = snapshot_preferences {
+            self.restore_snapshot_category_state(snapshot, window, cx);
+        }
+
         match &change {
-            EventChange::Create { event } => {
+            CalendarChange::Create { event } => {
                 if forward {
                     self.state
                         .select_event(OccurrenceId::Standalone(event.id()), event.date());
@@ -78,7 +94,7 @@ impl CadenceView {
                     self.state.clear_selection();
                 }
             }
-            EventChange::Update {
+            CalendarChange::Update {
                 id, before, after, ..
             } => {
                 let draft = if forward { after } else { before };
@@ -86,7 +102,7 @@ impl CadenceView {
                     .select_event(OccurrenceId::Standalone(*id), draft.date);
                 self.last_category = Some(draft.category_id);
             }
-            EventChange::Delete { event } => {
+            CalendarChange::Delete { event } => {
                 if forward {
                     self.state.clear_selection();
                 } else {
@@ -95,7 +111,7 @@ impl CadenceView {
                     self.last_category = Some(event.category_id());
                 }
             }
-            EventChange::Snapshot { .. } => {
+            CalendarChange::Snapshot { .. } => {
                 self.state.clear_selection();
             }
         }
@@ -132,5 +148,38 @@ impl CadenceView {
             .revise(draft.clone(), Timestamp::now())
             .map_err(|error| crate::domain::RepositoryError::InvalidEntity(error.to_string()))?;
         self.repository.update_event(event)
+    }
+
+    fn restore_snapshot_category_state(
+        &mut self,
+        snapshot: &crate::store::PersistenceSnapshot,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.settings = snapshot.settings.clone();
+        self.notifications_enabled = snapshot.preferences.notifications_enabled;
+        self.reduce_motion = snapshot.preferences.reduce_motion;
+        cx.set_reduce_motion(self.reduce_motion);
+        let filter = snapshot
+            .preferences
+            .category_filter
+            .filter(|id| {
+                snapshot
+                    .categories
+                    .iter()
+                    .any(|category| category.id() == *id && category.is_visible())
+            })
+            .map_or(
+                crate::calendar::CategoryFilter::All,
+                crate::calendar::CategoryFilter::Only,
+            );
+        self.state.set_category_filter(filter);
+        self.last_category = self.last_category.filter(|id| {
+            snapshot
+                .categories
+                .iter()
+                .any(|category| category.id() == *id)
+        });
+        self.sync_category_filter(window, cx);
     }
 }

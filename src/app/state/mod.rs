@@ -20,7 +20,7 @@ use crate::{
 };
 
 use super::{
-    history::EventHistory, interaction::Manipulation, presentation::WorkspaceSnapshot,
+    history::CalendarHistory, interaction::Manipulation, presentation::WorkspaceSnapshot,
     toolbar::FilterOption,
 };
 
@@ -38,7 +38,7 @@ pub(super) struct CadenceView {
     clock_task: Option<Task<()>>,
     pub(super) manipulation: Option<Manipulation>,
     manipulation_rollback: Option<RollbackViewState>,
-    pub(super) history: EventHistory,
+    pub(super) history: CalendarHistory,
     pub(super) settings: Settings,
     pub(super) state: CalendarState,
     pub(super) category_filter: Entity<SelectState<Vec<FilterOption>>>,

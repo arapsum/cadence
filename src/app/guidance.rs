@@ -1,16 +1,17 @@
 use gpui::{Context, IntoElement, Window, div, prelude::*, px};
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Placement, Sizable as _, StyledExt as _, WindowExt as _,
+    ActiveTheme as _, Icon, IconName, Placement, StyledExt as _, WindowExt as _,
     button::{Button, ButtonVariants as _},
     group_box::GroupBoxVariant,
     setting::{SettingField, SettingGroup, SettingItem, SettingPage, Settings},
-    switch::Switch,
     window_paddings,
 };
 
 use crate::{domain::format_time, store::TimetableRepository};
 
 use super::{
+    categories::CategoryManager,
+    history::{CalendarChange, ChangeKind},
     state::{CadenceView, HistoryEffect},
     style::{category_dot, dialog_margin_top},
     toolbar::FilterOption,
@@ -105,13 +106,14 @@ impl CadenceView {
 
     /// Opens the persisted application-preferences dialog.
     pub(in crate::app) fn open_settings(&self, window: &mut Window, cx: &mut Context<'_, Self>) {
-        let categories = self.repository.categories().unwrap_or_default();
         let week_start = format!("{:?}", self.settings.week_starts_on());
         let clock_format = match self.settings.clock_format() {
             crate::domain::ClockFormat::TwelveHour => "12-hour",
             crate::domain::ClockFormat::TwentyFourHour => "24-hour",
         };
         let owner = cx.entity().downgrade();
+        let view = cx.entity();
+        let category_manager = cx.new(|cx| CategoryManager::new(view, cx));
         window.open_dialog(cx, move |dialog, dialog_window, _| {
             let viewport = dialog_window.viewport_size();
             let padding = window_paddings(dialog_window);
@@ -123,7 +125,7 @@ impl CadenceView {
 
             let general_page = general_settings_page(&owner, week_start.clone(), clock_format);
             let notifications_page = notifications_settings_page(&owner);
-            let categories_page = categories_settings_page(&owner, &categories);
+            let categories_page = categories_settings_page(category_manager.clone());
 
             let settings = Settings::new("cadence-settings")
                 .sidebar_width(px(190.0))
@@ -168,7 +170,7 @@ impl CadenceView {
         cx.notify();
     }
 
-    fn set_category_visibility(
+    pub(in crate::app) fn set_category_visibility(
         &mut self,
         id: crate::domain::CategoryId,
         visible: bool,
@@ -178,6 +180,7 @@ impl CadenceView {
         let Ok(before) = self.repository.snapshot() else {
             return;
         };
+        let rollback = self.rollback_view_state();
         let Ok(categories) = self.repository.categories() else {
             return;
         };
@@ -204,12 +207,29 @@ impl CadenceView {
             return;
         }
         self.sync_category_filter(window, cx);
+        let _ = self.repository.replace_preferences(self.preferences());
         self.refresh_snapshot();
-        self.persist_snapshot(before, self.rollback_view_state(), HistoryEffect::None, cx);
+        let Ok(after) = self.repository.snapshot() else {
+            return;
+        };
+        self.persist_snapshot(
+            before.clone(),
+            rollback,
+            HistoryEffect::Record(CalendarChange::Snapshot {
+                before,
+                after,
+                kind: ChangeKind::EditCategory,
+            }),
+            cx,
+        );
         cx.notify();
     }
 
-    fn sync_category_filter(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+    pub(in crate::app) fn sync_category_filter(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
         let categories = self.repository.categories().unwrap_or_default();
         if let crate::calendar::CategoryFilter::Only(id) = self.state.category_filter()
             && !categories
@@ -328,73 +348,14 @@ fn notifications_settings_page(owner: &gpui::WeakEntity<CadenceView>) -> Setting
         )
 }
 
-fn categories_settings_page(
-    owner: &gpui::WeakEntity<CadenceView>,
-    categories: &[crate::domain::Category],
-) -> SettingPage {
+fn categories_settings_page(manager: gpui::Entity<CategoryManager>) -> SettingPage {
     SettingPage::new("Categories")
         .icon(Icon::new(IconName::Palette))
         .resettable(false)
-        .description("Choose which event categories are visible.")
+        .description("Create, edit, hide, and safely remove calendar categories.")
         .group(
-            SettingGroup::new().title("Calendar categories").items(
-                categories
-                    .iter()
-                    .map(|category| category_settings_item(owner, category)),
-            ),
+            SettingGroup::new()
+                .title("Calendar categories")
+                .item(SettingItem::render(move |_, _, _| manager.clone())),
         )
-}
-
-fn category_settings_item(
-    owner: &gpui::WeakEntity<CadenceView>,
-    category: &crate::domain::Category,
-) -> SettingItem {
-    let category_id = category.id();
-    let category_name = category.name().to_owned();
-    let category_color = category.color_token();
-    let initial_visibility = category.is_visible();
-    let category_reader = owner.clone();
-    let category_writer = owner.clone();
-    let tooltip = format!("Show {category_name} events");
-    let keyword = category_name.clone();
-    SettingItem::new(
-        category_name,
-        SettingField::render(move |options, _, cx| {
-            let visible = category_reader
-                .read_with(cx, |view, _| {
-                    view.repository
-                        .categories()
-                        .ok()
-                        .and_then(|categories| {
-                            categories
-                                .iter()
-                                .find(|category| category.id() == category_id)
-                                .map(crate::domain::Category::is_visible)
-                        })
-                        .unwrap_or(initial_visibility)
-                })
-                .unwrap_or(initial_visibility);
-            let writer = category_writer.clone();
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(category_dot(Some(category_color)))
-                .child(
-                    Switch::new(format!("category-visibility-{category_id}"))
-                        .checked(visible)
-                        .with_size(options.size())
-                        .tooltip(tooltip.clone())
-                        .on_click(move |visible, window, cx| {
-                            writer
-                                .update(cx, |view, cx| {
-                                    view.set_category_visibility(category_id, *visible, window, cx);
-                                })
-                                .ok();
-                        }),
-                )
-        }),
-    )
-    .description("Include this category in calendar views and filters.")
-    .keywords([keyword])
 }

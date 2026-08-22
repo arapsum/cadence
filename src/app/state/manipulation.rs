@@ -5,7 +5,7 @@ use gpui_component::WindowExt as _;
 use jiff::Timestamp;
 
 use crate::app::{
-    history::{ChangeKind, EventChange},
+    history::{CalendarChange, ChangeKind},
     interaction::{DragPayload, Manipulation, ManipulationKind, ManipulationUpdate},
 };
 use crate::store::TimetableRepository;
@@ -210,7 +210,7 @@ impl CadenceView {
         self.persist_snapshot(
             before,
             rollback,
-            HistoryEffect::Record(EventChange::Update {
+            HistoryEffect::Record(CalendarChange::Update {
                 id: event_id,
                 before: before_draft,
                 after: after_draft,
@@ -339,7 +339,7 @@ impl CadenceView {
         self.persist_snapshot(
             before.clone(),
             rollback,
-            HistoryEffect::Record(EventChange::Snapshot {
+            HistoryEffect::Record(CalendarChange::Snapshot {
                 before,
                 after,
                 kind,

@@ -5,7 +5,7 @@ use crate::store::PersistenceSnapshot;
 
 const HISTORY_LIMIT: usize = 100;
 
-/// User-facing operation represented by an event-history entry.
+/// User-facing operation represented by a calendar-history entry.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(super) enum ChangeKind {
     /// A new event was created.
@@ -18,6 +18,12 @@ pub(super) enum ChangeKind {
     Resize,
     /// An event was deleted.
     Delete,
+    /// A new category was created.
+    CreateCategory,
+    /// A category's editable fields were changed.
+    EditCategory,
+    /// A category was deleted.
+    DeleteCategory,
 }
 
 impl ChangeKind {
@@ -33,13 +39,16 @@ impl ChangeKind {
             Self::Move => "move event",
             Self::Resize => "resize event",
             Self::Delete => "delete event",
+            Self::CreateCategory => "create category",
+            Self::EditCategory => "edit category",
+            Self::DeleteCategory => "delete category",
         }
     }
 }
 
 /// Reversible mutation captured by the session history.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(super) enum EventChange {
+pub(super) enum CalendarChange {
     /// An event was inserted into the repository.
     Create { event: Event },
     /// An event was changed from one draft to another.
@@ -59,7 +68,7 @@ pub(super) enum EventChange {
     },
 }
 
-impl EventChange {
+impl CalendarChange {
     /// Returns the operation represented by this change.
     ///
     /// # Returns
@@ -74,20 +83,20 @@ impl EventChange {
     }
 }
 
-/// Bounded, session-only undo and redo stacks for event mutations.
+/// Bounded, session-only undo and redo stacks for calendar mutations.
 #[derive(Debug)]
-pub(super) struct EventHistory {
-    undo: VecDeque<EventChange>,
-    redo: VecDeque<EventChange>,
+pub(super) struct CalendarHistory {
+    undo: VecDeque<CalendarChange>,
+    redo: VecDeque<CalendarChange>,
 }
 
-impl Default for EventHistory {
+impl Default for CalendarHistory {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl EventHistory {
+impl CalendarHistory {
     /// Creates an empty history with bounded undo and redo capacity.
     ///
     /// # Returns
@@ -123,7 +132,7 @@ impl EventHistory {
     /// # Returns
     ///
     /// The top undo entry, or `None` when the stack is empty.
-    pub(super) fn peek_undo(&self) -> Option<&EventChange> {
+    pub(super) fn peek_undo(&self) -> Option<&CalendarChange> {
         self.undo.back()
     }
 
@@ -132,7 +141,7 @@ impl EventHistory {
     /// # Returns
     ///
     /// The top redo entry, or `None` when the stack is empty.
-    pub(super) fn peek_redo(&self) -> Option<&EventChange> {
+    pub(super) fn peek_redo(&self) -> Option<&CalendarChange> {
         self.redo.back()
     }
 
@@ -141,7 +150,7 @@ impl EventHistory {
     /// # Parameters
     ///
     /// - `change`: Mutation that was successfully persisted.
-    pub(super) fn record(&mut self, change: EventChange) {
+    pub(super) fn record(&mut self, change: CalendarChange) {
         if self.undo.len() == HISTORY_LIMIT {
             self.undo.pop_front();
         }
@@ -168,9 +177,9 @@ impl EventHistory {
     ///
     /// - The source stack changes between the top-entry check and removal.
     fn move_top(
-        from: &mut VecDeque<EventChange>,
-        to: &mut VecDeque<EventChange>,
-        expected: &EventChange,
+        from: &mut VecDeque<CalendarChange>,
+        to: &mut VecDeque<CalendarChange>,
+        expected: &CalendarChange,
     ) -> bool {
         if from.back() != Some(expected) {
             return false;
@@ -192,7 +201,7 @@ impl EventHistory {
     /// # Returns
     ///
     /// `true` when the matching undo entry moved to the redo stack.
-    pub(super) fn finish_undo(&mut self, change: &EventChange) -> bool {
+    pub(super) fn finish_undo(&mut self, change: &CalendarChange) -> bool {
         Self::move_top(&mut self.undo, &mut self.redo, change)
     }
 
@@ -205,7 +214,7 @@ impl EventHistory {
     /// # Returns
     ///
     /// `true` when the matching redo entry moved to the undo stack.
-    pub(super) fn finish_redo(&mut self, change: &EventChange) -> bool {
+    pub(super) fn finish_redo(&mut self, change: &CalendarChange) -> bool {
         Self::move_top(&mut self.redo, &mut self.undo, change)
     }
 
@@ -220,7 +229,7 @@ mod tests {
     use jiff::{Timestamp, civil::Date};
     use uuid::Uuid;
 
-    use super::{ChangeKind, EventChange, EventHistory};
+    use super::{CalendarChange, CalendarHistory, ChangeKind};
     use crate::domain::{CategoryId, Event, EventDraft};
 
     fn event(id: u128) -> Event {
@@ -241,9 +250,9 @@ mod tests {
 
     #[test]
     fn recording_a_new_change_clears_redo() {
-        let mut history = EventHistory::new();
-        let first = EventChange::Create { event: event(1) };
-        let second = EventChange::Create { event: event(2) };
+        let mut history = CalendarHistory::new();
+        let first = CalendarChange::Create { event: event(1) };
+        let second = CalendarChange::Create { event: event(2) };
         history.record(first.clone());
         assert!(history.finish_undo(&first));
         assert!(history.can_redo());
@@ -253,8 +262,8 @@ mod tests {
 
     #[test]
     fn undo_and_redo_move_one_entry_between_stacks() {
-        let mut history = EventHistory::new();
-        let change = EventChange::Update {
+        let mut history = CalendarHistory::new();
+        let change = CalendarChange::Update {
             id: event(1).id(),
             before: event(1).draft(),
             after: event(1).draft(),
