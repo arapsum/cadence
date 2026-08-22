@@ -9,9 +9,9 @@ use crate::calendar::CalendarViewMode;
 use crate::components::title_bar::CadenceTitleBar;
 
 use super::{
-    actions, day,
+    actions,
     state::{CadenceView, PersistenceState},
-    toolbar, week,
+    toolbar, workspace,
 };
 
 impl Render for CadenceView {
@@ -166,10 +166,9 @@ fn render_content(
                 )
                 .into_any_element()
         }
-        PersistenceState::Ready | PersistenceState::Writing => match view.state.view_mode() {
-            CalendarViewMode::Day => day::render(view, window, cx).into_any_element(),
-            CalendarViewMode::Week => week::render(view, window, cx).into_any_element(),
-        },
+        PersistenceState::Ready | PersistenceState::Writing => {
+            workspace::render(view, window, cx).into_any_element()
+        }
     }
 }
 

@@ -3,10 +3,10 @@ use gpui::{
     px,
 };
 use gpui_component::scroll::ScrollableElement as _;
-use gpui_component::{ActiveTheme as _, StyledExt as _};
+use gpui_component::{ActiveTheme as _, ElementExt as _, StyledExt as _};
 use jiff::civil::{Date, Time};
 
-use crate::domain::format_time;
+use crate::{calendar::CalendarViewMode, domain::format_time};
 
 use super::{
     grid,
@@ -17,13 +17,27 @@ use super::{
     },
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum SurfaceMode {
     Day,
     Week,
 }
 
 impl SurfaceMode {
+    pub(super) const fn calendar_mode(self) -> CalendarViewMode {
+        match self {
+            Self::Day => CalendarViewMode::Day,
+            Self::Week => CalendarViewMode::Week,
+        }
+    }
+
+    pub(super) const fn key(self) -> &'static str {
+        match self {
+            Self::Day => "day",
+            Self::Week => "week",
+        }
+    }
+
     const fn column_count(self) -> usize {
         match self {
             Self::Day => 1,
@@ -43,51 +57,53 @@ pub(super) fn render(
     mode: SurfaceMode,
     cx: &mut Context<'_, CadenceView>,
 ) -> impl IntoElement {
-    let viewport_width = window.viewport_size().width.as_f32();
-    let available_width = (viewport_width - 48.0 - TIME_GUTTER_WIDTH).max(0.0);
+    let calendar_mode = mode.calendar_mode();
+    let available_width = (view.surface_width(calendar_mode) - TIME_GUTTER_WIDTH).max(24.0);
     let column_count = mode.column_count();
-    let plane_width = if matches!(mode, SurfaceMode::Week) {
+    let plane_width = if mode == SurfaceMode::Week {
         available_width.max(MIN_COLUMN_WIDTH * 7.0)
     } else {
-        available_width.max(24.0)
+        available_width
     };
     let column_width =
         plane_width / f32::from(u16::try_from(column_count).expect("surface columns fit in u16"));
 
-    if matches!(
-        view.scroll_initialization,
-        super::state::ScrollInitialization::Pending
-    ) {
-        let initial = view.initial_scroll_offset(column_width);
-        view.scroll_initialization = super::state::ScrollInitialization::Scheduled;
+    if view.viewport(calendar_mode).initialization == super::state::ScrollInitialization::Pending {
+        let initial = view.initial_scroll_offset(calendar_mode, column_width);
+        view.viewport_mut(calendar_mode).initialization =
+            super::state::ScrollInitialization::Scheduled;
         let scroll_view = cx.entity().downgrade();
         window.defer(cx, move |_, cx| {
             scroll_view
-                .update(cx, |view, _| view.initialize_scroll(initial))
+                .update(cx, |view, _| {
+                    view.initialize_scroll(calendar_mode, initial);
+                })
                 .ok();
         });
     }
-    let scroll_offset = view.scroll_handle.offset();
-    let view_id = cx.entity_id();
+
+    let scroll_handle = view.viewport(calendar_mode).handle.clone();
+    let scroll_offset = scroll_handle.offset();
     let update_view = cx.entity().downgrade();
     let drop_view = update_view.clone();
     let cancel_view = update_view.clone();
+    let measure_view = update_view.clone();
     let body = div()
-        .id("calendar-plane-scroll")
+        .id(format!("{}-calendar-plane-scroll", mode.key()))
         .absolute()
         .top(px(DAY_HEADER_HEIGHT))
         .left(px(TIME_GUTTER_WIDTH))
         .right(px(0.0))
         .bottom(px(0.0))
-        .track_scroll(&view.scroll_handle)
+        .track_scroll(&scroll_handle)
         .overflow_scroll()
-        .on_scroll_wheel(move |_, _, cx| cx.notify(view_id))
         .on_drag_move(
             move |event: &DragMoveEvent<super::interaction::DragPayload>, _, app| {
                 update_view
                     .update(app, |view, cx| {
                         view.update_manipulation(
                             event,
+                            calendar_mode,
                             column_width,
                             plane_width,
                             column_count,
@@ -99,6 +115,9 @@ pub(super) fn render(
         )
         .on_drop(
             move |payload: &super::interaction::DragPayload, window, app| {
+                if payload.surface != calendar_mode {
+                    return;
+                }
                 drop_view
                     .update(app, |view, cx| {
                         view.finish_manipulation(payload, window, cx);
@@ -120,7 +139,7 @@ pub(super) fn render(
             cx,
         ));
     let header = render_header(view, mode, plane_width, column_width, scroll_offset, cx);
-    let gutter = render_time_gutter(view, scroll_offset, cx);
+    let gutter = render_time_gutter(view, mode, scroll_offset, cx);
     let corner = div()
         .absolute()
         .top(px(0.0))
@@ -132,28 +151,36 @@ pub(super) fn render(
         .justify_center()
         .bg(cx.theme().background)
         .border_b_1()
-        .border_color(cx.theme().border)
-        .child(div().font_medium().child("Time"));
+        .border_color(cx.theme().border.opacity(0.72))
+        .child(
+            div()
+                .text_xs()
+                .font_medium()
+                .text_color(cx.theme().muted_foreground)
+                .child("Time"),
+        );
 
     div()
-        .id("calendar-surface")
+        .id(format!("{}-calendar-surface", mode.key()))
         .relative()
         .flex_1()
         .min_h_0()
-        .mx_4()
-        .mb_4()
-        .rounded_lg()
-        .border_1()
-        .border_color(cx.theme().border)
         .bg(cx.theme().background)
         .overflow_hidden()
+        .on_prepaint(move |bounds, _, app| {
+            measure_view
+                .update(app, |view, cx| {
+                    view.set_surface_width(calendar_mode, bounds.size.width.as_f32(), cx);
+                })
+                .ok();
+        })
         .child(body)
         .child(header)
         .child(gutter)
         .child(corner)
-        .vertical_scrollbar(&view.scroll_handle)
+        .vertical_scrollbar(&scroll_handle)
         .when(mode.has_horizontal_scroll(), |this| {
-            this.horizontal_scrollbar(&view.scroll_handle)
+            this.horizontal_scrollbar(&scroll_handle)
         })
 }
 
@@ -165,7 +192,7 @@ fn render_header(
     scroll_offset: gpui::Point<gpui::Pixels>,
     cx: &Context<'_, CadenceView>,
 ) -> gpui::AnyElement {
-    let Some(snapshot) = &view.snapshot else {
+    let Some(snapshot) = view.surface_snapshot(mode.calendar_mode()) else {
         return div().into_any_element();
     };
     let (today, _) = local_date_time(view.now, &view.settings);
@@ -173,18 +200,20 @@ fn render_header(
     let dates = dates_in_range(snapshot.range);
     let owner = cx.entity().downgrade();
     let cells = dates.into_iter().map(move |date| {
-        let day_name = if matches!(mode, SurfaceMode::Day) {
+        let day_name = if mode == SurfaceMode::Day {
             date.strftime("%A").to_string()
         } else {
             date.strftime("%a").to_string()
         };
         render_header_cell(
             HeaderCell {
+                mode,
                 date,
                 is_today: date == today,
                 is_selected: date == selected_date,
                 day_name,
                 day_number: date.strftime("%-d").to_string(),
+                month: date.strftime("%B %Y").to_string(),
                 column_width,
                 owner: owner.clone(),
             },
@@ -200,7 +229,7 @@ fn render_header(
         .overflow_hidden()
         .bg(cx.theme().background)
         .border_b_1()
-        .border_color(cx.theme().border)
+        .border_color(cx.theme().border.opacity(0.72))
         .child(
             div()
                 .absolute()
@@ -215,30 +244,35 @@ fn render_header(
 }
 
 struct HeaderCell {
+    mode: SurfaceMode,
     date: Date,
     is_today: bool,
     is_selected: bool,
     day_name: String,
     day_number: String,
+    month: String,
     column_width: f32,
     owner: gpui::WeakEntity<CadenceView>,
 }
 
 fn render_header_cell(cell: HeaderCell, cx: &Context<'_, CadenceView>) -> gpui::AnyElement {
     let HeaderCell {
+        mode,
         date,
         is_today,
         is_selected,
         day_name,
         day_number,
+        month,
         column_width,
         owner,
     } = cell;
     let key_owner = owner.clone();
+    let calendar_mode = mode.calendar_mode();
     div()
-        .id(format!("calendar-day-header-{date}"))
+        .id(format!("{}-calendar-day-header-{date}", mode.key()))
         .role(gpui::Role::Button)
-        .aria_label(format!("{day_name} {day_number}"))
+        .aria_label(format!("{day_name} {day_number}, {month}"))
         .aria_selected(is_selected)
         .tab_index(0)
         .cursor_pointer()
@@ -250,65 +284,79 @@ fn render_header_cell(cell: HeaderCell, cx: &Context<'_, CadenceView>) -> gpui::
         .justify_center()
         .gap_1()
         .border_l_1()
-        .border_color(if is_selected {
-            cx.theme().primary
-        } else {
-            cx.theme().border.opacity(0.7)
+        .border_color(cx.theme().border.opacity(0.52))
+        .focus(|this| {
+            this.bg(cx.theme().secondary)
+                .border_color(cx.theme().primary)
         })
-        .when(is_today, |this| {
+        .when(is_selected && mode == SurfaceMode::Week, |this| {
             this.bg(cx.theme().primary.opacity(if cx.theme().mode.is_dark() {
-                0.08
+                0.18
             } else {
-                0.04
+                0.08
             }))
-        })
-        .when(is_selected, |this| {
-            this.border_b_2().border_color(cx.theme().primary)
+            .border_b_2()
+            .border_color(cx.theme().primary)
         })
         .on_click(move |_, _, app| {
             owner
-                .update(app, |this, cx| this.select_date(date, cx))
+                .update(app, |this, cx| {
+                    this.activate_surface(calendar_mode, cx);
+                    this.select_date(date, cx);
+                })
                 .ok();
         })
         .on_key_down(move |event: &KeyDownEvent, _, app| {
             if matches!(event.keystroke.key.as_str(), "enter" | "return" | "space") {
                 app.stop_propagation();
                 key_owner
-                    .update(app, |this, cx| this.select_date(date, cx))
+                    .update(app, |this, cx| {
+                        this.activate_surface(calendar_mode, cx);
+                        this.select_date(date, cx);
+                    })
                     .ok();
             }
         })
         .child(
             div()
-                .text_xl()
-                .font_semibold()
-                .text_color(if is_selected {
-                    cx.theme().primary
-                } else {
-                    cx.theme().foreground
-                })
-                .child(day_number),
-        )
-        .child(
-            div()
                 .text_xs()
-                .text_color(if is_today || is_selected {
-                    cx.theme().primary
+                .font_medium()
+                .text_color(if is_selected {
+                    cx.theme().foreground
                 } else {
                     cx.theme().muted_foreground
                 })
                 .child(day_name),
         )
-        .child(div().w(px(5.0)).h(px(5.0)).rounded_full().bg(if is_today {
-            cx.theme().success
-        } else {
-            Hsla::transparent_black()
-        }))
+        .child(
+            div()
+                .when(mode == SurfaceMode::Day, gpui::Styled::text_3xl)
+                .when(mode == SurfaceMode::Week, gpui::Styled::text_lg)
+                .font_semibold()
+                .text_color(cx.theme().foreground)
+                .child(day_number),
+        )
+        .when(mode == SurfaceMode::Day, |this| {
+            this.child(
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(month),
+            )
+        })
+        .when(mode == SurfaceMode::Week, |this| {
+            this.child(div().w(px(5.0)).h(px(5.0)).rounded_full().bg(if is_today {
+                cx.theme().success
+            } else {
+                Hsla::transparent_black()
+            }))
+        })
         .into_any_element()
 }
 
 fn render_time_gutter(
     view: &CadenceView,
+    mode: SurfaceMode,
     scroll_offset: gpui::Point<gpui::Pixels>,
     cx: &Context<'_, CadenceView>,
 ) -> gpui::AnyElement {
@@ -316,6 +364,7 @@ fn render_time_gutter(
         let y = f32::from(hour) * 60.0 * PIXELS_PER_MINUTE;
         let time = Time::constant(i8::try_from(hour % 24).expect("hour fits in i8"), 0, 0, 0);
         div()
+            .id(format!("{}-time-label-{hour}", mode.key()))
             .absolute()
             .top(px((y - 8.0).max(0.0)))
             .right(px(10.0))

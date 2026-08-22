@@ -26,8 +26,14 @@ pub(super) fn render_plane(
     cx: &Context<'_, CadenceView>,
 ) -> impl IntoElement {
     let mut children = render_grid_lines(plane_width, column_width, column_count, cx);
-    children.extend(render_empty_slots(view, column_width, column_count, cx));
-    if let Some(current_line) = render_current_line(view, column_width, cx) {
+    children.extend(render_empty_slots(
+        view,
+        column_width,
+        column_count,
+        mode,
+        cx,
+    ));
+    if let Some(current_line) = render_current_line(view, column_width, mode, cx) {
         children.push(current_line);
     }
     children.extend(render_event_cards(
@@ -37,12 +43,12 @@ pub(super) fn render_plane(
         mode,
         cx,
     ));
-    if let Some(preview) = render_manipulation_preview(view, column_width, cx) {
+    if let Some(preview) = render_manipulation_preview(view, column_width, mode, cx) {
         children.push(preview);
     }
 
     div()
-        .id("calendar-plane")
+        .id(format!("{}-calendar-plane", mode.key()))
         .relative()
         .w(px(plane_width))
         .h(px(PLANE_HEIGHT))
@@ -50,7 +56,11 @@ pub(super) fn render_plane(
         .on_click({
             let view = cx.entity().downgrade();
             move |_, _, app| {
-                view.update(app, CadenceView::clear_selection).ok();
+                view.update(app, |view, cx| {
+                    view.activate_surface(mode.calendar_mode(), cx);
+                    view.clear_selection(cx);
+                })
+                .ok();
             }
         })
         .children(children)
@@ -94,12 +104,12 @@ fn render_grid_lines(
 fn render_current_line(
     view: &CadenceView,
     column_width: f32,
+    mode: SurfaceMode,
     cx: &Context<'_, CadenceView>,
 ) -> Option<gpui::AnyElement> {
     let (today, current_time) = local_date_time(view.now, &view.settings);
     let day = view
-        .snapshot
-        .as_ref()
+        .surface_snapshot(mode.calendar_mode())
         .and_then(|snapshot| day_index(snapshot.range, today))?;
     let y = time_to_offset(current_time, PIXELS_PER_MINUTE).ok()?;
     let day = f32::from(u16::try_from(day).expect("week day fits in u16"));
@@ -125,16 +135,17 @@ fn render_current_line(
     )
 }
 
+#[allow(clippy::too_many_lines)]
 fn render_empty_slots(
     view: &CadenceView,
     column_width: f32,
     column_count: usize,
+    mode: SurfaceMode,
     cx: &Context<'_, CadenceView>,
 ) -> Vec<gpui::AnyElement> {
-    let empty_border = cx.theme().border.opacity(0.65);
+    let empty_border = cx.theme().border.opacity(0.22);
     let empty_foreground = cx.theme().muted_foreground.opacity(0.7);
-    view.snapshot
-        .as_ref()
+    view.surface_snapshot(mode.calendar_mode())
         .map(|snapshot| {
             (0..column_count)
                 .flat_map(|day| {
@@ -183,7 +194,7 @@ fn render_empty_slots(
                         let left = day.mul_add(column_width, 4.0);
                         Some(
                             div()
-                                .id(format!("empty-slot-{day_date}-{hour}"))
+                                .id(format!("{}-empty-slot-{day_date}-{hour}", mode.key()))
                                 .role(gpui::Role::Button)
                                 .aria_label(slot_label)
                                 .absolute()
@@ -197,9 +208,18 @@ fn render_empty_slots(
                                 .border_1()
                                 .border_dashed()
                                 .border_color(empty_border)
+                                .bg(cx.theme().background.opacity(0.01))
                                 .text_color(empty_foreground)
                                 .cursor_pointer()
                                 .tab_index(0)
+                                .focus(|this| {
+                                    this.bg(cx.theme().secondary)
+                                        .border_color(cx.theme().primary)
+                                })
+                                .hover(|this| {
+                                    this.bg(cx.theme().secondary.opacity(0.7))
+                                        .border_color(cx.theme().border.opacity(0.72))
+                                })
                                 .on_key_down(move |event: &KeyDownEvent, window, app| {
                                     if move_focus(event, window, app) {
                                         return;
@@ -208,6 +228,7 @@ fn render_empty_slots(
                                         app.stop_propagation();
                                         key_view
                                             .update(app, |view, cx| {
+                                                view.activate_surface(mode.calendar_mode(), cx);
                                                 view.new_event_at(day_date, slot_time, window, cx);
                                             })
                                             .ok();
@@ -216,6 +237,7 @@ fn render_empty_slots(
                                 .on_click(move |_, window, app| {
                                     app.stop_propagation();
                                     view.update(app, |view, cx| {
+                                        view.activate_surface(mode.calendar_mode(), cx);
                                         view.new_event_at(day_date, slot_time, window, cx);
                                     })
                                     .ok();
@@ -253,10 +275,13 @@ fn render_event_cards(
     mode: SurfaceMode,
     cx: &Context<'_, CadenceView>,
 ) -> Vec<gpui::AnyElement> {
-    let Some(snapshot) = &view.snapshot else {
+    let Some(snapshot) = view.surface_snapshot(mode.calendar_mode()) else {
         return Vec::new();
     };
-    let categories = snapshot
+    let Some(workspace) = &view.snapshot else {
+        return Vec::new();
+    };
+    let categories = workspace
         .categories
         .iter()
         .map(|category| (category.id(), category))
@@ -312,15 +337,21 @@ fn render_event_cards(
 fn render_manipulation_preview(
     view: &CadenceView,
     column_width: f32,
+    mode: SurfaceMode,
     cx: &Context<'_, CadenceView>,
 ) -> Option<gpui::AnyElement> {
     let manipulation = view.manipulation.as_ref()?;
-    let snapshot = view.snapshot.as_ref()?;
+    if manipulation.surface() != mode.calendar_mode() {
+        return None;
+    }
+    let snapshot = view.surface_snapshot(mode.calendar_mode())?;
     let position = snapshot
         .positions
         .iter()
         .find(|position| position.occurrence_id() == manipulation.occurrence_id())?;
-    let category = snapshot
+    let category = view
+        .snapshot
+        .as_ref()?
         .categories
         .iter()
         .find(|category| category.id() == manipulation.event.category_id())?;
@@ -345,7 +376,7 @@ fn render_manipulation_preview(
     );
     Some(
         div()
-            .id("calendar-manipulation-preview")
+            .id(format!("{}-calendar-manipulation-preview", mode.key()))
             .absolute()
             .top(px(top))
             .left(px(left))

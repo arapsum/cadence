@@ -2,7 +2,7 @@ use gpui::{Bounds, Pixels, Point, px};
 use jiff::civil::Date;
 
 use crate::{
-    calendar::{ResizeEdge, propose_move, propose_resize},
+    calendar::{CalendarViewMode, ResizeEdge, propose_move, propose_resize},
     domain::{DateRange, EventDraft, EventOccurrence, OccurrenceId},
 };
 
@@ -20,6 +20,7 @@ pub(super) enum ManipulationKind {
 #[derive(Debug, Clone)]
 pub(super) struct DragPayload {
     pub(super) occurrence_id: OccurrenceId,
+    pub(super) surface: CalendarViewMode,
     pub(super) kind: ManipulationKind,
     pub(super) original_day: u8,
     pub(super) range_start: Date,
@@ -29,6 +30,7 @@ pub(super) struct DragPayload {
 pub(super) struct Manipulation {
     pub(super) event: EventOccurrence,
     pub(super) kind: ManipulationKind,
+    pub(super) surface: CalendarViewMode,
     pub(super) proposed: EventDraft,
     pub(super) original_day: u8,
     pub(super) range_start: Date,
@@ -67,6 +69,7 @@ impl Manipulation {
         Self {
             event: event.clone(),
             kind: payload.kind,
+            surface: payload.surface,
             proposed: event.draft(),
             original_day: payload.original_day,
             range_start: payload.range_start,
@@ -171,6 +174,10 @@ impl Manipulation {
 
     pub(super) const fn occurrence_id(&self) -> OccurrenceId {
         self.event.id()
+    }
+
+    pub(super) const fn surface(&self) -> CalendarViewMode {
+        self.surface
     }
 }
 

@@ -236,9 +236,15 @@ impl CadenceView {
                         });
                     self.state = pending.view_state.calendar_state;
                     self.last_category = pending.view_state.last_category;
-                    self.scroll_handle
-                        .set_offset(pending.view_state.scroll_offset);
-                    self.scroll_initialization = pending.view_state.scroll_initialization;
+                    self.day_viewport
+                        .handle
+                        .set_offset(pending.view_state.day_scroll_offset);
+                    self.week_viewport
+                        .handle
+                        .set_offset(pending.view_state.week_scroll_offset);
+                    self.day_viewport.initialization = pending.view_state.day_scroll_initialization;
+                    self.week_viewport.initialization =
+                        pending.view_state.week_scroll_initialization;
                     self.pending_scroll_minutes = pending.view_state.pending_scroll_minutes;
                     self.refresh_snapshot();
                 }

@@ -41,7 +41,7 @@ impl CadenceView {
                     .await;
                 let keep_running = owner
                     .update(cx, |view, cx| {
-                        let Some(manipulation) = &mut view.manipulation else {
+                        let Some(manipulation) = &view.manipulation else {
                             return false;
                         };
                         let delta = manipulation.edge_velocity();
@@ -49,14 +49,19 @@ impl CadenceView {
                             return true;
                         }
                         let next_offset = manipulation.scroll_by(delta);
-                        view.scroll_handle.set_offset(next_offset);
                         let pointer = manipulation.pointer;
                         let viewport = manipulation.viewport;
                         let plane_width = manipulation.plane_width;
                         let column_width = manipulation.column_width;
                         let column_count = manipulation.column_count;
-                        let range = view.snapshot.as_ref().map(|snapshot| snapshot.range);
-                        if let Some(range) = range {
+                        let surface = manipulation.surface();
+                        view.viewport(surface).handle.set_offset(next_offset);
+                        let range = view
+                            .surface_snapshot(surface)
+                            .map(|snapshot| snapshot.range);
+                        if let Some(range) = range
+                            && let Some(manipulation) = &mut view.manipulation
+                        {
                             manipulation.update(ManipulationUpdate {
                                 pointer,
                                 viewport,
@@ -84,16 +89,23 @@ impl CadenceView {
     pub(in crate::app) fn update_manipulation(
         &mut self,
         event: &DragMoveEvent<DragPayload>,
+        surface: crate::calendar::CalendarViewMode,
         column_width: f32,
         plane_width: f32,
         column_count: usize,
         cx: &mut Context<'_, Self>,
     ) {
-        let Some(snapshot) = self.snapshot.as_ref() else {
+        let Some(active_surface) = self.manipulation.as_ref().map(Manipulation::surface) else {
+            return;
+        };
+        if active_surface != surface {
+            return;
+        }
+        let Some(snapshot) = self.surface_snapshot(surface) else {
             return;
         };
         let range = snapshot.range;
-        let scroll_offset = self.scroll_handle.offset();
+        let scroll_offset = self.viewport(surface).handle.offset();
         let snap_minutes = self.settings.snap_interval().minutes();
         if let Some(manipulation) = &mut self.manipulation {
             manipulation.update(ManipulationUpdate {
@@ -189,7 +201,7 @@ impl CadenceView {
         );
         self.last_category = Some(after_draft.category_id);
         self.pending_scroll_minutes = None;
-        self.scroll_initialization = super::ScrollInitialization::Pending;
+        self.reset_scroll_initialization();
         self.refresh_snapshot();
         let kind = match manipulation.kind {
             ManipulationKind::Move => ChangeKind::Move,

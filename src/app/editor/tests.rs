@@ -71,7 +71,7 @@ fn event_entry_points_render_their_dialogs(cx: &mut TestAppContext) {
         let event = view
             .snapshot
             .as_ref()
-            .and_then(|snapshot| snapshot.events.first())
+            .and_then(|snapshot| snapshot.surface(view.state.view_mode()).events.first())
             .expect("the seeded calendar contains an event");
         (event.id(), event.date())
     });
@@ -86,7 +86,7 @@ fn event_entry_points_render_their_dialogs(cx: &mut TestAppContext) {
         let event = view
             .snapshot
             .as_ref()
-            .and_then(|snapshot| snapshot.events.first())
+            .and_then(|snapshot| snapshot.surface(view.state.view_mode()).events.first())
             .expect("the seeded calendar contains an event");
         let mut draft = FormDraft::from_occurrence(event);
         draft.recurrence = Some(RecurrenceRule::Daily);

@@ -22,7 +22,7 @@ impl CadenceView {
         let Some(snapshot) = self.snapshot.clone() else {
             return;
         };
-        let events = snapshot.events;
+        let events = snapshot.surface(self.state.view_mode()).events.clone();
         let categories = snapshot.categories;
         window.open_sheet_at(Placement::Right, cx, move |sheet, _, cx| {
             sheet.title("Agenda").size(px(420.0)).child(

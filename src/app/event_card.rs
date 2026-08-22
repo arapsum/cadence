@@ -62,22 +62,24 @@ pub(super) fn render(
     let resize_start_view = view.clone();
     let resize_end_view = view.clone();
     let range_start = state
-        .snapshot
-        .as_ref()
+        .surface_snapshot(mode.calendar_mode())
         .map_or(event_date, |snapshot| snapshot.range.start());
     let move_payload = DragPayload {
+        surface: mode.calendar_mode(),
         occurrence_id,
         kind: ManipulationKind::Move,
         original_day: position.day_offset(),
         range_start,
     };
     let resize_start_payload = DragPayload {
+        surface: mode.calendar_mode(),
         occurrence_id,
         kind: ManipulationKind::Resize(crate::calendar::ResizeEdge::Start),
         original_day: position.day_offset(),
         range_start,
     };
     let resize_end_payload = DragPayload {
+        surface: mode.calendar_mode(),
         occurrence_id,
         kind: ManipulationKind::Resize(crate::calendar::ResizeEdge::End),
         original_day: position.day_offset(),
@@ -87,12 +89,12 @@ pub(super) fn render(
     let avatar_time = event_time.clone();
     let avatar_background = background;
     let avatar_foreground = foreground;
-    let active = state
-        .manipulation
-        .as_ref()
-        .is_some_and(|manipulation| manipulation.occurrence_id() == occurrence_id);
+    let active = state.manipulation.as_ref().is_some_and(|manipulation| {
+        manipulation.occurrence_id() == occurrence_id
+            && manipulation.surface() == mode.calendar_mode()
+    });
     div()
-        .id(format!("event-card-{element_key}"))
+        .id(format!("{}-event-card-{element_key}", mode.key()))
         .role(gpui::Role::Button)
         .aria_label(accessibility_label)
         .aria_selected(selected)
@@ -128,6 +130,7 @@ pub(super) fn render(
                     app.stop_propagation();
                     key_view
                         .update(app, |view, cx| {
+                            view.activate_surface(mode.calendar_mode(), cx);
                             view.inspect_event(occurrence_id, event_date, window, cx);
                         })
                         .ok();
@@ -160,6 +163,7 @@ pub(super) fn render(
         .on_click(move |event, window, app| {
             app.stop_propagation();
             view.update(app, |this, cx| {
+                this.activate_surface(mode.calendar_mode(), cx);
                 if event.standard_click() && event.click_count() >= 2 {
                     this.inspect_event(occurrence_id, event_date, window, cx);
                 } else {
@@ -169,7 +173,7 @@ pub(super) fn render(
             .ok();
         })
         .child(resize_handle(ResizeHandleProps {
-            id: format!("event-resize-start-{element_key}"),
+            id: format!("{}-event-resize-start-{element_key}", mode.key()),
             payload: resize_start_payload,
             view: resize_start_view,
             start: true,
@@ -182,7 +186,7 @@ pub(super) fn render(
         .child(render_category_header(category_name, foreground))
         .child(details)
         .child(resize_handle(ResizeHandleProps {
-            id: format!("event-resize-end-{element_key}"),
+            id: format!("{}-event-resize-end-{element_key}", mode.key()),
             payload: resize_end_payload,
             view: resize_end_view,
             start: false,
@@ -222,18 +226,12 @@ fn resize_handle(props: ResizeHandleProps) -> gpui::AnyElement {
     let handle_view = view;
     div()
         .id(id)
-        .role(gpui::Role::Button)
-        .aria_label(if start {
-            "Resize event start"
-        } else {
-            "Resize event end"
-        })
         .absolute()
         .left(px(0.0))
         .right(px(0.0))
         .when(start, |this| this.top(px(0.0)))
         .when(!start, |this| this.bottom(px(0.0)))
-        .h(px(8.0_f32.min((height - 4.0).max(3.0))))
+        .h(px(10.0_f32.min((height - 4.0).max(4.0))))
         .cursor_ns_resize()
         .bg(foreground.opacity(0.08))
         .hover(|this| this.bg(foreground.opacity(0.2)))

@@ -7,12 +7,14 @@ pub(super) mod guidance;
 pub(super) mod history;
 pub(super) mod interaction;
 pub(super) mod presentation;
+pub(super) mod sidebar;
 pub(super) mod state;
 pub(super) mod style;
 pub(super) mod surface;
 pub(super) mod toolbar;
 pub(super) mod view;
 pub(super) mod week;
+pub(super) mod workspace;
 
 use gpui::{App, AppContext as _, WindowBounds, WindowDecorations, WindowOptions, px, size};
 use gpui_component::{Root, WindowExt as _};
@@ -35,7 +37,7 @@ pub fn run() {
         actions::bind(cx);
 
         let window_options = WindowOptions {
-            window_bounds: Some(WindowBounds::centered(size(px(1180.), px(760.)), cx)),
+            window_bounds: Some(WindowBounds::centered(size(px(1480.), px(880.)), cx)),
             window_min_size: Some(size(px(640.), px(480.))),
             window_decorations: Some(WindowDecorations::Client),
             ..CadenceTitleBar::window_options()

@@ -9,7 +9,7 @@ pub(in crate::app) use viewport::{RollbackViewState, ScrollInitialization};
 
 use std::{collections::HashSet, path::PathBuf};
 
-use gpui::{Entity, ScrollHandle, Subscription, Task};
+use gpui::{Entity, Subscription, Task};
 use gpui_component::select::SelectState;
 use jiff::Timestamp;
 
@@ -20,7 +20,7 @@ use crate::{
 };
 
 use super::{
-    history::EventHistory, interaction::Manipulation, presentation::CalendarSnapshot,
+    history::EventHistory, interaction::Manipulation, presentation::WorkspaceSnapshot,
     toolbar::FilterOption,
 };
 
@@ -42,10 +42,12 @@ pub(super) struct CadenceView {
     pub(super) settings: Settings,
     pub(super) state: CalendarState,
     pub(super) category_filter: Entity<SelectState<Vec<FilterOption>>>,
-    pub(super) scroll_handle: ScrollHandle,
-    pub(super) snapshot: Option<CalendarSnapshot>,
+    pub(super) day_viewport: viewport::SurfaceViewportState,
+    pub(super) week_viewport: viewport::SurfaceViewportState,
+    pub(super) day_surface_width: f32,
+    pub(super) week_surface_width: f32,
+    pub(super) snapshot: Option<WorkspaceSnapshot>,
     pub(super) now: Timestamp,
-    pub(super) scroll_initialization: ScrollInitialization,
     pub(super) pending_scroll_minutes: Option<f32>,
     pub(super) error: Option<String>,
     pub(super) last_category: Option<crate::domain::CategoryId>,

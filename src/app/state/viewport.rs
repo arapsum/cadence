@@ -1,7 +1,9 @@
+use gpui::{Context, ScrollHandle};
+
 use crate::calendar::CalendarViewMode;
 
 use super::super::{
-    presentation::{day_index, local_date_time},
+    presentation::{SurfaceSnapshot, day_index, local_date_time},
     style::PIXELS_PER_MINUTE,
 };
 
@@ -18,12 +20,28 @@ pub(in crate::app) enum ScrollInitialization {
     Initialized,
 }
 
+pub(in crate::app) struct SurfaceViewportState {
+    pub(in crate::app) handle: ScrollHandle,
+    pub(in crate::app) initialization: ScrollInitialization,
+}
+
+impl SurfaceViewportState {
+    pub(in crate::app) fn new() -> Self {
+        Self {
+            handle: ScrollHandle::new(),
+            initialization: ScrollInitialization::Pending,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(in crate::app) struct RollbackViewState {
     pub(in crate::app::state) calendar_state: crate::calendar::CalendarState,
     pub(in crate::app::state) last_category: Option<crate::domain::CategoryId>,
-    pub(in crate::app::state) scroll_offset: gpui::Point<gpui::Pixels>,
-    pub(in crate::app::state) scroll_initialization: ScrollInitialization,
+    pub(in crate::app::state) day_scroll_offset: gpui::Point<gpui::Pixels>,
+    pub(in crate::app::state) week_scroll_offset: gpui::Point<gpui::Pixels>,
+    pub(in crate::app::state) day_scroll_initialization: ScrollInitialization,
+    pub(in crate::app::state) week_scroll_initialization: ScrollInitialization,
     pub(in crate::app::state) pending_scroll_minutes: Option<f32>,
 }
 
@@ -39,20 +57,73 @@ impl CadenceView {
                 .strftime("%A, %b %-d, %Y")
                 .to_string();
         }
-        let last_day = snapshot
+        let week = &snapshot.week;
+        let last_day = week
             .range
             .end()
             .yesterday()
-            .unwrap_or_else(|_| snapshot.range.start());
-        let start = snapshot.range.start().strftime("%b %-d");
+            .unwrap_or_else(|_| week.range.start());
+        let start = week.range.start().strftime("%b %-d");
         let end = last_day.strftime("%b %-d, %Y");
         format!("{start} – {end}")
     }
 
-    /// Calculates the initial scroll offset for the visible calendar surface.
+    pub(in crate::app) fn surface_snapshot(
+        &self,
+        mode: CalendarViewMode,
+    ) -> Option<&SurfaceSnapshot> {
+        self.snapshot
+            .as_ref()
+            .map(|snapshot| snapshot.surface(mode))
+    }
+
+    pub(in crate::app) const fn viewport(&self, mode: CalendarViewMode) -> &SurfaceViewportState {
+        match mode {
+            CalendarViewMode::Day => &self.day_viewport,
+            CalendarViewMode::Week => &self.week_viewport,
+        }
+    }
+
+    pub(in crate::app) const fn viewport_mut(
+        &mut self,
+        mode: CalendarViewMode,
+    ) -> &mut SurfaceViewportState {
+        match mode {
+            CalendarViewMode::Day => &mut self.day_viewport,
+            CalendarViewMode::Week => &mut self.week_viewport,
+        }
+    }
+
+    pub(in crate::app) const fn surface_width(&self, mode: CalendarViewMode) -> f32 {
+        match mode {
+            CalendarViewMode::Day => self.day_surface_width,
+            CalendarViewMode::Week => self.week_surface_width,
+        }
+    }
+
+    pub(in crate::app) fn set_surface_width(
+        &mut self,
+        mode: CalendarViewMode,
+        width: f32,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let measured = width.max(1.0);
+        let current = match mode {
+            CalendarViewMode::Day => &mut self.day_surface_width,
+            CalendarViewMode::Week => &mut self.week_surface_width,
+        };
+        if (*current - measured).abs() <= 1.0 {
+            return;
+        }
+        *current = measured;
+        cx.notify();
+    }
+
+    /// Calculates the initial scroll offset for a calendar surface.
     ///
     /// # Parameters
     ///
+    /// - `mode`: Calendar surface receiving the initial offset.
     /// - `column_width`: Width of one visible day column in pixels.
     ///
     /// # Returns
@@ -64,9 +135,13 @@ impl CadenceView {
     /// Panics when:
     ///
     /// - The visible calendar contains more days than fit in a `u16`.
-    pub(in crate::app) fn initial_scroll_offset(&self, column_width: f32) -> (f32, f32) {
+    pub(in crate::app) fn initial_scroll_offset(
+        &self,
+        mode: CalendarViewMode,
+        column_width: f32,
+    ) -> (f32, f32) {
         let pending_scroll_minutes = self.pending_scroll_minutes;
-        let Some(snapshot) = &self.snapshot else {
+        let Some(snapshot) = self.surface_snapshot(mode) else {
             return (0.0, 0.0);
         };
         let target_minutes = pending_scroll_minutes.unwrap_or_else(|| {
@@ -87,7 +162,7 @@ impl CadenceView {
                     .map_or(5.0 * 60.0, |minutes| (minutes - 60.0).max(0.0))
             }
         });
-        let horizontal = if self.state.view_mode() == CalendarViewMode::Day {
+        let horizontal = if mode == CalendarViewMode::Day {
             0.0
         } else {
             day_index(snapshot.range, self.state.selected_date()).map_or(0.0, |day| {
@@ -98,28 +173,49 @@ impl CadenceView {
         (horizontal, target_minutes * PIXELS_PER_MINUTE)
     }
 
-    /// Applies a measured initial scroll offset after the surface has been laid out.
+    /// Applies a measured initial scroll offset after a surface is laid out.
     ///
     /// # Parameters
     ///
+    /// - `mode`: Calendar surface receiving the offset.
     /// - `offset`: Horizontal and vertical scroll offsets in pixels.
-    pub(in crate::app) fn initialize_scroll(&mut self, offset: (f32, f32)) {
-        self.scroll_handle
+    pub(in crate::app) fn initialize_scroll(&mut self, mode: CalendarViewMode, offset: (f32, f32)) {
+        let viewport = self.viewport_mut(mode);
+        viewport
+            .handle
             .set_offset(gpui::point(gpui::px(-offset.0), gpui::px(-offset.1)));
-        self.scroll_initialization = ScrollInitialization::Initialized;
-        self.pending_scroll_minutes = None;
+        viewport.initialization = ScrollInitialization::Initialized;
+        if self.day_viewport.initialization == ScrollInitialization::Initialized
+            && self.week_viewport.initialization == ScrollInitialization::Initialized
+        {
+            self.pending_scroll_minutes = None;
+        }
     }
 
     pub(in crate::app::state) fn current_scroll_minutes(&self) -> f32 {
-        (-self.scroll_handle.offset().y.as_f32() / PIXELS_PER_MINUTE).max(0.0)
+        (-self
+            .viewport(self.state.view_mode())
+            .handle
+            .offset()
+            .y
+            .as_f32()
+            / PIXELS_PER_MINUTE)
+            .max(0.0)
+    }
+
+    pub(in crate::app) const fn reset_scroll_initialization(&mut self) {
+        self.day_viewport.initialization = ScrollInitialization::Pending;
+        self.week_viewport.initialization = ScrollInitialization::Pending;
     }
 
     pub(in crate::app) fn rollback_view_state(&self) -> RollbackViewState {
         RollbackViewState {
             calendar_state: self.state,
             last_category: self.last_category,
-            scroll_offset: self.scroll_handle.offset(),
-            scroll_initialization: self.scroll_initialization,
+            day_scroll_offset: self.day_viewport.handle.offset(),
+            week_scroll_offset: self.week_viewport.handle.offset(),
+            day_scroll_initialization: self.day_viewport.initialization,
+            week_scroll_initialization: self.week_viewport.initialization,
             pending_scroll_minutes: self.pending_scroll_minutes,
         }
     }
@@ -127,8 +223,14 @@ impl CadenceView {
     pub(in crate::app::state) fn restore_view_state(&mut self, view_state: RollbackViewState) {
         self.state = view_state.calendar_state;
         self.last_category = view_state.last_category;
-        self.scroll_handle.set_offset(view_state.scroll_offset);
-        self.scroll_initialization = view_state.scroll_initialization;
+        self.day_viewport
+            .handle
+            .set_offset(view_state.day_scroll_offset);
+        self.week_viewport
+            .handle
+            .set_offset(view_state.week_scroll_offset);
+        self.day_viewport.initialization = view_state.day_scroll_initialization;
+        self.week_viewport.initialization = view_state.week_scroll_initialization;
         self.pending_scroll_minutes = view_state.pending_scroll_minutes;
         self.refresh_snapshot();
     }

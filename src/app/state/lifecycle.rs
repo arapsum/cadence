@@ -1,8 +1,6 @@
 use std::{collections::HashSet, path::PathBuf, time::Duration};
 
-use gpui::{
-    AppContext as _, Context, ScrollHandle, SystemNotification, SystemNotificationAction, Window,
-};
+use gpui::{AppContext as _, Context, SystemNotification, SystemNotificationAction, Window};
 use gpui_component::{
     IndexPath,
     select::{SelectEvent, SelectState},
@@ -21,7 +19,9 @@ use crate::{
 
 use super::super::{presentation::local_date_time, toolbar::FilterOption};
 
-use super::{CadenceView, EventHistory, HistoryEffect, PersistenceState, ScrollInitialization};
+use super::{
+    CadenceView, EventHistory, HistoryEffect, PersistenceState, viewport::SurfaceViewportState,
+};
 
 impl CadenceView {
     pub(in crate::app) fn new(window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
@@ -72,10 +72,12 @@ impl CadenceView {
             settings,
             state,
             category_filter,
-            scroll_handle: ScrollHandle::new(),
+            day_viewport: SurfaceViewportState::new(),
+            week_viewport: SurfaceViewportState::new(),
+            day_surface_width: 400.0,
+            week_surface_width: 720.0,
             snapshot: None,
             now,
-            scroll_initialization: ScrollInitialization::Pending,
             pending_scroll_minutes: None,
             error: None,
             last_category: None,
@@ -198,7 +200,7 @@ impl CadenceView {
                     let before = this.repository.snapshot().ok();
                     this.state.set_category_filter(*filter);
                     this.state.clear_selection();
-                    this.scroll_initialization = ScrollInitialization::Pending;
+                    this.reset_scroll_initialization();
                     this.refresh_snapshot();
                     let _ = this.repository.replace_preferences(this.preferences());
                     if let Some(before) = before {
@@ -265,7 +267,7 @@ impl CadenceView {
                 });
                 self.persistence_state = PersistenceState::Ready;
                 self.error = None;
-                self.scroll_initialization = ScrollInitialization::Pending;
+                self.reset_scroll_initialization();
                 self.pending_scroll_minutes = None;
                 self.refresh_snapshot();
             }

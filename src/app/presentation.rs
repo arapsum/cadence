@@ -5,16 +5,32 @@ use jiff::{
 };
 
 use crate::{
-    calendar::{CategoryFilter, LayoutMetrics, PositionedEvent},
+    calendar::{CalendarViewMode, CategoryFilter, LayoutMetrics, PositionedEvent},
     domain::{Category, DateRange, EventOccurrence, Settings},
 };
 
 #[derive(Clone)]
-pub(super) struct CalendarSnapshot {
+pub(super) struct SurfaceSnapshot {
     pub(super) range: DateRange,
     pub(super) events: Vec<EventOccurrence>,
     pub(super) positions: Vec<PositionedEvent>,
+}
+
+#[derive(Clone)]
+pub(super) struct WorkspaceSnapshot {
+    pub(super) day: SurfaceSnapshot,
+    pub(super) week: SurfaceSnapshot,
     pub(super) categories: Vec<Category>,
+    pub(super) summary_events: Vec<EventOccurrence>,
+}
+
+impl WorkspaceSnapshot {
+    pub(super) const fn surface(&self, mode: CalendarViewMode) -> &SurfaceSnapshot {
+        match mode {
+            CalendarViewMode::Day => &self.day,
+            CalendarViewMode::Week => &self.week,
+        }
+    }
 }
 
 pub(super) fn local_date_time(timestamp: Timestamp, settings: &Settings) -> (Date, Time) {
