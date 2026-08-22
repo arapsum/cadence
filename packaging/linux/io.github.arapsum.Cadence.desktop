@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Cadence
+Comment=Plan your day and understand your week
+Exec=cadence
+Icon=io.github.arapsum.Cadence
+Terminal=false
+Categories=Office;
+Keywords=calendar;timetable;planner;schedule;
+StartupNotify=true

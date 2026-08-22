@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.arapsum.Cadence</id>
+  <name>Cadence</name>
+  <summary>Plan your day and understand your week</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>Cadence is a local-first desktop timetable for planning a day and understanding a week.</p>
+    <p>Create focused time blocks, keep recurring routines, and make changes with confidence while your data stays on your computer.</p>
+  </description>
+  <launchable type="desktop-id">io.github.arapsum.Cadence.desktop</launchable>
+  <url type="homepage">https://github.com/arapsum/cadence</url>
+  <categories>
+    <category>Office</category>
+    <category>Calendar</category>
+  </categories>
+  <releases>
+    <release version="0.1.0" date="2026-08-22">
+      <description>
+        <p>Initial public release of Cadence.</p>
+      </description>
+    </release>
+  </releases>
+</component>

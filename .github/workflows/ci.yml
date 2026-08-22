@@ -26,7 +26,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Linux build dependencies
         run: |
@@ -59,3 +59,52 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace --locked --all-targets --all-features
+
+      - name: Build release profile
+        run: cargo build --workspace --locked --release
+
+  package:
+    name: Build and validate Ubuntu package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Linux build and metadata dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            appstream \
+            build-essential \
+            clang \
+            cmake \
+            desktop-file-utils \
+            dpkg-dev \
+            libasound2-dev \
+            libfontconfig1-dev \
+            libglib2.0-dev \
+            libssl-dev \
+            libvulkan-dev \
+            libwayland-dev \
+            libx11-xcb-dev \
+            libxkbcommon-x11-dev \
+            libzstd-dev \
+            pkg-config
+
+      - name: Configure pinned Rust
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal
+          rustup component add --toolchain 1.97.1 clippy rustfmt
+
+      - name: Build release binary
+        run: cargo build --locked --release -p cadence-desktop
+
+      - name: Build Debian package
+        run: scripts/package-linux.sh --skip-build
+
+      - name: Validate Debian package
+        run: |
+          version=$(sed -nE 's/^version = "([0-9][^"]*)"/\1/p' Cargo.toml | head -n 1)
+          scripts/validate-linux-package.sh "target/dist/cadence_${version}_amd64.deb"

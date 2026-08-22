@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  draft-release:
+    name: Package and draft GitHub release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Linux build and packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            appstream \
+            build-essential \
+            clang \
+            cmake \
+            desktop-file-utils \
+            dpkg-dev \
+            libasound2-dev \
+            libfontconfig1-dev \
+            libglib2.0-dev \
+            libssl-dev \
+            libvulkan-dev \
+            libwayland-dev \
+            libx11-xcb-dev \
+            libxkbcommon-x11-dev \
+            libzstd-dev \
+            pkg-config
+
+      - name: Configure pinned Rust
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal
+          rustup component add --toolchain 1.97.1 clippy rustfmt
+
+      - name: Verify release version
+        run: scripts/check-release-version.sh "$GITHUB_REF_NAME"
+
+      - name: Verify formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint all targets and features
+        run: cargo clippy --workspace --locked --all-targets --all-features -- -D warnings -W clippy::pedantic -W clippy::nursery -W rust-2018-idioms
+
+      - name: Run tests
+        run: cargo test --workspace --locked --all-targets --all-features
+
+      - name: Build release binary
+        run: CADENCE_BUILD_COMMIT="${GITHUB_SHA::12}" cargo build --locked --release -p cadence-desktop
+
+      - name: Build Debian package
+        run: scripts/package-linux.sh --skip-build "${GITHUB_REF_NAME#v}"
+
+      - name: Validate Debian package
+        run: scripts/validate-linux-package.sh "target/dist/cadence_${GITHUB_REF_NAME#v}_amd64.deb"
+
+      - name: Verify clean installation and upgrade
+        run: scripts/verify-linux-install.sh "target/dist/cadence_${GITHUB_REF_NAME#v}_amd64.deb"
+
+      - name: Extract release notes
+        run: |
+          scripts/extract-release-notes.sh "${GITHUB_REF_NAME#v}" > target/dist/release-notes.md
+          printf '\nChecksums are published in SHA256SUMS.\n' >> target/dist/release-notes.md
+
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: target/dist/*
+
+      - name: Create draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "target/dist/cadence_${GITHUB_REF_NAME#v}_amd64.deb" \
+            target/dist/SHA256SUMS \
+            --draft \
+            --verify-tag \
+            --title "Cadence ${GITHUB_REF_NAME#v}" \
+            --notes-file target/dist/release-notes.md
