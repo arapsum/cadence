@@ -21,10 +21,12 @@ payload. A click selects an event and strengthens its border.
 ## State and geometry
 
 The GPUI layer owns transient interaction state, while calendar::state and
-calendar::layout remain UI-independent. The layout engine partitions events by
-day, uses end-exclusive intervals, assigns overlap lanes, and reserves a
-minimum occupancy for very short events. The renderer maps the resulting
-positions to the 1.5 px/minute 24-hour plane.
+calendar::layout remain UI-independent. The domain scheduler rejects new
+overlapping intervals across all categories using end-exclusive boundaries;
+adjacent events remain valid. The layout engine still partitions rendered
+events by day and can assign overlap lanes so legacy conflicts remain readable
+and individually selectable while users resolve them. The renderer maps the
+resulting positions to the 1.5 px/minute 24-hour plane.
 
 The current-day column receives a subtle tint and a green dot in its header. A
 green line and dot track the local wall-clock time and refresh every 30 seconds.
@@ -58,7 +60,7 @@ Automated validation currently passes:
 - cargo test --workspace --locked --all-targets --all-features
 
 The remaining release check is a Wayland visual pass at the baseline and
-minimum window sizes, including horizontal scrolling and the seeded overlap.
+minimum window sizes, including horizontal scrolling and legacy-overlap flags.
 
 ## M4 event editor
 

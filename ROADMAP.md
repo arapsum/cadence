@@ -208,7 +208,8 @@ Create one pure layout engine shared by day and week views:
 - Convert duration to height with a minimum visible event height.
 - Use a configurable pixels-per-minute scale.
 - Partition events by day.
-- Detect intersecting intervals and assign overlap lanes.
+- Detect intersecting intervals for validation; assign overlap lanes only as a
+  rendering fallback for legacy conflicting records.
 - Expand an event only when doing so does not collide with a later lane.
 - Clip only for rendering; preserve the real event times.
 
@@ -261,7 +262,7 @@ Tasks:
 - Implement day boundaries, week boundaries, date navigation, time formatting,
   time-to-offset conversion, and 15-minute snapping.
 - Define a repository trait and an in-memory implementation.
-- Seed a realistic sample week covering short, adjacent, and overlapping events.
+- Seed a realistic sample week covering short, adjacent, and recurring events.
 
 Done when:
 
@@ -285,7 +286,8 @@ Tasks:
 - Render color-coded event cards with title, category, and time.
 - Add vertical scrolling and scroll initially near the current/first event time.
 - Add a current-day treatment and a live current-time line.
-- Implement overlap lanes using the pure layout engine.
+- Enforce one event per time interval in repository mutations and retain the
+  pure layout engine's overlap lanes for legacy-data presentation.
 
 Implementation notes:
 
@@ -300,7 +302,8 @@ Implementation notes:
 Done when:
 
 - Adjacent events do not overlap visually.
-- Simultaneous events remain individually clickable and readable.
+- Legacy simultaneous events remain individually clickable and readable while
+  new and edited events are rejected with an actionable conflict message.
 - Week navigation works across month and year boundaries.
 - Resizing the window preserves usable headers, gutter, and columns.
 - No-event days and an entirely empty week have intentional empty states.
@@ -573,7 +576,8 @@ A release candidate should pass this uninterrupted scenario:
 
 1. Launch into the current week and navigate to Today.
 2. Create “Morning routine” for today from 06:00 to 06:30.
-3. Create a second, overlapping event and see both remain operable.
+3. Attempt a second overlapping event, see the conflict message, then create
+   an adjacent event successfully.
 4. Filter to one category and clear the filter.
 5. Switch to Day view and edit the second event's time.
 6. Navigate away and back using only the keyboard.
@@ -583,8 +587,9 @@ A release candidate should pass this uninterrupted scenario:
 
 ## Testing strategy
 
-- **Unit tests:** validation, date ranges, snapping, formatting, overlap lanes,
-  recurrence expansion, and migrations.
+- **Unit tests:** validation, date ranges, snapping, formatting, schedule
+  conflicts, legacy conflict flags, overlap lanes, recurrence expansion, and
+  migrations.
 - **Property tests:** generated event intervals never yield negative sizes,
   overlapping rectangles never occupy the same lane, and week navigation
   round-trips.

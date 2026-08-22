@@ -14,13 +14,14 @@ as a quiet, spatially honest time grid rather than a dashboard.
 
 - Switch between a seven-day Week view and a focused Day view.
 - Navigate by day or week, jump to today, and filter by category.
-- Read overlapping events clearly with a fixed time gutter, sticky day headers,
-  current-time treatment, and horizontal or vertical scrolling where needed.
+- Keep one event per time interval across every category, with a fixed time
+  gutter, sticky day headers, current-time treatment, and horizontal or
+  vertical scrolling where needed.
 - Create events from the toolbar or an empty time slot; inspect, edit,
   duplicate, delete, move, and resize them; undo or redo committed changes
   during the current session.
-- Validate event titles, categories, and time ranges before changing the
-  timetable.
+- Validate event titles, categories, time ranges, and schedule conflicts before
+  changing the timetable. Adjacent end/start boundaries remain valid.
 - Use pointer and keyboard interactions with light and dark themes.
 - Drag event bodies across time and days, resize their start or end, preview
   snapped changes, and cancel an in-progress manipulation with Escape.
@@ -140,8 +141,8 @@ After running the application, verify the following on the supported baseline:
    the selected date and filter survive a mode change.
 3. The fixed header and time gutter remain aligned while the grid scrolls.
    Narrow windows retain usable cards through horizontal Week scrolling.
-4. Adjacent events do not collide, overlapping events remain individually
-   selectable, and event hover/focus exposes their complete details.
+4. Adjacent events do not collide; conflicting legacy records are visibly
+   flagged, and event hover/focus exposes their complete details.
 5. The current-day tint and current-time line appear when today is displayed.
 6. New event, empty-slot creation, event inspection, editing, duplication,
    deletion, dragging, resizing, recurring scope edits, undo, and redo update
