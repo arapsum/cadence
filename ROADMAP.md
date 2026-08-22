@@ -556,6 +556,12 @@ Done when:
 
 **Outcome:** a versioned build another person can install and trust.
 
+**Implementation status:** Complete for the first Ubuntu 26.04 LTS x86_64
+Wayland target. The repository now contains a reproducible `.deb` builder,
+metadata/content validators, a draft-release workflow, and the release/user
+documentation. Clean-machine installation and publication remain deliberate
+manual gates for each tagged release.
+
 Tasks:
 
 - Add CI for formatting, linting, tests, and release builds.

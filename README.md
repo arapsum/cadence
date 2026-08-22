@@ -5,10 +5,11 @@ a week. Built with Rust, [GPUI](https://gpui.rs/), and [GPUI
 Component](https://longbridge.github.io/gpui-component/), it keeps the calendar
 as a quiet, spatially honest time grid rather than a dashboard.
 
-> **Project status:** Milestone 7 is implemented. Cadence stores timetable data
-> in a local SQLite database, supports snap-aware event dragging and resizing,
-> repeating schedules with scoped edits, and provides bounded session undo/redo
-> plus non-destructive recovery for unreadable databases.
+> **Project status:** Milestone 9 is implemented for the first supported
+> release target. Cadence stores timetable data in a local SQLite database,
+> supports snap-aware event dragging and resizing, repeating schedules with
+> scoped edits, bounded session undo/redo, non-destructive recovery for
+> unreadable databases, and a versioned Ubuntu x86_64 `.deb` release artifact.
 
 ## What it does
 
@@ -68,6 +69,19 @@ From the repository root:
 ```sh
 cargo run --locked
 ```
+
+## Install a release
+
+Download the Ubuntu x86_64 `.deb` from a draft or published GitHub release and
+install it with:
+
+```sh
+sudo apt install ./cadence_<version>_amd64.deb
+```
+
+The release target is Ubuntu 26.04 LTS on Wayland. See the [user guide](docs/USER_GUIDE.md)
+for the day-to-day workflow and [release procedure](docs/RELEASING.md) for
+package verification.
 
 The first build downloads Git dependencies and can take several minutes. Later
 builds reuse Cargo's cache.
@@ -130,6 +144,9 @@ cargo fmt --all -- --check
 cargo clippy --workspace --locked --all-targets --all-features -- -D warnings \
   -W clippy::pedantic -W clippy::nursery -W rust-2018-idioms
 cargo test --workspace --locked --all-targets --all-features
+
+scripts/package-linux.sh
+scripts/validate-linux-package.sh target/dist/cadence_<version>_amd64.deb
 ```
 
 ## Manual verification
@@ -165,3 +182,6 @@ After running the application, verify the following on the supported baseline:
 - [Roadmap](ROADMAP.md) — scope, milestones, and technical direction.
 - [Product contract](PRODUCT.md) — product intent and experience principles.
 - [Design record](DESIGN.md) — surface, geometry, and editor decisions.
+- [Changelog](CHANGELOG.md) — release history and supported target.
+- [User guide](docs/USER_GUIDE.md) — install, workflow, shortcuts, and data.
+- [Release procedure](docs/RELEASING.md) — repeatable tag and package process.
