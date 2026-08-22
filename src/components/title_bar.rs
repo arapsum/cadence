@@ -1,14 +1,15 @@
 use gpui::{
     AnyElement, App, Context, Decorations, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement as _, Render, RenderOnce, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Window, WindowControlArea, WindowOptions, div, prelude::FluentBuilder as _, px,
+    Styled as _, Window, WindowControlArea, WindowOptions, div, hsla, prelude::FluentBuilder as _,
+    px,
 };
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, InteractiveElementExt as _, Sizable as _, StyledExt as _,
     h_flex,
 };
 
-const TITLE_BAR_HEIGHT: gpui::Pixels = px(44.);
+const TITLE_BAR_HEIGHT: gpui::Pixels = px(60.);
 
 /// Cadence's custom title bar and native-style window controls.
 #[derive(IntoElement)]
@@ -16,6 +17,7 @@ pub struct CadenceTitleBar {
     title: SharedString,
     leading: Option<AnyElement>,
     controls: Option<AnyElement>,
+    brand_width: gpui::Pixels,
 }
 
 impl CadenceTitleBar {
@@ -33,6 +35,7 @@ impl CadenceTitleBar {
             title: title.into(),
             leading: None,
             controls: None,
+            brand_width: px(252.0),
         }
     }
 
@@ -63,6 +66,21 @@ impl CadenceTitleBar {
     #[must_use]
     pub fn controls(mut self, controls: impl IntoElement) -> Self {
         self.controls = Some(controls.into_any_element());
+        self
+    }
+
+    /// Sets the width reserved for the application brand and history controls.
+    ///
+    /// # Parameters
+    ///
+    /// - `width`: Horizontal space reserved at the start of the title bar.
+    ///
+    /// # Returns
+    ///
+    /// A title bar whose brand region uses `width`.
+    #[must_use]
+    pub const fn brand_width(mut self, width: gpui::Pixels) -> Self {
+        self.brand_width = width;
         self
     }
 
@@ -244,10 +262,17 @@ impl RenderOnce for WindowControls {
 }
 
 impl RenderOnce for CadenceTitleBar {
+    #[allow(clippy::too_many_lines)]
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let drag_state = window.use_state(cx, |_, _| DragState { should_move: false });
         let supports_maximize = window.window_controls().maximize && window.is_resizable();
         let supports_window_menu = window.window_controls().window_menu;
+        let has_controls = self.controls.is_some();
+        let brand_color = if cx.theme().mode.is_dark() {
+            hsla(0.91, 0.34, 0.76, 1.0)
+        } else {
+            hsla(0.91, 0.42, 0.25, 1.0)
+        };
 
         div()
             .id("cadence-title-bar")
@@ -298,39 +323,58 @@ impl RenderOnce for CadenceTitleBar {
                     .id("window-title")
                     .flex()
                     .items_center()
+                    .gap_1()
+                    .w(self.brand_width)
                     .h_full()
-                    .text_sm()
-                    .font_medium()
-                    .child(self.title),
+                    .flex_shrink_0()
+                    .border_r_1()
+                    .border_color(cx.theme().title_bar_border)
+                    .text_base()
+                    .font_semibold()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size(px(28.0))
+                            .rounded_md()
+                            .border_1()
+                            .border_color(brand_color.opacity(0.32))
+                            .bg(brand_color.opacity(0.1))
+                            .text_color(brand_color)
+                            .child(Icon::new(IconName::Calendar).small()),
+                    )
+                    .child(self.title)
+                    .when_some(self.leading, |this, leading| {
+                        this.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_1()
+                                .ml_1()
+                                .h_full()
+                                .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                                    cx.stop_propagation();
+                                })
+                                .child(leading),
+                        )
+                    }),
             )
-            .when_some(self.leading, |this, leading| {
-                this.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_1()
-                        .h_full()
-                        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                        .child(leading),
-                )
-            })
-            .child(div().flex_1().h_full())
             .when_some(self.controls, |this, controls| {
                 this.child(
                     div()
                         .id("title-bar-controls")
-                        .absolute()
-                        .inset_0()
                         .flex()
+                        .flex_1()
+                        .min_w_0()
                         .items_center()
-                        .justify_center()
-                        .gap_2()
+                        .px_4()
                         .h_full()
                         .child(
                             div()
                                 .flex()
+                                .w_full()
                                 .items_center()
-                                .gap_2()
                                 .on_mouse_down(MouseButton::Left, |_, _, cx| {
                                     cx.stop_propagation();
                                 })
@@ -338,6 +382,7 @@ impl RenderOnce for CadenceTitleBar {
                         ),
                 )
             })
+            .when(!has_controls, |this| this.child(div().flex_1()))
             .child(WindowControls)
     }
 }

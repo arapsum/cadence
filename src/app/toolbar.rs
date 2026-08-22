@@ -1,6 +1,7 @@
 use gpui::{App, Context, IntoElement, SharedString, Window, div, prelude::*, px};
 use gpui_component::{
-    ActiveTheme as _, Disableable as _, IconName, Sizable as _, StyledExt as _, Theme, ThemeMode,
+    ActiveTheme as _, Disableable as _, Icon, IconName, Sizable as _, StyledExt as _, Theme,
+    ThemeMode,
     button::{Button, ButtonVariants as _},
     menu::{DropdownMenu as _, PopupMenu, PopupMenuItem},
     select::{Select, SelectItem},
@@ -106,7 +107,7 @@ pub(super) fn render_titlebar_actions(
     let show_navigation = width >= 1_160.0;
     let interactive = view.is_interactive();
     let filter = Select::new(&view.category_filter)
-        .w(px(200.0))
+        .w(px(156.0))
         .appearance(false)
         .disabled(!interactive)
         .placeholder("Filter categories");
@@ -128,24 +129,39 @@ pub(super) fn render_titlebar_actions(
             this.new_event(window, cx);
         }));
 
-    div()
+    let leading = div()
         .flex()
         .items_center()
         .gap_2()
         .child(render_mode_control(view, cx))
-        .when(show_filter, |this| this.child(filter))
-        .when(show_today, |this| this.child(today_button))
-        .child(new_event_button)
+        .when(show_filter, |this| this.child(filter));
+    let trailing = div()
+        .flex()
+        .items_center()
+        .gap_2()
         .when(show_navigation, |this| {
-            this.child(render_navigation(view, false, cx))
+            this.child(render_navigation(view, true, cx))
         })
+        .when(show_today && !show_navigation, |this| {
+            this.child(today_button)
+        })
+        .child(new_event_button)
         .child(render_overflow_menu(
             view,
             show_filter,
             show_today,
             show_navigation,
             cx,
-        ))
+        ));
+
+    div()
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap_4()
+        .w_full()
+        .child(leading)
+        .child(trailing)
         .into_any_element()
 }
 
@@ -378,34 +394,54 @@ fn render_navigation(
     div()
         .flex()
         .items_center()
-        .rounded_md()
-        .border_1()
-        .border_color(cx.theme().border)
+        .gap_2()
         .child(
-            Button::new("previous-period")
-                .ghost()
-                .icon(IconName::ChevronLeft)
-                .tooltip("Previous period (Alt+Left)")
-                .on_click(cx.listener(|this, _, _, cx| this.shift_period(false, cx))),
+            div()
+                .flex()
+                .items_center()
+                .rounded_md()
+                .border_1()
+                .border_color(cx.theme().border)
+                .child(
+                    Button::new("previous-period")
+                        .ghost()
+                        .small()
+                        .icon(IconName::ChevronLeft)
+                        .tooltip("Previous period (Alt+Left)")
+                        .on_click(cx.listener(|this, _, _, cx| this.shift_period(false, cx))),
+                )
+                .child(
+                    Button::new("navigation-today")
+                        .ghost()
+                        .small()
+                        .label("Today")
+                        .on_click(cx.listener(|this, _, _, cx| this.go_to_today(cx))),
+                )
+                .child(
+                    Button::new("next-period")
+                        .ghost()
+                        .small()
+                        .icon(IconName::ChevronRight)
+                        .tooltip("Next period (Alt+Right)")
+                        .on_click(cx.listener(|this, _, _, cx| this.shift_period(true, cx))),
+                ),
         )
         .child(
             div()
-                .min_w(px(if compact { 166.0 } else { 180.0 }))
+                .flex()
+                .items_center()
+                .gap_2()
+                .min_w(px(if compact { 164.0 } else { 176.0 }))
+                .h(px(32.0))
                 .px_3()
                 .text_center()
                 .text_sm()
                 .font_medium()
-                .border_l_1()
-                .border_r_1()
+                .rounded_md()
+                .border_1()
                 .border_color(cx.theme().border)
+                .child(Icon::new(IconName::Calendar).small())
                 .child(view.range_label()),
-        )
-        .child(
-            Button::new("next-period")
-                .ghost()
-                .icon(IconName::ChevronRight)
-                .tooltip("Next period (Alt+Right)")
-                .on_click(cx.listener(|this, _, _, cx| this.shift_period(true, cx))),
         )
         .into_any_element()
 }
