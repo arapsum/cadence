@@ -80,7 +80,32 @@ both published-crate and Git dependency setups. Milestone 0 must prove a matchin
 pair on the target platform, then pin exact versions or Git revisions. Do not
 track an unpinned branch after the spike.
 
-### Suggested source layout
+### Current workspace layout
+
+The implementation now uses three crates with one-way dependencies:
+
+```text
+crates/
+  core/
+    src/                    GPUI-free domain, calendar, editor, and store
+    tests/                  calendar math, layout, persistence, repository
+  ui/
+    src/                    GPUI views, state, dialogs, and components
+    assets/themes/          bundled GPUI Component themes
+  desktop/
+    src/main.rs             native startup, platform, and window setup
+```
+
+```text
+cadence-core  <-  cadence-ui  <-  cadence-desktop
+ (no GPUI)       (GPUI views)     (native startup)
+```
+
+The core crate must not depend on GPUI. Keeping the domain, calendar geometry,
+editor rules, and persistence behind that boundary makes them cheap to test and
+lets the desktop shell evolve independently.
+
+### Historical single-package layout
 
 ```text
 src/
@@ -264,11 +289,11 @@ Tasks:
 
 Implementation notes:
 
-- src/calendar/layout.rs contains the GPUI-free end-exclusive overlap algorithm
+- `crates/core/src/calendar/layout.rs` contains the GPUI-free end-exclusive overlap algorithm
   with minimum occupancy for short events.
-- src/calendar/state.rs owns selected date, category filter, and selection
+- `crates/core/src/calendar/state.rs` owns selected date, category filter, and selection
   transitions.
-- src/app/week.rs renders one tracked scroll plane with fixed header/gutter
+- `crates/ui/src/app/week.rs` renders one tracked scroll plane with fixed header/gutter
   overlays and a responsive minimum column width; `grid.rs` and `event_card.rs`
   keep the body surfaces independently evolvable.
 
@@ -309,8 +334,9 @@ Implementation notes:
   date and moves by a day or week according to the active mode.
 - `layout_events` accepts any supported date range, so Day and Week share the
   same overlap lanes and event geometry.
-- `src/app/day.rs` and `src/app/week.rs` are thin surface adapters over
-  `src/app/surface.rs`; toolbar and root action handling are mode-aware.
+- `crates/ui/src/app/day.rs` and `crates/ui/src/app/week.rs` are thin surface
+  adapters over `crates/ui/src/app/surface.rs`; toolbar and root action handling
+  are mode-aware.
 
 Done when:
 
@@ -349,9 +375,9 @@ Done when:
 
 Implementation notes:
 
-- `src/editor.rs` owns the UI-independent form draft, default-time rules,
+- `crates/core/src/editor.rs` owns the UI-independent form draft, default-time rules,
   snap-aware time options, date adapters, and field-level validation.
-- `src/app/editor.rs` owns the GPUI Component dialog, editor subscriptions,
+- `crates/ui/src/app/editor/` owns the GPUI Component dialog, editor subscriptions,
   inspector actions, repository mutations, and transient undo state. Create and
   edit share the same form entity; duplicate starts a fresh create draft with a
   new identifier only when it is saved.
@@ -394,11 +420,11 @@ Done when:
 
 Implementation notes:
 
-- `src/store/sqlite.rs` owns the numbered `PRAGMA user_version` migrations,
+- `crates/core/src/store/sqlite.rs` owns the numbered `PRAGMA user_version` migrations,
   foreign-key/integrity checks, canonical civil date/time encoding, and the
   repository contract implementation. A fresh database creates the six
   categories but no sample events.
-- `src/store/worker.rs` owns one SQLite connection on a dedicated worker
+- `crates/core/src/store/worker.rs` owns one SQLite connection on a dedicated worker
   thread. The GPUI view receives asynchronous load/write results and keeps the
   last committed in-memory snapshot when a transaction fails.
 - On Linux the database is `$CADENCE_DATA_DIR/cadence.sqlite3` when the
@@ -435,9 +461,9 @@ Tasks:
 
 Implementation notes:
 
-- `src/app/interaction.rs` owns transient drag payloads, snapped proposals,
+- `crates/ui/src/app/interaction.rs` owns transient drag payloads, snapped proposals,
   resize edges, and viewport-edge auto-scroll calculations.
-- `src/calendar/interaction.rs` keeps move and resize proposal math free of
+- `crates/core/src/calendar/interaction.rs` keeps move and resize proposal math free of
   GPUI, including duration preservation, date changes, clamping, and minimum
   snap-sized durations.
 - Event cards distinguish click, double-click, move, and resize gestures. A
@@ -477,7 +503,7 @@ Tasks:
 
 Implementation notes:
 
-- `src/domain/recurrence.rs` models Daily, Weekdays, and Weekly-on-selected-days
+- `crates/core/src/domain/recurrence.rs` models Daily, Weekdays, and Weekly-on-selected-days
   rules as civil-date series. Occurrences are expanded only inside the visible
   `DateRange`, so a long-running routine never becomes one row per future date.
 - Durable storage keeps one `recurrence_series` row per schedule and one

@@ -71,6 +71,21 @@ cargo run --locked
 The first build downloads Git dependencies and can take several minutes. Later
 builds reuse Cargo's cache.
 
+## Workspace structure
+
+Cadence is split into three crates with one-way dependencies:
+
+- `crates/core` — GPUI-free domain types, calendar geometry, editor rules, and
+  local persistence. Its integration tests exercise the application data model
+  without opening a window.
+- `crates/ui` — GPUI views, application state, interactions, dialogs, themes,
+  and reusable timetable components.
+- `crates/desktop` — the native binary named `cadence`; it owns platform
+  startup, app identity, window options, and mounts the UI crate.
+
+The default workspace member is `cadence-desktop`, so `cargo run --locked`
+continues to launch the desktop application from the repository root.
+
 ## Keyboard shortcuts
 
 | Action | Shortcut |
@@ -111,9 +126,9 @@ Run these checks before completing a milestone or submitting a change:
 
 ```sh
 cargo fmt --all -- --check
-cargo clippy --locked --all-targets --all-features -- -D warnings \
+cargo clippy --workspace --locked --all-targets --all-features -- -D warnings \
   -W clippy::pedantic -W clippy::nursery -W rust-2018-idioms
-cargo test --locked --all-targets
+cargo test --workspace --locked --all-targets --all-features
 ```
 
 ## Manual verification

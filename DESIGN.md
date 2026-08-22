@@ -53,9 +53,9 @@ Alt+Left/Right navigate, and Cmd/Ctrl+T returns to today.
 Automated validation currently passes:
 
 - cargo fmt --all -- --check
-- cargo clippy --locked --all-targets --all-features -- -D warnings -W
+- cargo clippy --workspace --locked --all-targets --all-features -- -D warnings -W
   clippy::pedantic -W clippy::nursery -W rust-2018-idioms
-- cargo test --locked --all-targets
+- cargo test --workspace --locked --all-targets --all-features
 
 The remaining release check is a Wayland visual pass at the baseline and
 minimum window sizes, including horizontal scrolling and the seeded overlap.
@@ -70,9 +70,9 @@ the current editable values into a new, unsaved create draft; it does not write
 until Save is confirmed.
 
 The shared editor form contains title, notes, date, start time, end time, and
-category. `src/editor.rs` keeps its draft and validation independent of GPUI;
-`src/app/editor.rs` adapts those values to GPUI Component's Input, Textarea,
-DatePicker, and Select entities. Existing off-grid times are retained as
+category. `crates/core/src/editor.rs` keeps its draft and validation independent
+of GPUI; `crates/ui/src/app/editor/` adapts those values to GPUI Component's
+Input, Textarea, DatePicker, and Select entities. Existing off-grid times are retained as
 additional select options so opening an event never silently changes its time.
 
 Creation defaults are deterministic: an empty slot uses that day and hour with
