@@ -17,7 +17,7 @@ use crate::{
         Category, CategoryId, Event, EventDraft, EventId, OccurrenceId, RecurrenceSeries,
         RecurrenceSeriesId,
     },
-    editor::{EditorMode, FormDraft},
+    editor::{EditorMode, FormDraft, FormErrors},
     store::TimetableRepository,
 };
 
@@ -27,6 +27,20 @@ use super::super::{
     style::dialog_margin_top,
 };
 use super::{form::EventEditor, recurrence::RecurrenceScope};
+
+enum EditorCommitError {
+    Repository(crate::domain::RepositoryError),
+    Message(String),
+}
+
+impl std::fmt::Display for EditorCommitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Repository(error) => error.fmt(f),
+            Self::Message(message) => f.write_str(message),
+        }
+    }
+}
 
 impl CadenceView {
     pub(in crate::app) fn new_event(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
@@ -316,6 +330,7 @@ impl CadenceView {
             }
         };
         let timestamp = Timestamp::now();
+        let repository_rollback = self.repository.clone();
         let result = match mode {
             EditorMode::Create => self.create_editor_change(&form, &draft, &before, timestamp),
             EditorMode::Edit(occurrence_id) => {
@@ -325,7 +340,22 @@ impl CadenceView {
         let (id, change) = match result {
             Ok(result) => result,
             Err(error) => {
-                self.show_error(error, window, cx);
+                self.repository = repository_rollback;
+                if matches!(
+                    &error,
+                    EditorCommitError::Repository(
+                        crate::domain::RepositoryError::ScheduleConflict(_)
+                    )
+                ) {
+                    editor.update(cx, |editor, _| {
+                        editor.set_errors(FormErrors {
+                            conflict: Some(error.to_string()),
+                            ..FormErrors::default()
+                        });
+                    });
+                } else {
+                    self.show_error(error.to_string(), window, cx);
+                }
                 return false;
             }
         };
@@ -358,7 +388,7 @@ impl CadenceView {
         draft: &EventDraft,
         before: &crate::store::PersistenceSnapshot,
         timestamp: Timestamp,
-    ) -> Result<(OccurrenceId, CalendarChange), String> {
+    ) -> Result<(OccurrenceId, CalendarChange), EditorCommitError> {
         if let Some(rule) = form.recurrence {
             let series = RecurrenceSeries::new(
                 RecurrenceSeriesId::new(),
@@ -367,15 +397,15 @@ impl CadenceView {
                 form.ends_on,
                 timestamp,
             )
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| EditorCommitError::Message(error.to_string()))?;
             let id = series.id();
             self.repository
                 .create_series(series)
-                .map_err(|error| error.to_string())?;
+                .map_err(EditorCommitError::Repository)?;
             let after = self
                 .repository
                 .snapshot()
-                .map_err(|error| error.to_string())?;
+                .map_err(EditorCommitError::Repository)?;
             Ok((
                 OccurrenceId::Recurring {
                     series_id: id,
@@ -390,14 +420,14 @@ impl CadenceView {
         } else {
             let id = EventId::new();
             Event::new(id, draft.clone(), timestamp)
-                .map_err(|error| error.to_string())
+                .map_err(|error| EditorCommitError::Message(error.to_string()))
                 .and_then(|event| {
                     let change = CalendarChange::Create {
                         event: event.clone(),
                     };
                     self.repository
                         .create_event(event)
-                        .map_err(|error| error.to_string())
+                        .map_err(EditorCommitError::Repository)
                         .map(|()| (OccurrenceId::Standalone(id), change))
                 })
         }
@@ -411,7 +441,7 @@ impl CadenceView {
         scope: Option<RecurrenceScope>,
         before: &crate::store::PersistenceSnapshot,
         timestamp: Timestamp,
-    ) -> Result<(OccurrenceId, CalendarChange), String> {
+    ) -> Result<(OccurrenceId, CalendarChange), EditorCommitError> {
         match occurrence_id {
             OccurrenceId::Standalone(id) if form.recurrence.is_some() => {
                 self.convert_standalone_to_series(id, form, draft, before, timestamp)
@@ -421,7 +451,9 @@ impl CadenceView {
                 series_id,
                 original_date,
             } => {
-                let active_scope = scope.ok_or_else(|| "Choose a recurrence scope.".to_owned())?;
+                let active_scope = scope.ok_or_else(|| {
+                    EditorCommitError::Message("Choose a recurrence scope.".to_owned())
+                })?;
                 self.update_recurring_event(
                     series_id,
                     original_date,
@@ -441,11 +473,11 @@ impl CadenceView {
         draft: &EventDraft,
         before: &crate::store::PersistenceSnapshot,
         timestamp: Timestamp,
-    ) -> Result<(OccurrenceId, CalendarChange), String> {
+    ) -> Result<(OccurrenceId, CalendarChange), EditorCommitError> {
         let event = self
             .repository
             .delete_event(id)
-            .map_err(|error| error.to_string())?;
+            .map_err(EditorCommitError::Repository)?;
         let rule = form.recurrence.expect("checked above");
         let series = RecurrenceSeries::new(
             RecurrenceSeriesId::new(),
@@ -454,15 +486,15 @@ impl CadenceView {
             form.ends_on,
             timestamp,
         )
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| EditorCommitError::Message(error.to_string()))?;
         let series_id = series.id();
         self.repository
             .create_series(series)
-            .map_err(|error| error.to_string())?;
+            .map_err(EditorCommitError::Repository)?;
         let after = self
             .repository
             .snapshot()
-            .map_err(|error| error.to_string())?;
+            .map_err(EditorCommitError::Repository)?;
         Ok((
             OccurrenceId::Recurring {
                 series_id,
@@ -481,20 +513,22 @@ impl CadenceView {
         id: EventId,
         draft: &EventDraft,
         timestamp: Timestamp,
-    ) -> Result<(OccurrenceId, CalendarChange), String> {
+    ) -> Result<(OccurrenceId, CalendarChange), EditorCommitError> {
         let mut event = self
             .repository
             .event(id)
-            .map_err(|error| error.to_string())?
-            .ok_or_else(|| "That event is no longer available.".to_owned())?;
+            .map_err(EditorCommitError::Repository)?
+            .ok_or_else(|| {
+                EditorCommitError::Message("That event is no longer available.".to_owned())
+            })?;
         let event_before = event.draft();
         event
             .revise(draft.clone(), timestamp)
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| EditorCommitError::Message(error.to_string()))?;
         let after = event.draft();
         self.repository
             .update_event(event)
-            .map_err(|error| error.to_string())?;
+            .map_err(EditorCommitError::Repository)?;
         Ok((
             OccurrenceId::Standalone(id),
             CalendarChange::Update {
@@ -514,12 +548,14 @@ impl CadenceView {
         scope: RecurrenceScope,
         before: &crate::store::PersistenceSnapshot,
         timestamp: Timestamp,
-    ) -> Result<(OccurrenceId, CalendarChange), String> {
-        let id = self.apply_recurring_edit(series_id, original_date, form, scope, timestamp)?;
+    ) -> Result<(OccurrenceId, CalendarChange), EditorCommitError> {
+        let id = self
+            .apply_recurring_edit(series_id, original_date, form, scope, timestamp)
+            .map_err(EditorCommitError::Message)?;
         let after = self
             .repository
             .snapshot()
-            .map_err(|error| error.to_string())?;
+            .map_err(EditorCommitError::Repository)?;
         Ok((
             id,
             CalendarChange::Snapshot {

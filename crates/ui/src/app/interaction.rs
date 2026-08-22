@@ -3,7 +3,7 @@ use jiff::civil::Date;
 
 use crate::{
     calendar::{CalendarViewMode, ResizeEdge, propose_move, propose_resize},
-    domain::{DateRange, EventDraft, EventOccurrence, OccurrenceId},
+    domain::{DateRange, EventDraft, EventOccurrence, OccurrenceId, ScheduleConflict},
 };
 
 use super::style::PIXELS_PER_MINUTE;
@@ -32,6 +32,7 @@ pub(super) struct Manipulation {
     pub(super) kind: ManipulationKind,
     pub(super) surface: CalendarViewMode,
     pub(super) proposed: EventDraft,
+    pub(super) conflict: Option<ScheduleConflict>,
     pub(super) original_day: u8,
     pub(super) range_start: Date,
     pub(super) pointer: Point<Pixels>,
@@ -71,6 +72,7 @@ impl Manipulation {
             kind: payload.kind,
             surface: payload.surface,
             proposed: event.draft(),
+            conflict: None,
             original_day: payload.original_day,
             range_start: payload.range_start,
             pointer: Point::default(),
@@ -178,6 +180,10 @@ impl Manipulation {
 
     pub(super) const fn surface(&self) -> CalendarViewMode {
         self.surface
+    }
+
+    pub(super) fn set_conflict(&mut self, conflict: Option<ScheduleConflict>) {
+        self.conflict = conflict;
     }
 }
 

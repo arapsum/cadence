@@ -3,6 +3,7 @@ use jiff::{
     civil::{Date, Time},
     tz::TimeZone,
 };
+use std::collections::HashSet;
 
 use crate::{
     calendar::{CalendarViewMode, CategoryFilter, LayoutMetrics, PositionedEvent},
@@ -22,6 +23,7 @@ pub(super) struct WorkspaceSnapshot {
     pub(super) week: SurfaceSnapshot,
     pub(super) categories: Vec<Category>,
     pub(super) summary_events: Vec<EventOccurrence>,
+    pub(super) conflict_ids: HashSet<crate::domain::OccurrenceId>,
 }
 
 impl WorkspaceSnapshot {

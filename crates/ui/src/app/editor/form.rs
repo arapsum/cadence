@@ -326,6 +326,7 @@ impl EventEditor {
         self.subscriptions
             .push(cx.subscribe(&date, |this, _, _: &DatePickerEvent, cx| {
                 this.errors.date = None;
+                this.errors.conflict = None;
                 cx.notify();
             }));
         let start_time = self.start_time.clone();
@@ -335,6 +336,7 @@ impl EventEditor {
             |this, _, event: &gpui_component::select::SelectEvent<Vec<TimeOption>>, window, cx| {
                 this.errors.start_time = None;
                 this.errors.end_time = None;
+                this.errors.conflict = None;
                 if let gpui_component::select::SelectEvent::Confirm(Some(start_time)) = event {
                     this.update_end_time_options(*start_time, window, cx);
                 }
@@ -346,6 +348,7 @@ impl EventEditor {
             &end_time,
             |this, _, _: &gpui_component::select::SelectEvent<Vec<TimeOption>>, cx| {
                 this.errors.end_time = None;
+                this.errors.conflict = None;
                 cx.notify();
             },
         ));
@@ -363,6 +366,7 @@ impl EventEditor {
             |this, _, _: &gpui_component::select::SelectEvent<Vec<RepeatOption>>, cx| {
                 cx.notify();
                 this.errors.recurrence = None;
+                this.errors.conflict = None;
             },
         ));
         let reminder = self.reminder.clone();
@@ -376,6 +380,7 @@ impl EventEditor {
         self.subscriptions
             .push(cx.subscribe(&ends_on, |this, _, _: &DatePickerEvent, cx| {
                 this.errors.ends_on = None;
+                this.errors.conflict = None;
                 cx.notify();
             }));
     }
@@ -460,6 +465,7 @@ impl EventEditor {
 
     fn toggle_end_date(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.ends_enabled = !self.ends_enabled;
+        self.errors.conflict = None;
         if self.ends_enabled {
             self.reveal_end_date = true;
             self.ends_on.update(cx, |date, cx| {
@@ -476,6 +482,7 @@ impl EventEditor {
     fn toggle_weekday(&mut self, day: Weekday, cx: &mut Context<'_, Self>) {
         if let Ok(days) = self.weekly_days.toggled(day) {
             self.weekly_days = days;
+            self.errors.conflict = None;
             cx.notify();
         }
     }
@@ -637,6 +644,14 @@ impl Render for EventEditor {
                         errors.end_time,
                     )),
             )
+            .when_some(errors.conflict, |this, error| {
+                this.child(
+                    div()
+                        .text_xs()
+                        .text_color(gpui::rgb(0x00D9_304F))
+                        .child(error),
+                )
+            })
             .child(field(
                 "Category",
                 Select::new(&self.category)

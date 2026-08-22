@@ -6,6 +6,7 @@ use crate::{calendar::CalendarViewMode, domain::DateRange, store::TimetableRepos
 use super::super::presentation::{
     SurfaceSnapshot, WorkspaceSnapshot, event_matches_filter, layout_events, local_date_time,
 };
+use crate::domain::find_occurrence_conflicts;
 
 use super::{CadenceView, HistoryEffect, PersistenceState};
 
@@ -65,6 +66,10 @@ impl CadenceView {
             .filter(|event| event.date() == self.state.selected_date())
             .cloned()
             .collect::<Vec<_>>();
+        let conflict_ids = find_occurrence_conflicts(&visible_events)
+            .into_iter()
+            .flat_map(|conflict| [conflict.first(), conflict.second()])
+            .collect();
         let week_events = visible_events
             .into_iter()
             .filter(|event| event_matches_filter(event, self.state.category_filter()))
@@ -104,6 +109,7 @@ impl CadenceView {
             },
             categories,
             summary_events,
+            conflict_ids,
         });
         self.error = None;
     }

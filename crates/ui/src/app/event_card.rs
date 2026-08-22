@@ -17,15 +17,29 @@ use super::{
 };
 
 #[allow(clippy::too_many_lines)]
-pub(super) fn render(
-    view: &CadenceView,
-    event: &EventOccurrence,
-    category: &Category,
-    position: PositionedEvent,
-    column_width: f32,
-    mode: SurfaceMode,
-    cx: &Context<'_, CadenceView>,
-) -> gpui::AnyElement {
+pub(super) struct EventCardProps<'a> {
+    pub(super) view: &'a CadenceView,
+    pub(super) event: &'a EventOccurrence,
+    pub(super) category: &'a Category,
+    pub(super) conflicted: bool,
+    pub(super) position: PositionedEvent,
+    pub(super) column_width: f32,
+    pub(super) mode: SurfaceMode,
+    pub(super) cx: &'a Context<'a, CadenceView>,
+}
+
+#[allow(clippy::too_many_lines)]
+pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
+    let EventCardProps {
+        view,
+        event,
+        category,
+        conflicted,
+        position,
+        column_width,
+        mode,
+        cx,
+    } = *props;
     let selected = view.state.selected_event() == Some(event.id());
     let dark = cx.theme().mode.is_dark();
     let (background, foreground, border) = category_palette(category.color_token(), dark);
@@ -46,6 +60,11 @@ pub(super) fn render(
         || format!("{title}\n{category_name} · {event_time}"),
         |notes| format!("{title}\n{category_name} · {event_time}\n{notes}"),
     );
+    let tooltip_text = if conflicted {
+        format!("{tooltip_text}\nWarning: overlaps another event")
+    } else {
+        tooltip_text
+    };
     let element_key = format!("{occurrence_id:?}");
     let event_date = event.date();
     let accessibility_label = format!("{title}, {category_name}, {event_date}, {event_time}");
@@ -109,7 +128,9 @@ pub(super) fn render(
         .when(roomy, |this| this.p_2().gap_1())
         .rounded_md()
         .border_1()
-        .border_color(if selected {
+        .border_color(if conflicted {
+            cx.theme().warning
+        } else if selected {
             cx.theme().foreground
         } else {
             border
@@ -183,7 +204,12 @@ pub(super) fn render(
             event_title: event.title().to_owned(),
             event_time: event_time.clone(),
         }))
-        .child(render_category_header(category_name, foreground))
+        .child(render_category_header(
+            category_name,
+            foreground,
+            conflicted,
+            cx,
+        ))
         .child(details)
         .child(resize_handle(ResizeHandleProps {
             id: format!("{}-event-resize-end-{element_key}", mode.key()),
@@ -315,7 +341,12 @@ impl Render for DragAvatar {
     }
 }
 
-fn render_category_header(category_name: String, foreground: Hsla) -> gpui::AnyElement {
+fn render_category_header(
+    category_name: String,
+    foreground: Hsla,
+    conflicted: bool,
+    cx: &Context<'_, CadenceView>,
+) -> gpui::AnyElement {
     div()
         .flex()
         .items_center()
@@ -336,6 +367,9 @@ fn render_category_header(category_name: String, foreground: Hsla) -> gpui::AnyE
                 .rounded_full()
                 .bg(foreground.opacity(0.65)),
         )
+        .when(conflicted, |this| {
+            this.child(div().ml_auto().text_color(cx.theme().warning).child("!"))
+        })
         .into_any_element()
 }
 

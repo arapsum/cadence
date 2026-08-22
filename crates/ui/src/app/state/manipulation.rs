@@ -72,6 +72,7 @@ impl CadenceView {
                                 range,
                                 snap_minutes: view.settings.snap_interval().minutes(),
                             });
+                            view.refresh_manipulation_conflict();
                         }
                         cx.notify();
                         true
@@ -118,6 +119,7 @@ impl CadenceView {
                 range,
                 snap_minutes,
             });
+            self.refresh_manipulation_conflict();
             cx.notify();
         }
     }
@@ -153,6 +155,15 @@ impl CadenceView {
         if manipulation.event.id() != payload.occurrence_id || !manipulation.changed() {
             self.restore_view_state(rollback);
             cx.notify();
+            return;
+        }
+        if let Some(conflict) = manipulation.conflict.as_ref() {
+            self.restore_view_state(rollback);
+            self.show_error(
+                crate::domain::RepositoryError::ScheduleConflict(conflict.clone()).to_string(),
+                window,
+                cx,
+            );
             return;
         }
         let before = match self.repository.snapshot() {
@@ -219,6 +230,38 @@ impl CadenceView {
             cx,
         );
         cx.notify();
+    }
+
+    fn refresh_manipulation_conflict(&mut self) {
+        let Some(manipulation) = self.manipulation.as_ref() else {
+            return;
+        };
+        let Some(event_id) = manipulation.event.id().standalone() else {
+            if let Some(manipulation) = &mut self.manipulation {
+                manipulation.set_conflict(None);
+            }
+            return;
+        };
+        let Some(mut event) = self.repository.event(event_id).ok().flatten() else {
+            return;
+        };
+        if event
+            .revise(manipulation.proposed.clone(), Timestamp::now())
+            .is_err()
+        {
+            if let Some(manipulation) = &mut self.manipulation {
+                manipulation.set_conflict(None);
+            }
+            return;
+        }
+        let conflict = self.repository.snapshot().ok().and_then(|snapshot| {
+            let series = snapshot.recurrence_series;
+            let exceptions = snapshot.recurrence_exceptions;
+            crate::domain::find_event_conflict(&event, &snapshot.events, &series, &exceptions)
+        });
+        if let Some(manipulation) = &mut self.manipulation {
+            manipulation.set_conflict(conflict);
+        }
     }
 
     fn open_manipulation_scope_prompt(

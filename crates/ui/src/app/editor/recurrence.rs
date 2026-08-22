@@ -45,6 +45,23 @@ impl CadenceView {
         scope: RecurrenceScope,
         timestamp: Timestamp,
     ) -> Result<OccurrenceId, String> {
+        let repository_rollback = self.repository.clone();
+        let result =
+            self.apply_recurring_edit_inner(series_id, original_date, draft, scope, timestamp);
+        if result.is_err() {
+            self.repository = repository_rollback;
+        }
+        result
+    }
+
+    fn apply_recurring_edit_inner(
+        &mut self,
+        series_id: RecurrenceSeriesId,
+        original_date: Date,
+        draft: &FormDraft,
+        scope: RecurrenceScope,
+        timestamp: Timestamp,
+    ) -> Result<OccurrenceId, String> {
         let series = self
             .repository
             .series(series_id)
@@ -204,6 +221,7 @@ impl CadenceView {
                 return;
             }
         };
+        let repository_rollback = self.repository.clone();
         let result = (|| -> Result<(), String> {
             match scope {
                 RecurrenceScope::This => self
@@ -252,6 +270,7 @@ impl CadenceView {
             }
         })();
         if let Err(error) = result {
+            self.repository = repository_rollback;
             self.show_error(error, window, cx);
             return;
         }

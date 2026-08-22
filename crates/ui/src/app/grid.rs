@@ -295,15 +295,17 @@ fn render_event_cards(
                 .iter()
                 .find(|event| event.id() == position.occurrence_id())?;
             let category = categories.get(&event.category_id())?;
-            Some(event_card::render(
+            let conflicted = workspace.conflict_ids.contains(&event.id());
+            Some(event_card::render(&event_card::EventCardProps {
                 view,
                 event,
                 category,
-                *position,
+                conflicted,
+                position: *position,
                 column_width,
                 mode,
                 cx,
-            ))
+            }))
         })
         .collect::<Vec<_>>();
 
@@ -358,6 +360,7 @@ fn render_manipulation_preview(
     let dark = cx.theme().mode.is_dark();
     let (background, foreground, border) =
         super::style::category_palette(category.color_token(), dark);
+    let conflict = manipulation.conflict.is_some();
     let lane_count = f32::from(position.lane_count().max(1));
     let width = column_width * f32::from(position.lane_span()) / lane_count - 8.0;
     let lane = f32::from(position.lane());
@@ -387,18 +390,21 @@ fn render_manipulation_preview(
             .rounded_md()
             .border_2()
             .border_dashed()
-            .border_color(border)
-            .bg(background.opacity(0.28))
+            .border_color(if conflict { cx.theme().warning } else { border })
+            .bg(if conflict {
+                cx.theme().warning.opacity(0.2)
+            } else {
+                background.opacity(0.28)
+            })
             .text_color(foreground)
             .px_2()
             .py_1()
             .overflow_hidden()
-            .child(
-                div()
-                    .text_xs()
-                    .font_medium()
-                    .child(manipulation.event.title().to_owned()),
-            )
+            .child(div().text_xs().font_medium().child(if conflict {
+                format!("Conflict: {}", manipulation.event.title())
+            } else {
+                manipulation.event.title().to_owned()
+            }))
             .child(div().text_xs().opacity(0.8).child(event_time))
             .into_any_element(),
     )
