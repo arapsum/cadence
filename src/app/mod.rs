@@ -1,4 +1,5 @@
 pub(super) mod actions;
+pub(super) mod appearance;
 pub(super) mod categories;
 pub(super) mod day;
 pub(super) mod editor;
@@ -35,6 +36,7 @@ pub fn run() {
     app.run(|cx: &mut App| {
         cx.set_app_identity("io.github.arapsum.Cadence", "Cadence");
         gpui_component::init(cx);
+        appearance::register_themes(cx);
         actions::bind(cx);
 
         let window_options = WindowOptions {

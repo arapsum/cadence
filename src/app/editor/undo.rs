@@ -159,7 +159,9 @@ impl CadenceView {
         self.settings = snapshot.settings.clone();
         self.notifications_enabled = snapshot.preferences.notifications_enabled;
         self.reduce_motion = snapshot.preferences.reduce_motion;
+        self.appearance = snapshot.preferences.appearance.clone();
         cx.set_reduce_motion(self.reduce_motion);
+        super::super::appearance::apply(&self.appearance, Some(window), cx);
         let filter = snapshot
             .preferences
             .category_filter

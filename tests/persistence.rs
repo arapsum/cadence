@@ -83,6 +83,13 @@ fn sqlite_round_trip_preserves_entities_and_preferences() {
             category_filter: Some(category_id),
             notifications_enabled: true,
             reduce_motion: true,
+            appearance: cadence::store::AppearancePreferences {
+                mode: cadence::store::AppearanceMode::Dark,
+                light_theme: "Default Light".to_owned(),
+                dark_theme: "Tokyonight Dark".to_owned(),
+                font_family: ".SystemUIFont".to_owned(),
+                font_size: 18,
+            },
         })
         .unwrap();
     drop(repository);
@@ -105,6 +112,10 @@ fn sqlite_round_trip_preserves_entities_and_preferences() {
         repository.preferences().unwrap().category_filter,
         Some(category_id)
     );
+    let appearance = repository.preferences().unwrap().appearance;
+    assert_eq!(appearance.mode, cadence::store::AppearanceMode::Dark);
+    assert_eq!(appearance.dark_theme, "Tokyonight Dark");
+    assert_eq!(appearance.font_size, 18);
 }
 
 #[test]
@@ -224,7 +235,7 @@ fn version_one_database_migrates_to_current_schema() {
         .unwrap()
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 4);
+    assert_eq!(version, 5);
 }
 
 #[test]
@@ -250,7 +261,7 @@ fn worker_exports_a_versioned_read_consistent_backup() {
 
     let backup = client.export_json().recv_blocking().unwrap().unwrap();
     let value: serde_json::Value = serde_json::from_str(&backup).unwrap();
-    assert_eq!(value["format_version"], 3);
+    assert_eq!(value["format_version"], 4);
     assert_eq!(value["data"]["events"].as_array().unwrap().len(), 0);
     assert_eq!(value["data"]["categories"].as_array().unwrap().len(), 6);
 
@@ -262,5 +273,5 @@ fn worker_exports_a_versioned_read_consistent_backup() {
         .unwrap();
     let written = fs::read_to_string(backup_path).unwrap();
     let written: serde_json::Value = serde_json::from_str(&written).unwrap();
-    assert_eq!(written["format_version"], 3);
+    assert_eq!(written["format_version"], 4);
 }

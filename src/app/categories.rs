@@ -1151,6 +1151,7 @@ mod tests {
                 category_filter: Some(source.id()),
                 notifications_enabled: false,
                 reduce_motion: false,
+                appearance: crate::store::AppearancePreferences::default(),
             },
             categories: vec![source.clone(), target.clone()],
             events: vec![event],

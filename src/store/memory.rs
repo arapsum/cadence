@@ -100,7 +100,7 @@ impl InMemoryRepository {
     /// - A category or event violates the repository contract.
     pub fn from_snapshot(snapshot: &PersistenceSnapshot) -> Result<Self, RepositoryError> {
         let mut repository = Self::new(snapshot.settings.clone());
-        repository.preferences = snapshot.preferences;
+        repository.preferences = snapshot.preferences.clone();
         for category in snapshot.categories.iter().cloned() {
             repository.create_category(category)?;
         }
@@ -307,7 +307,7 @@ impl TimetableRepository for InMemoryRepository {
     }
 
     fn preferences(&self) -> Result<AppPreferences, RepositoryError> {
-        Ok(self.preferences)
+        Ok(self.preferences.clone())
     }
 
     fn replace_preferences(&mut self, preferences: AppPreferences) -> Result<(), RepositoryError> {
@@ -325,7 +325,7 @@ impl TimetableRepository for InMemoryRepository {
         events.sort_by_key(Event::id);
         Ok(PersistenceSnapshot {
             settings: self.settings.clone(),
-            preferences: self.preferences,
+            preferences: self.preferences.clone(),
             categories,
             events,
             recurrence_series: self.recurrence_series()?,

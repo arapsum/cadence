@@ -13,7 +13,7 @@ pub use sqlite::{SqliteRepository, StorageError, data_directory, database_path};
 pub use worker::{StorageClient, StorageSnapshot};
 
 /// Preferences restored when Cadence starts.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct AppPreferences {
     /// Calendar surface selected at the previous shutdown.
     pub view_mode: CalendarViewModePreference,
@@ -25,6 +25,9 @@ pub struct AppPreferences {
     /// Whether non-essential interface animation is reduced.
     #[serde(default)]
     pub reduce_motion: bool,
+    /// Appearance and typography selected by the user.
+    #[serde(default)]
+    pub appearance: AppearancePreferences,
 }
 
 impl Default for AppPreferences {
@@ -34,8 +37,75 @@ impl Default for AppPreferences {
             category_filter: None,
             notifications_enabled: false,
             reduce_motion: false,
+            appearance: AppearancePreferences::default(),
         }
     }
+}
+
+/// Appearance mode selected for the Cadence window.
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AppearanceMode {
+    /// Follow the operating system appearance.
+    #[default]
+    System,
+    /// Always use the configured light theme.
+    Light,
+    /// Always use the configured dark theme.
+    Dark,
+}
+
+/// Persisted theme and typography preferences.
+#[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct AppearancePreferences {
+    /// Whether the active mode follows the system or is explicitly selected.
+    #[serde(default)]
+    pub mode: AppearanceMode,
+    /// Theme applied whenever the active mode is light.
+    #[serde(default = "default_light_theme")]
+    pub light_theme: String,
+    /// Theme applied whenever the active mode is dark.
+    #[serde(default = "default_dark_theme")]
+    pub dark_theme: String,
+    /// Installed font family used for application text.
+    #[serde(default = "default_font_family")]
+    pub font_family: String,
+    /// Base application font size in logical pixels.
+    #[serde(default = "default_font_size")]
+    pub font_size: u16,
+}
+
+impl AppearancePreferences {
+    /// Supported application font-size presets.
+    pub const FONT_SIZES: [u16; 3] = [14, 16, 18];
+}
+
+impl Default for AppearancePreferences {
+    fn default() -> Self {
+        Self {
+            mode: AppearanceMode::System,
+            light_theme: default_light_theme(),
+            dark_theme: default_dark_theme(),
+            font_family: default_font_family(),
+            font_size: default_font_size(),
+        }
+    }
+}
+
+fn default_light_theme() -> String {
+    "Default Light".to_owned()
+}
+
+fn default_dark_theme() -> String {
+    "Default Dark".to_owned()
+}
+
+fn default_font_family() -> String {
+    ".SystemUIFont".to_owned()
+}
+
+const fn default_font_size() -> u16 {
+    16
 }
 
 /// Serializable calendar view preference.

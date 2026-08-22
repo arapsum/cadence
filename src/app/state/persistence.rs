@@ -146,7 +146,7 @@ impl CadenceView {
         }));
     }
 
-    pub(in crate::app) const fn preferences(&self) -> AppPreferences {
+    pub(in crate::app) fn preferences(&self) -> AppPreferences {
         AppPreferences {
             view_mode: match self.state.view_mode() {
                 CalendarViewMode::Day => CalendarViewModePreference::Day,
@@ -158,6 +158,7 @@ impl CadenceView {
             },
             notifications_enabled: self.notifications_enabled,
             reduce_motion: self.reduce_motion,
+            appearance: self.appearance.clone(),
         }
     }
 
@@ -220,7 +221,9 @@ impl CadenceView {
                     self.settings = pending.rollback.settings.clone();
                     self.notifications_enabled = pending.rollback.preferences.notifications_enabled;
                     self.reduce_motion = pending.rollback.preferences.reduce_motion;
+                    self.appearance = pending.rollback.preferences.appearance.clone();
                     cx.set_reduce_motion(self.reduce_motion);
+                    super::super::appearance::apply(&self.appearance, None, cx);
                     self.repository = repository;
                     self.state.set_category_filter(
                         pending

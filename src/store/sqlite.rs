@@ -19,12 +19,12 @@ use crate::domain::{
 };
 
 use super::{
-    AppPreferences, CalendarViewModePreference, InMemoryRepository, PersistenceSnapshot,
-    TimetableRepository,
+    AppPreferences, AppearanceMode, AppearancePreferences, CalendarViewModePreference,
+    InMemoryRepository, PersistenceSnapshot, TimetableRepository,
 };
 
 /// Latest schema version understood by Cadence.
-pub const CURRENT_SCHEMA_VERSION: u32 = 4;
+pub const CURRENT_SCHEMA_VERSION: u32 = 5;
 
 /// Error raised while opening, migrating, validating, or using local storage.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -286,13 +286,35 @@ impl SqliteRepository {
         let row = self
             .connection
             .query_row(
-                "SELECT view_mode, category_filter_id, notifications_enabled, reduce_motion FROM app_preferences WHERE id = 1",
+                "SELECT view_mode, category_filter_id, notifications_enabled, reduce_motion, appearance_mode, light_theme, dark_theme, font_family, font_size FROM app_preferences WHERE id = 1",
                 [],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?, row.get::<_, i64>(2)?, row.get::<_, i64>(3)?)),
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, i64>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, String>(5)?,
+                        row.get::<_, String>(6)?,
+                        row.get::<_, String>(7)?,
+                        row.get::<_, i64>(8)?,
+                    ))
+                },
             )
             .optional()
             .map_err(sqlite_error)?;
-        let Some((view_mode, category_filter_id, notifications_enabled, reduce_motion)) = row
+        let Some((
+            view_mode,
+            category_filter_id,
+            notifications_enabled,
+            reduce_motion,
+            appearance_mode,
+            light_theme,
+            dark_theme,
+            font_family,
+            font_size,
+        )) = row
         else {
             return Ok(AppPreferences::default());
         };
@@ -311,11 +333,19 @@ impl SqliteRepository {
             .map_err(|error| {
                 StorageError::InvalidEntity(format!("invalid category filter: {error}"))
             })?;
+        let appearance = appearance_from_values(
+            &appearance_mode,
+            &light_theme,
+            &dark_theme,
+            &font_family,
+            font_size,
+        )?;
         Ok(AppPreferences {
             view_mode,
             category_filter,
             notifications_enabled: notifications_enabled != 0,
             reduce_motion: reduce_motion != 0,
+            appearance,
         })
     }
 
@@ -747,8 +777,20 @@ fn migrate(connection: &Connection) -> Result<(), StorageError> {
              ALTER TABLE app_preferences ADD COLUMN notifications_enabled INTEGER NOT NULL DEFAULT 0 CHECK (notifications_enabled IN (0, 1));
              ALTER TABLE app_preferences ADD COLUMN reduce_motion INTEGER NOT NULL DEFAULT 0 CHECK (reduce_motion IN (0, 1));",
         )
-        .map_err(|error| StorageError::Migration(error.to_string()))?;
+            .map_err(|error| StorageError::Migration(error.to_string()))?;
         tx.pragma_update(None, "user_version", 4_u32)
+            .map_err(|error| StorageError::Migration(error.to_string()))?;
+    }
+    if current < 5 {
+        tx.execute_batch(
+            "ALTER TABLE app_preferences ADD COLUMN appearance_mode TEXT NOT NULL DEFAULT 'system' CHECK (appearance_mode IN ('system', 'light', 'dark'));
+             ALTER TABLE app_preferences ADD COLUMN light_theme TEXT NOT NULL DEFAULT 'Default Light';
+             ALTER TABLE app_preferences ADD COLUMN dark_theme TEXT NOT NULL DEFAULT 'Default Dark';
+             ALTER TABLE app_preferences ADD COLUMN font_family TEXT NOT NULL DEFAULT '.SystemUIFont';
+             ALTER TABLE app_preferences ADD COLUMN font_size INTEGER NOT NULL DEFAULT 16 CHECK (font_size IN (14, 16, 18));",
+        )
+        .map_err(|error| StorageError::Migration(error.to_string()))?;
+        tx.pragma_update(None, "user_version", 5_u32)
             .map_err(|error| StorageError::Migration(error.to_string()))?;
     }
     tx.commit()
@@ -866,16 +908,59 @@ fn update_preferences(
     };
     connection
         .execute(
-            "UPDATE app_preferences SET view_mode = ?1, category_filter_id = ?2, notifications_enabled = ?3, reduce_motion = ?4 WHERE id = 1",
+            "UPDATE app_preferences SET view_mode = ?1, category_filter_id = ?2, notifications_enabled = ?3, reduce_motion = ?4, appearance_mode = ?5, light_theme = ?6, dark_theme = ?7, font_family = ?8, font_size = ?9 WHERE id = 1",
             params![
                 view_mode,
                 preferences.category_filter.map(|id| id.to_string()),
                 i64::from(preferences.notifications_enabled),
-                i64::from(preferences.reduce_motion)
+                i64::from(preferences.reduce_motion),
+                appearance_mode_name(preferences.appearance.mode),
+                preferences.appearance.light_theme,
+                preferences.appearance.dark_theme,
+                preferences.appearance.font_family,
+                i64::from(preferences.appearance.font_size),
             ],
         )
         .map(|_| ())
         .map_err(|error| StorageError::Sqlite(error.to_string()))
+}
+
+fn appearance_mode_name(mode: AppearanceMode) -> &'static str {
+    match mode {
+        AppearanceMode::System => "system",
+        AppearanceMode::Light => "light",
+        AppearanceMode::Dark => "dark",
+    }
+}
+
+fn appearance_from_values(
+    mode: &str,
+    light_theme: &str,
+    dark_theme: &str,
+    font_family: &str,
+    font_size: i64,
+) -> Result<AppearancePreferences, StorageError> {
+    let mode = match mode {
+        "system" => AppearanceMode::System,
+        "light" => AppearanceMode::Light,
+        "dark" => AppearanceMode::Dark,
+        value => {
+            return Err(StorageError::InvalidEntity(format!(
+                "unknown appearance mode '{value}'"
+            )));
+        }
+    };
+    let font_size = u16::try_from(font_size)
+        .ok()
+        .filter(|size| AppearancePreferences::FONT_SIZES.contains(size))
+        .ok_or_else(|| StorageError::InvalidEntity("unsupported font size".to_owned()))?;
+    Ok(AppearancePreferences {
+        mode,
+        light_theme: light_theme.to_owned(),
+        dark_theme: dark_theme.to_owned(),
+        font_family: font_family.to_owned(),
+        font_size,
+    })
 }
 
 fn settings_from_values(

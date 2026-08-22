@@ -1,7 +1,6 @@
 use gpui::{App, Context, IntoElement, SharedString, Window, div, prelude::*, px};
 use gpui_component::{
-    ActiveTheme as _, Disableable as _, Icon, IconName, Sizable as _, StyledExt as _, Theme,
-    ThemeMode,
+    ActiveTheme as _, Disableable as _, Icon, IconName, Sizable as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
     menu::{DropdownMenu as _, PopupMenu, PopupMenuItem},
     select::{Select, SelectItem},
@@ -9,7 +8,10 @@ use gpui_component::{
 };
 
 use crate::calendar::{CalendarViewMode, CategoryFilter};
-use crate::{domain::CategoryColor, store::TimetableRepository};
+use crate::{
+    domain::CategoryColor,
+    store::{AppearanceMode, TimetableRepository},
+};
 
 use super::{state::CadenceView, style::category_dot};
 
@@ -197,7 +199,7 @@ fn render_overflow_menu(
 ) -> impl IntoElement {
     let owner = cx.entity().downgrade();
     let interactive = view.is_interactive();
-    let is_dark = cx.theme().mode.is_dark();
+    let appearance_mode = view.appearance.mode;
     let selected_filter = view.state.category_filter();
     let filters = std::iter::once(FilterOption::all())
         .chain(
@@ -219,7 +221,7 @@ fn render_overflow_menu(
         .small()
         .icon(IconName::Ellipsis)
         .tooltip("More timetable actions")
-        .dropdown_menu(move |menu, _, _| {
+        .dropdown_menu(move |menu, window, cx| {
             let menu = add_navigation_items(
                 menu,
                 owner.clone(),
@@ -235,7 +237,14 @@ fn render_overflow_menu(
                 selected_filter,
                 &filters,
             );
-            add_secondary_items(menu, owner.clone(), interactive, is_dark)
+            add_secondary_items(
+                menu,
+                owner.clone(),
+                interactive,
+                appearance_mode,
+                window,
+                cx,
+            )
         })
 }
 
@@ -325,12 +334,16 @@ fn add_secondary_items(
     menu: PopupMenu,
     owner: gpui::WeakEntity<CadenceView>,
     interactive: bool,
-    is_dark: bool,
+    appearance_mode: AppearanceMode,
+    window: &mut Window,
+    cx: &mut gpui::Context<PopupMenu>,
 ) -> PopupMenu {
     let agenda_owner = owner.clone();
     let export_owner = owner.clone();
+    let appearance_owner = owner.clone();
     let settings_owner = owner;
-    menu.separator()
+    let menu = menu
+        .separator()
         .item(
             PopupMenuItem::new("Agenda")
                 .icon(IconName::Calendar)
@@ -359,31 +372,43 @@ fn add_secondary_items(
                         .update(cx, |view, cx| view.open_settings(window, cx))
                         .ok();
                 }),
+        );
+    menu.submenu_with_icon(
+        Some(Icon::new(IconName::Palette)),
+        "Appearance",
+        window,
+        cx,
+        move |menu, _, _| {
+            add_appearance_items(menu, appearance_owner.clone(), interactive, appearance_mode)
+        },
+    )
+}
+
+fn add_appearance_items(
+    menu: PopupMenu,
+    owner: gpui::WeakEntity<CadenceView>,
+    interactive: bool,
+    selected: AppearanceMode,
+) -> PopupMenu {
+    [
+        (AppearanceMode::System, "System"),
+        (AppearanceMode::Light, "Light"),
+        (AppearanceMode::Dark, "Dark"),
+    ]
+    .into_iter()
+    .fold(menu, |menu, (mode, label)| {
+        let mode_owner = owner.clone();
+        menu.item(
+            PopupMenuItem::new(label)
+                .checked(mode == selected)
+                .disabled(!interactive)
+                .on_click(move |_, _, cx| {
+                    mode_owner
+                        .update(cx, |view, cx| view.set_appearance_mode(mode, cx))
+                        .ok();
+                }),
         )
-        .separator()
-        .item(
-            PopupMenuItem::new(if is_dark {
-                "Use light theme"
-            } else {
-                "Use dark theme"
-            })
-            .icon(if is_dark {
-                IconName::Sun
-            } else {
-                IconName::Moon
-            })
-            .on_click(|_, window, cx| {
-                Theme::change(
-                    if cx.theme().mode.is_dark() {
-                        ThemeMode::Light
-                    } else {
-                        ThemeMode::Dark
-                    },
-                    Some(window),
-                    cx,
-                );
-            }),
-        )
+    })
 }
 
 fn render_navigation(

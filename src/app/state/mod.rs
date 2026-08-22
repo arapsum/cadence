@@ -16,7 +16,7 @@ use jiff::Timestamp;
 use crate::{
     calendar::CalendarState,
     domain::Settings,
-    store::{InMemoryRepository, StorageClient},
+    store::{AppearancePreferences, InMemoryRepository, StorageClient},
 };
 
 use super::{
@@ -53,6 +53,7 @@ pub(super) struct CadenceView {
     pub(super) last_category: Option<crate::domain::CategoryId>,
     pub(super) notifications_enabled: bool,
     pub(super) reduce_motion: bool,
+    pub(super) appearance: AppearancePreferences,
     pub(super) delivered_reminders: HashSet<String>,
     pub(super) subscriptions: Vec<Subscription>,
 }

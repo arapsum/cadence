@@ -67,6 +67,13 @@ fn event_entry_points_render_their_dialogs(cx: &mut TestAppContext) {
     assert!(cx.debug_bounds("event-editor-form").is_some());
 
     cx.update(gpui_component::WindowExt::close_all_dialogs);
+    calendar.update_in(cx, |view, window, app| {
+        view.open_settings(window, app);
+    });
+    cx.update(|window, app| window.draw(app).clear(app));
+    assert!(cx.update(gpui_component::WindowExt::has_active_dialog));
+    cx.update(gpui_component::WindowExt::close_all_dialogs);
+
     let (event_id, event_date) = calendar.read_with(cx, |view, _| {
         let event = view
             .snapshot

@@ -12,8 +12,8 @@ use crate::{
     domain::DateRange,
     domain::Settings,
     store::{
-        CalendarViewModePreference, InMemoryRepository, StorageClient, StorageError,
-        TimetableRepository, database_path, default_categories,
+        AppearancePreferences, CalendarViewModePreference, InMemoryRepository, StorageClient,
+        StorageError, TimetableRepository, database_path, default_categories,
     },
 };
 
@@ -83,11 +83,20 @@ impl CadenceView {
             last_category: None,
             notifications_enabled: false,
             reduce_motion: false,
+            appearance: AppearancePreferences::default(),
             delivered_reminders: HashSet::new(),
             subscriptions: Vec::new(),
         };
 
         this.subscribe_category_filter(cx);
+        super::super::appearance::apply(&this.appearance, Some(window), cx);
+        this.subscriptions
+            .push(cx.observe_window_appearance(window, |view, window, cx| {
+                if matches!(view.appearance.mode, crate::store::AppearanceMode::System) {
+                    super::super::appearance::apply(&view.appearance, Some(window), cx);
+                    cx.notify();
+                }
+            }));
 
         #[cfg(not(test))]
         {
@@ -232,7 +241,10 @@ impl CadenceView {
                 self.settings = snapshot.settings.clone();
                 self.notifications_enabled = snapshot.preferences.notifications_enabled;
                 self.reduce_motion = snapshot.preferences.reduce_motion;
+                self.appearance =
+                    super::super::appearance::normalize(&snapshot.preferences.appearance, cx);
                 cx.set_reduce_motion(self.reduce_motion);
+                super::super::appearance::apply(&self.appearance, Some(window), cx);
                 self.repository = repository;
                 let (today, _) = local_date_time(self.now, &self.settings);
                 self.state = CalendarState::new(

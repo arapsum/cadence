@@ -10,6 +10,7 @@ use gpui_component::{
 use crate::{domain::format_time, store::TimetableRepository};
 
 use super::{
+    appearance::AppearanceControls,
     categories::CategoryManager,
     history::{CalendarChange, ChangeKind},
     state::{CadenceView, HistoryEffect},
@@ -114,6 +115,8 @@ impl CadenceView {
         let owner = cx.entity().downgrade();
         let view = cx.entity();
         let category_manager = cx.new(|cx| CategoryManager::new(view, cx));
+        let appearance_controls = cx
+            .new(|cx| AppearanceControls::new(owner.clone(), self.appearance.clone(), window, cx));
         window.open_dialog(cx, move |dialog, dialog_window, _| {
             let viewport = dialog_window.viewport_size();
             let padding = window_paddings(dialog_window);
@@ -126,11 +129,17 @@ impl CadenceView {
             let general_page = general_settings_page(&owner, week_start.clone(), clock_format);
             let notifications_page = notifications_settings_page(&owner);
             let categories_page = categories_settings_page(category_manager.clone());
+            let appearance_page = appearance_settings_page(appearance_controls.clone());
 
             let settings = Settings::new("cadence-settings")
                 .sidebar_width(px(190.0))
                 .with_group_variant(GroupBoxVariant::Outline)
-                .pages([general_page, notifications_page, categories_page]);
+                .pages([
+                    general_page,
+                    appearance_page,
+                    notifications_page,
+                    categories_page,
+                ]);
 
             dialog
                 .margin_top(margin_top)
@@ -165,6 +174,59 @@ impl CadenceView {
         };
         self.reduce_motion = enabled;
         cx.set_reduce_motion(enabled);
+        let _ = self.repository.replace_preferences(self.preferences());
+        self.persist_snapshot(before, self.rollback_view_state(), HistoryEffect::None, cx);
+        cx.notify();
+    }
+
+    pub(in crate::app) fn set_appearance_mode(
+        &mut self,
+        mode: crate::store::AppearanceMode,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.update_appearance(|appearance| appearance.mode = mode, cx);
+    }
+
+    pub(in crate::app) fn set_light_theme(&mut self, theme: String, cx: &mut Context<'_, Self>) {
+        self.update_appearance(|appearance| appearance.light_theme = theme, cx);
+    }
+
+    pub(in crate::app) fn set_dark_theme(&mut self, theme: String, cx: &mut Context<'_, Self>) {
+        self.update_appearance(|appearance| appearance.dark_theme = theme, cx);
+    }
+
+    pub(in crate::app) fn set_font_family(&mut self, family: String, cx: &mut Context<'_, Self>) {
+        self.update_appearance(|appearance| appearance.font_family = family, cx);
+    }
+
+    pub(in crate::app) fn set_font_size(&mut self, size: u16, cx: &mut Context<'_, Self>) {
+        if !crate::store::AppearancePreferences::FONT_SIZES.contains(&size) {
+            return;
+        }
+        self.update_appearance(|appearance| appearance.font_size = size, cx);
+    }
+
+    pub(in crate::app) fn reset_appearance(&mut self, cx: &mut Context<'_, Self>) {
+        self.update_appearance(
+            |appearance| *appearance = crate::store::AppearancePreferences::default(),
+            cx,
+        );
+    }
+
+    fn update_appearance(
+        &mut self,
+        update: impl FnOnce(&mut crate::store::AppearancePreferences),
+        cx: &mut Context<'_, Self>,
+    ) {
+        if !self.is_interactive() {
+            return;
+        }
+        let Ok(before) = self.repository.snapshot() else {
+            return;
+        };
+        self.appearance = super::appearance::normalize(&self.appearance, cx);
+        update(&mut self.appearance);
+        super::appearance::apply(&self.appearance, None, cx);
         let _ = self.repository.replace_preferences(self.preferences());
         self.persist_snapshot(before, self.rollback_view_state(), HistoryEffect::None, cx);
         cx.notify();
@@ -356,6 +418,18 @@ fn categories_settings_page(manager: gpui::Entity<CategoryManager>) -> SettingPa
         .group(
             SettingGroup::new()
                 .title("Calendar categories")
+                .item(SettingItem::render(move |_, _, _| manager.clone())),
+        )
+}
+
+fn appearance_settings_page(manager: gpui::Entity<AppearanceControls>) -> SettingPage {
+    SettingPage::new("Appearance")
+        .icon(Icon::new(IconName::Palette))
+        .resettable(false)
+        .description("Choose the theme, appearance mode, and application typography.")
+        .group(
+            SettingGroup::new()
+                .title("Theme and typography")
                 .item(SettingItem::render(move |_, _, _| manager.clone())),
         )
 }
