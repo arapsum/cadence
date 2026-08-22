@@ -1,7 +1,10 @@
+use std::sync::{Arc, LazyLock};
+
 use gpui::{
-    AnyElement, App, Context, Decorations, InteractiveElement as _, IntoElement, MouseButton,
-    ParentElement as _, Render, RenderOnce, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Window, WindowControlArea, div, hsla, prelude::FluentBuilder as _, px,
+    AnyElement, App, Context, Decorations, Image, ImageFormat, InteractiveElement as _,
+    IntoElement, MouseButton, ParentElement as _, Render, RenderOnce, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window, WindowControlArea, div, img,
+    prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, InteractiveElementExt as _, Sizable as _, StyledExt as _,
@@ -9,6 +12,14 @@ use gpui_component::{
 };
 
 const TITLE_BAR_HEIGHT: gpui::Pixels = px(60.);
+const CADENCE_ICON_SVG: &[u8] = include_bytes!("../../assets/cadence-icon.svg");
+
+static CADENCE_ICON: LazyLock<Arc<Image>> = LazyLock::new(|| {
+    Arc::new(Image::from_bytes(
+        ImageFormat::Svg,
+        CADENCE_ICON_SVG.to_vec(),
+    ))
+});
 
 /// Cadence's custom title bar and native-style window controls.
 #[derive(IntoElement)]
@@ -242,12 +253,6 @@ impl RenderOnce for CadenceTitleBar {
         let supports_maximize = window.window_controls().maximize && window.is_resizable();
         let supports_window_menu = window.window_controls().window_menu;
         let has_controls = self.controls.is_some();
-        let brand_color = if cx.theme().mode.is_dark() {
-            hsla(0.91, 0.34, 0.76, 1.0)
-        } else {
-            hsla(0.91, 0.42, 0.25, 1.0)
-        };
-
         div()
             .id("cadence-title-bar")
             .flex()
@@ -311,12 +316,7 @@ impl RenderOnce for CadenceTitleBar {
                             .items_center()
                             .justify_center()
                             .size(px(28.0))
-                            .rounded_md()
-                            .border_1()
-                            .border_color(brand_color.opacity(0.32))
-                            .bg(brand_color.opacity(0.1))
-                            .text_color(brand_color)
-                            .child(Icon::new(IconName::Calendar).small()),
+                            .child(img(CADENCE_ICON.clone()).size(px(28.0))),
                     )
                     .child(self.title)
                     .when_some(self.leading, |this, leading| {

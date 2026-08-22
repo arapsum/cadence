@@ -1,0 +1,76 @@
+<svg
+  width="64"
+  height="64"
+  viewBox="0 0 64 64"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <title>Cadence app icon</title>
+
+  <!-- Background -->
+  <rect
+    x="1.5"
+    y="1.5"
+    width="61"
+    height="61"
+    rx="12"
+    fill="#33103A"
+  />
+
+  <!-- Timeline -->
+  <rect
+    x="11"
+    y="10"
+    width="2"
+    height="44"
+    rx="1"
+    fill="#F7F3F8"
+  />
+
+  <!-- Current time indicator -->
+  <circle
+    cx="12"
+    cy="32"
+    r="4.2"
+    fill="#48C22E"
+    stroke="#F7F3F8"
+    stroke-width="1.8"
+  />
+
+  <!-- Schedule blocks -->
+  <rect
+    x="18"
+    y="12"
+    width="28"
+    height="7"
+    rx="2.4"
+    fill="#B47AF3"
+  />
+
+  <rect
+    x="18"
+    y="22.5"
+    width="9"
+    height="4.8"
+    rx="1.8"
+    fill="#F5C326"
+  />
+
+  <rect
+    x="18"
+    y="31"
+    width="32"
+    height="7.5"
+    rx="2.6"
+    fill="#40C4D8"
+  />
+
+  <rect
+    x="18"
+    y="44"
+    width="26.5"
+    height="7.2"
+    rx="2.6"
+    fill="#A7D93D"
+  />
+</svg>

@@ -62,7 +62,7 @@ impl Render for CadenceView {
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
             .child(
-                CadenceTitleBar::new("Timetable")
+                CadenceTitleBar::new("Cadence")
                     .leading(toolbar::render_titlebar_history(self, cx))
                     .controls(toolbar::render_titlebar_actions(self, window, cx)),
             )
