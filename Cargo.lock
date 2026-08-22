@@ -823,20 +823,39 @@ dependencies = [
 ]
 
 [[package]]
-name = "cadence"
+name = "cadence-core"
 version = "0.1.0"
 dependencies = [
  "async-channel",
  "chrono",
- "gpui",
- "gpui-component",
- "gpui-component-assets",
- "gpui_platform",
  "jiff",
  "rusqlite",
  "serde",
  "serde_json",
  "tempfile",
+ "uuid",
+]
+
+[[package]]
+name = "cadence-desktop"
+version = "0.1.0"
+dependencies = [
+ "cadence-ui",
+ "gpui",
+ "gpui-component",
+ "gpui-component-assets",
+ "gpui_platform",
+]
+
+[[package]]
+name = "cadence-ui"
+version = "0.1.0"
+dependencies = [
+ "cadence-core",
+ "gpui",
+ "gpui-component",
+ "jiff",
+ "serde_json",
  "uuid",
 ]
 

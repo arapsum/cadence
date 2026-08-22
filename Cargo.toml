@@ -1,17 +1,18 @@
-[package]
-name = "cadence"
+[workspace]
+resolver = "2"
+members = ["crates/core", "crates/ui", "crates/desktop"]
+default-members = ["crates/desktop"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.97.1"
 
-[[bin]]
-name = "cadence"
-path = "src/bin/main.rs"
-
-[lib]
-name = "cadence"
-path = "src/lib.rs"
-
-[dependencies]
+[workspace.dependencies]
+cadence-core = { path = "crates/core" }
+cadence-ui = { path = "crates/ui" }
+# Keep the source identity aligned with gpui-component's Zed dependency; the
+# committed lockfile pins both packages to the exact GPUI revision.
 gpui = { git = "https://github.com/zed-industries/zed" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = [
   "font-kit",
@@ -26,7 +27,3 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.145"
 async-channel = "2.5.0"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
-
-[dev-dependencies]
-gpui = { git = "https://github.com/zed-industries/zed", features = ["test-support"] }
-tempfile = "3.23.0"
