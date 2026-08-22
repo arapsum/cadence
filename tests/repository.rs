@@ -70,6 +70,7 @@ fn day_and_week_queries_share_the_same_events() {
 #[test]
 fn repository_preserves_boundaries_and_referential_integrity() {
     let mut repository = InMemoryRepository::with_defaults();
+    repository.create_category(category(9, "Fallback")).unwrap();
     let category = category(10, "Reading");
     let category_id = category.id();
     repository.create_category(category.clone()).unwrap();
@@ -85,6 +86,82 @@ fn repository_preserves_boundaries_and_referential_integrity() {
         event
     );
     assert_eq!(repository.delete_category(category_id).unwrap(), category);
+}
+
+#[test]
+fn categories_require_unique_names_and_keep_one_category() {
+    let mut repository = InMemoryRepository::with_defaults();
+    let first = category(600, "Focus");
+    let second = category(601, "Career");
+    repository.create_category(first.clone()).unwrap();
+    repository.create_category(second.clone()).unwrap();
+
+    let duplicate = Category::new(
+        CategoryId::from_uuid(Uuid::from_u128(602)),
+        "  focus  ",
+        CategoryColor::Blue,
+        true,
+    )
+    .unwrap();
+    assert!(matches!(
+        repository.create_category(duplicate),
+        Err(cadence::domain::RepositoryError::DuplicateCategoryName)
+    ));
+
+    let mut renamed = second.clone();
+    renamed.revise("FOCUS", CategoryColor::Cyan, true).unwrap();
+    assert!(matches!(
+        repository.update_category(renamed),
+        Err(cadence::domain::RepositoryError::DuplicateCategoryName)
+    ));
+
+    repository.delete_category(first.id()).unwrap();
+    assert!(matches!(
+        repository.delete_category(second.id()),
+        Err(cadence::domain::RepositoryError::LastCategory)
+    ));
+}
+
+#[test]
+fn category_deletion_checks_modified_recurrence_exceptions() {
+    let mut repository = InMemoryRepository::with_defaults();
+    let source = category(610, "Source");
+    let target = category(611, "Target");
+    repository.create_category(source.clone()).unwrap();
+    repository.create_category(target.clone()).unwrap();
+    let start = date(2026, 8, 17);
+    let series = RecurrenceSeries::new(
+        RecurrenceSeriesId::from_uuid(Uuid::from_u128(612)),
+        EventDraft::new("Series", start, time(8, 0), time(9, 0), target.id(), None),
+        RecurrenceRule::Daily,
+        None,
+        Timestamp::from_second(0).unwrap(),
+    )
+    .unwrap();
+    repository.create_series(series.clone()).unwrap();
+    repository
+        .upsert_exception(
+            RecurrenceException::modified(
+                series.id(),
+                start,
+                EventDraft::new(
+                    "One-off",
+                    start,
+                    time(10, 0),
+                    time(11, 0),
+                    source.id(),
+                    None,
+                ),
+                Timestamp::from_second(1).unwrap(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+    assert!(matches!(
+        repository.delete_category(source.id()),
+        Err(cadence::domain::RepositoryError::CategoryInUse)
+    ));
 }
 
 #[test]

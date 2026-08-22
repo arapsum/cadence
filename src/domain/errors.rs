@@ -97,8 +97,10 @@ pub enum RepositoryError {
     DuplicateSeries,
     SeriesNotFound,
     DuplicateCategory,
+    DuplicateCategoryName,
     CategoryNotFound,
     CategoryInUse,
+    LastCategory,
     InvalidEntity(String),
     Storage(String),
 }
@@ -111,8 +113,10 @@ impl fmt::Display for RepositoryError {
             Self::DuplicateSeries => f.write_str("a recurring series with this ID already exists."),
             Self::SeriesNotFound => f.write_str("the recurring series could not be found."),
             Self::DuplicateCategory => f.write_str("a category with this ID already exists."),
+            Self::DuplicateCategoryName => f.write_str("a category with this name already exists."),
             Self::CategoryNotFound => f.write_str("the category could not be found."),
-            Self::CategoryInUse => f.write_str("the category is still used by an event."),
+            Self::CategoryInUse => f.write_str("the category is still used by scheduled items."),
+            Self::LastCategory => f.write_str("keep at least one category."),
             Self::InvalidEntity(message) | Self::Storage(message) => f.write_str(message),
         }
     }

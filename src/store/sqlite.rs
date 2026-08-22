@@ -14,11 +14,14 @@ use uuid::Uuid;
 
 use crate::domain::{
     Category, CategoryColor, CategoryId, ClockFormat, DateRange, Event, EventDraft, EventId,
-    RecurrenceException, RecurrenceSeries, RecurrenceSeriesId, ReminderOffset, RepositoryError,
-    Settings, SnapInterval, TimeZoneId, WeekStart,
+    RecurrenceException, RecurrenceExceptionKind, RecurrenceSeries, RecurrenceSeriesId,
+    ReminderOffset, RepositoryError, Settings, SnapInterval, TimeZoneId, WeekStart,
 };
 
-use super::{AppPreferences, CalendarViewModePreference, PersistenceSnapshot, TimetableRepository};
+use super::{
+    AppPreferences, CalendarViewModePreference, InMemoryRepository, PersistenceSnapshot,
+    TimetableRepository,
+};
 
 /// Latest schema version understood by Cadence.
 pub const CURRENT_SCHEMA_VERSION: u32 = 4;
@@ -183,6 +186,16 @@ impl SqliteRepository {
         &self.path
     }
 
+    fn ensure_unique_category_name(&self, category: &Category) -> Result<(), RepositoryError> {
+        if self.categories()?.iter().any(|existing| {
+            existing.id() != category.id()
+                && existing.name().to_lowercase() == category.name().to_lowercase()
+        }) {
+            return Err(RepositoryError::DuplicateCategoryName);
+        }
+        Ok(())
+    }
+
     /// Reads all persisted entities in a deterministic order.
     ///
     /// # Returns
@@ -228,6 +241,8 @@ impl SqliteRepository {
     /// - A snapshot entity is invalid or violates a foreign key.
     /// - The transaction cannot commit.
     pub fn replace_snapshot(&mut self, snapshot: &PersistenceSnapshot) -> Result<(), StorageError> {
+        InMemoryRepository::from_snapshot(snapshot)
+            .map_err(|error| StorageError::InvalidEntity(error.to_string()))?;
         let tx = self.connection.transaction().map_err(sqlite_error)?;
         tx.execute("DELETE FROM recurrence_exceptions", [])
             .map_err(sqlite_error)?;
@@ -479,6 +494,11 @@ impl TimetableRepository for SqliteRepository {
         let Some(_series) = self.series(exception.series_id())? else {
             return Err(RepositoryError::SeriesNotFound);
         };
+        if let RecurrenceExceptionKind::Modified(draft) = exception.kind()
+            && self.category(draft.category_id)?.is_none()
+        {
+            return Err(RepositoryError::CategoryNotFound);
+        }
         self.connection
             .execute(
                 "INSERT INTO recurrence_exceptions (series_id, original_date, data) VALUES (?1, ?2, ?3) ON CONFLICT(series_id, original_date) DO UPDATE SET data = excluded.data",
@@ -568,12 +588,14 @@ impl TimetableRepository for SqliteRepository {
     }
 
     fn create_category(&mut self, category: Category) -> Result<(), RepositoryError> {
+        self.ensure_unique_category_name(&category)?;
         let tx = self.connection.transaction().map_err(sqlite_error)?;
         insert_category(&tx, &category).map_err(map_repository_error)?;
         tx.commit().map_err(sqlite_error).map_err(Into::into)
     }
 
     fn update_category(&mut self, category: Category) -> Result<(), RepositoryError> {
+        self.ensure_unique_category_name(&category)?;
         let tx = self.connection.transaction().map_err(sqlite_error)?;
         let changed = tx
             .execute(
@@ -593,9 +615,25 @@ impl TimetableRepository for SqliteRepository {
     }
 
     fn delete_category(&mut self, id: CategoryId) -> Result<Category, RepositoryError> {
-        let Some(category) = self.category(id)? else {
+        let categories = self.categories()?;
+        let Some(category) = categories
+            .iter()
+            .find(|category| category.id() == id)
+            .cloned()
+        else {
             return Err(RepositoryError::CategoryNotFound);
         };
+        if categories.len() == 1 {
+            return Err(RepositoryError::LastCategory);
+        }
+        if self.recurrence_exceptions()?.iter().any(|exception| {
+            matches!(
+                exception.kind(),
+                RecurrenceExceptionKind::Modified(draft) if draft.category_id == id
+            )
+        }) {
+            return Err(RepositoryError::CategoryInUse);
+        }
         let tx = self.connection.transaction().map_err(sqlite_error)?;
         match tx.execute("DELETE FROM categories WHERE id = ?1", [id.to_string()]) {
             Ok(_) => tx
@@ -1001,6 +1039,12 @@ fn parse_color(value: &str) -> Result<CategoryColor, StorageError> {
         "violet" => Ok(CategoryColor::Violet),
         "cyan" => Ok(CategoryColor::Cyan),
         "blue" => Ok(CategoryColor::Blue),
+        "orange" => Ok(CategoryColor::Orange),
+        "rose" => Ok(CategoryColor::Rose),
+        "magenta" => Ok(CategoryColor::Magenta),
+        "indigo" => Ok(CategoryColor::Indigo),
+        "teal" => Ok(CategoryColor::Teal),
+        "slate" => Ok(CategoryColor::Slate),
         value => Err(StorageError::InvalidEntity(format!(
             "unknown category color '{value}'"
         ))),
@@ -1015,6 +1059,12 @@ const fn color_name(color: CategoryColor) -> &'static str {
         CategoryColor::Violet => "violet",
         CategoryColor::Cyan => "cyan",
         CategoryColor::Blue => "blue",
+        CategoryColor::Orange => "orange",
+        CategoryColor::Rose => "rose",
+        CategoryColor::Magenta => "magenta",
+        CategoryColor::Indigo => "indigo",
+        CategoryColor::Teal => "teal",
+        CategoryColor::Slate => "slate",
     }
 }
 

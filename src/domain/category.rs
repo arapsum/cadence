@@ -80,6 +80,53 @@ pub enum CategoryColor {
     Violet,
     Cyan,
     Blue,
+    Orange,
+    Rose,
+    Magenta,
+    Indigo,
+    Teal,
+    Slate,
+}
+
+impl CategoryColor {
+    /// All curated category colors in the order used by the color picker.
+    pub const ALL: [Self; 12] = [
+        Self::Lime,
+        Self::Yellow,
+        Self::Coral,
+        Self::Violet,
+        Self::Cyan,
+        Self::Blue,
+        Self::Orange,
+        Self::Rose,
+        Self::Magenta,
+        Self::Indigo,
+        Self::Teal,
+        Self::Slate,
+    ];
+
+    /// Returns the accessible display label for this color.
+    ///
+    /// # Returns
+    ///
+    /// A concise label suitable for controls and assistive technology.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Lime => "Lime",
+            Self::Yellow => "Yellow",
+            Self::Coral => "Coral",
+            Self::Violet => "Violet",
+            Self::Cyan => "Cyan",
+            Self::Blue => "Blue",
+            Self::Orange => "Orange",
+            Self::Rose => "Rose",
+            Self::Magenta => "Magenta",
+            Self::Indigo => "Indigo",
+            Self::Teal => "Teal",
+            Self::Slate => "Slate",
+        }
+    }
 }
 
 /// A named category used to organize timetable events.
@@ -167,5 +214,34 @@ impl Category {
     /// - `is_visible`: New visibility state.
     pub const fn set_visible(&mut self, is_visible: bool) {
         self.is_visible = is_visible;
+    }
+
+    /// Revises the category's editable values.
+    ///
+    /// # Parameters
+    ///
+    /// - `name`: Replacement user-facing category name.
+    /// - `color_token`: Replacement semantic color token.
+    /// - `is_visible`: Replacement calendar visibility state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when:
+    ///
+    /// - `name` is empty after trimming.
+    pub fn revise(
+        &mut self,
+        name: impl Into<String>,
+        color_token: CategoryColor,
+        is_visible: bool,
+    ) -> Result<(), ValidationError> {
+        let name = name.into().trim().to_owned();
+        if name.is_empty() {
+            return Err(ValidationError::EmptyCategoryName);
+        }
+        self.name = name;
+        self.color_token = color_token;
+        self.is_visible = is_visible;
+        Ok(())
     }
 }

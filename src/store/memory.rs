@@ -8,8 +8,8 @@ use uuid::Uuid;
 
 use crate::domain::{
     Category, CategoryColor, CategoryId, DateRange, Event, EventDraft, EventId,
-    RecurrenceException, RecurrenceSeries, RecurrenceSeriesId, RepositoryError, Settings,
-    WeekStart,
+    RecurrenceException, RecurrenceExceptionKind, RecurrenceSeries, RecurrenceSeriesId,
+    RepositoryError, Settings, WeekStart,
 };
 
 use super::{AppPreferences, PersistenceSnapshot, TimetableRepository};
@@ -74,6 +74,13 @@ impl InMemoryRepository {
             && self.recurrence_series.is_empty()
             && self.recurrence_exceptions.is_empty()
             && self.categories.is_empty()
+    }
+
+    fn category_name_in_use(&self, category: &Category) -> bool {
+        self.categories.values().any(|existing| {
+            existing.id() != category.id()
+                && existing.name().to_lowercase() == category.name().to_lowercase()
+        })
     }
 
     /// Rebuilds an in-memory cache from a persisted snapshot.
@@ -188,6 +195,9 @@ impl TimetableRepository for InMemoryRepository {
         if !self.recurrence_series.contains_key(&exception.series_id()) {
             return Err(RepositoryError::SeriesNotFound);
         }
+        if let RecurrenceExceptionKind::Modified(draft) = exception.kind() {
+            self.ensure_category(draft.category_id)?;
+        }
         self.recurrence_exceptions.insert(
             (exception.series_id(), exception.original_date()),
             exception,
@@ -231,7 +241,7 @@ impl TimetableRepository for InMemoryRepository {
 
     fn categories(&self) -> Result<Vec<Category>, RepositoryError> {
         let mut categories = self.categories.values().cloned().collect::<Vec<_>>();
-        categories.sort_by_key(|category| (category.name().to_ascii_lowercase(), category.id()));
+        categories.sort_by_key(|category| (category.name().to_lowercase(), category.id()));
         Ok(categories)
     }
 
@@ -243,6 +253,9 @@ impl TimetableRepository for InMemoryRepository {
         if self.categories.contains_key(&category.id()) {
             return Err(RepositoryError::DuplicateCategory);
         }
+        if self.category_name_in_use(&category) {
+            return Err(RepositoryError::DuplicateCategoryName);
+        }
         self.categories.insert(category.id(), category);
         Ok(())
     }
@@ -251,16 +264,31 @@ impl TimetableRepository for InMemoryRepository {
         if !self.categories.contains_key(&category.id()) {
             return Err(RepositoryError::CategoryNotFound);
         }
+        if self.category_name_in_use(&category) {
+            return Err(RepositoryError::DuplicateCategoryName);
+        }
         self.categories.insert(category.id(), category);
         Ok(())
     }
 
     fn delete_category(&mut self, id: CategoryId) -> Result<Category, RepositoryError> {
+        if !self.categories.contains_key(&id) {
+            return Err(RepositoryError::CategoryNotFound);
+        }
+        if self.categories.len() == 1 {
+            return Err(RepositoryError::LastCategory);
+        }
         if self.events.values().any(|event| event.category_id() == id)
             || self
                 .recurrence_series
                 .values()
                 .any(|series| series.template().category_id == id)
+            || self.recurrence_exceptions.values().any(|exception| {
+                matches!(
+                    exception.kind(),
+                    RecurrenceExceptionKind::Modified(draft) if draft.category_id == id
+                )
+            })
         {
             return Err(RepositoryError::CategoryInUse);
         }

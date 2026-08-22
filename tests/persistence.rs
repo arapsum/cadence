@@ -30,7 +30,7 @@ const fn time(hour: i8, minute: i8) -> Time {
 fn category(id: u128) -> Category {
     Category::new(
         CategoryId::from_uuid(Uuid::from_u128(id)),
-        "Focus",
+        "Persisted focus",
         CategoryColor::Violet,
         true,
     )
@@ -105,6 +105,40 @@ fn sqlite_round_trip_preserves_entities_and_preferences() {
         repository.preferences().unwrap().category_filter,
         Some(category_id)
     );
+}
+
+#[test]
+fn sqlite_round_trip_preserves_the_expanded_category_palette() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("cadence.sqlite3");
+    let mut repository = SqliteRepository::open(&path).unwrap();
+    for (index, color) in CategoryColor::ALL.into_iter().enumerate() {
+        repository
+            .create_category(
+                Category::new(
+                    CategoryId::from_uuid(Uuid::from_u128(700 + index as u128)),
+                    format!("Category {index}"),
+                    color,
+                    true,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+    }
+    drop(repository);
+
+    let repository = SqliteRepository::open(path).unwrap();
+    let colors = repository
+        .categories()
+        .unwrap()
+        .into_iter()
+        .filter(|category| category.name().starts_with("Category"))
+        .map(|category| category.color_token())
+        .collect::<Vec<_>>();
+    assert_eq!(colors.len(), CategoryColor::ALL.len());
+    for color in CategoryColor::ALL {
+        assert!(colors.contains(&color));
+    }
 }
 
 #[test]
