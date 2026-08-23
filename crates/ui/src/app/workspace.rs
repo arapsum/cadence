@@ -42,14 +42,14 @@ pub(super) fn render(
         ResizablePanelGroup::new("calendar-workspace-panels")
             .child(
                 resizable_panel()
-                    .size(px(400.0))
-                    .size_range(px(360.0)..px(720.0))
+                    .size(px(360.0))
+                    .size_range(px(360.0)..px(360.0))
                     .pr(px(6.0))
                     .child(render_panel(view, window, CalendarViewMode::Day, cx)),
             )
             .child(
                 resizable_panel()
-                    .size_range(px(560.0)..gpui::Pixels::MAX)
+                    .size_range(px(600.0)..gpui::Pixels::MAX)
                     .pl(px(6.0))
                     .child(render_panel(view, window, CalendarViewMode::Week, cx)),
             )
