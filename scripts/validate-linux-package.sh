@@ -34,6 +34,17 @@ dpkg-deb --info "$package" >/dev/null
 dpkg-deb --contents "$package" > "$metadata_dir/contents"
 dpkg-deb --extract "$package" "$extracted_dir"
 
+declared_dependencies=$(dpkg-deb --field "$package" Depends)
+for expected_dependency in libxkbcommon0 libxkbcommon-x11-0; do
+    if ! printf '%s\n' "$declared_dependencies" \
+        | tr ',' '\n' \
+        | grep -Eq "^[[:space:]]*${expected_dependency}([[:space:]]|\\(|$)"; then
+        printf 'error: package does not declare runtime dependency %s\n' \
+            "$expected_dependency" >&2
+        exit 1
+    fi
+done
+
 desktop_file="$extracted_dir/usr/share/applications/io.github.arapsum.Cadence.desktop"
 metainfo_file="$extracted_dir/usr/share/metainfo/io.github.arapsum.Cadence.metainfo.xml"
 binary="$extracted_dir/usr/bin/cadence"
