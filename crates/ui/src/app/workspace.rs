@@ -8,6 +8,19 @@ use crate::calendar::CalendarViewMode;
 
 use super::{day, sidebar, state::CadenceView, week};
 
+#[derive(Debug, Eq, PartialEq)]
+struct WorkspacePanelWidths {
+    day: u16,
+    week_min: u16,
+}
+
+const fn workspace_panel_widths() -> WorkspacePanelWidths {
+    WorkspacePanelWidths {
+        day: 360,
+        week_min: 600,
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum WorkspaceLayout {
     Expanded,
@@ -39,17 +52,18 @@ pub(super) fn render(
     let layout = WorkspaceLayout::for_width(window.viewport_size().width.as_f32());
     let sidebar_collapsed = layout != WorkspaceLayout::Expanded;
     let content = if layout.shows_both() {
+        let widths = workspace_panel_widths();
         ResizablePanelGroup::new("calendar-workspace-panels")
             .child(
                 resizable_panel()
-                    .size(px(400.0))
-                    .size_range(px(360.0)..px(720.0))
+                    .size(px(f32::from(widths.day)))
+                    .size_range(px(f32::from(widths.day))..px(f32::from(widths.day)))
                     .pr(px(6.0))
                     .child(render_panel(view, window, CalendarViewMode::Day, cx)),
             )
             .child(
                 resizable_panel()
-                    .size_range(px(560.0)..gpui::Pixels::MAX)
+                    .size_range(px(f32::from(widths.week_min))..gpui::Pixels::MAX)
                     .pl(px(6.0))
                     .child(render_panel(view, window, CalendarViewMode::Week, cx)),
             )
@@ -146,7 +160,21 @@ fn render_panel(
 
 #[cfg(test)]
 mod tests {
-    use super::WorkspaceLayout;
+    use super::{WorkspaceLayout, WorkspacePanelWidths, workspace_panel_widths};
+
+    #[test]
+    fn workspace_gives_the_week_panel_more_room_than_the_day_panel() {
+        let widths = workspace_panel_widths();
+
+        assert_eq!(
+            widths,
+            WorkspacePanelWidths {
+                day: 360,
+                week_min: 600,
+            }
+        );
+        assert!(widths.week_min > widths.day);
+    }
 
     #[test]
     fn workspace_breakpoints_select_expected_layouts() {
