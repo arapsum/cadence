@@ -106,7 +106,7 @@ for document in README.md LICENSE CHANGELOG.md docs/USER_GUIDE.md packaging/linu
     install -m 0644 "$REPO_ROOT/$document" "$stage/usr/share/doc/cadence/$(basename "$document")"
 done
 
-runtime_dependencies='libvulkan1, libwayland-client0, libwayland-cursor0, libwayland-egl1, libfontconfig1, libxcb-xkb1, libxau6, libxdmcp6'
+runtime_dependencies='libvulkan1, libwayland-client0, libwayland-cursor0, libwayland-egl1, libfontconfig1, libxkbcommon0, libxcb-xkb1, libxau6, libxdmcp6'
 dependencies="libc6, libgcc-s1, libstdc++6, ${runtime_dependencies}"
 if command -v dpkg-shlibdeps >/dev/null 2>&1; then
     dependency_workspace="$stage/.dependency-work"
