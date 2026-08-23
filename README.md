@@ -5,11 +5,9 @@ a week. Built with Rust, [GPUI](https://gpui.rs/), and [GPUI
 Component](https://longbridge.github.io/gpui-component/), it keeps the calendar
 as a quiet, spatially honest time grid rather than a dashboard.
 
-> **Project status:** Milestone 9 is implemented for the first supported
-> release target. Cadence stores timetable data in a local SQLite database,
-> supports snap-aware event dragging and resizing, repeating schedules with
-> scoped edits, bounded session undo/redo, non-destructive recovery for
-> unreadable databases, and a versioned Ubuntu x86_64 `.deb` release artifact.
+> **Project status:** Milestones M0–M9 are implemented. Cadence is release-ready
+> for Ubuntu 26.04 LTS on x86_64 under Wayland; tagging a version creates a
+> draft GitHub release for a final manual smoke test before publication.
 
 ## What it does
 
@@ -32,19 +30,27 @@ as a quiet, spatially honest time grid rather than a dashboard.
 - Store events, categories, settings, and calendar preferences locally with
   transactional writes and numbered schema migrations, including recurring
   series and per-occurrence exceptions.
+- Manage custom categories, use the agenda sheet to scan the current range,
+  and follow a compact Now / Next summary in the sidebar.
+- Set per-event reminders and opt into desktop notifications while Cadence is
+  running; operating-system notification permissions still apply.
+- Choose a light, dark, or system appearance mode, a bundled GPUI theme, and
+  the application font family and size.
 - Export a human-readable JSON backup or reveal the data folder from the
   toolbar.
 
 ## Requirements
 
-The supported development baseline is Ubuntu 26.04 LTS on x86_64, running a
-Wayland session with stable Rust 1.97.1 or newer. Cadence currently enables only
-the Wayland backend; X11 support has not been enabled or tested.
+The supported release and development baseline is Ubuntu 26.04 LTS on x86_64,
+running a Wayland session. Cadence currently enables only the Wayland backend;
+X11 support has not been enabled or tested. The repository pins Rust 1.97.1 in
+`rust-toolchain.toml` for builds and CI.
 
 Install Rust with [rustup](https://rustup.rs/):
 
 ```sh
-rustup default stable
+rustup toolchain install 1.97.1 --profile minimal
+rustup component add --toolchain 1.97.1 clippy rustfmt
 ```
 
 On Ubuntu or Debian, install the compiler toolchain and native libraries used by
@@ -70,10 +76,13 @@ From the repository root:
 cargo run --locked
 ```
 
+Use `cargo run --locked -- --version` to inspect the compiled version, commit,
+and GPUI revision without opening a window.
+
 ## Install a release
 
-Download the Ubuntu x86_64 `.deb` from a draft or published GitHub release and
-install it with:
+After a version tag has produced a draft or published GitHub release, download
+the Ubuntu x86_64 `.deb` and install it with:
 
 ```sh
 sudo apt install ./cadence_<version>_amd64.deb
@@ -129,6 +138,10 @@ when `CADENCE_DATA_DIR` is set. Otherwise it uses
 default categories and no sample events. The Export action produces a
 versioned, pretty-printed JSON backup without changing the database.
 
+Removing the Debian package does not remove this data directory or a JSON
+backup. Archive or delete either only when you explicitly intend to discard the
+timetable.
+
 If the database cannot be opened or migrated, Cadence keeps the original file
 untouched and shows a recovery screen. Retry, reveal the data folder, or
 explicitly confirm Archive and start fresh; the latter moves the database and
@@ -141,13 +154,18 @@ Run these checks before completing a milestone or submitting a change:
 
 ```sh
 cargo fmt --all -- --check
-cargo clippy --workspace --locked --all-targets --all-features -- -D warnings \
+cargo +stable clippy --workspace --locked --all-targets --all-features -- -D warnings \
   -W clippy::pedantic -W clippy::nursery -W rust-2018-idioms
 cargo test --workspace --locked --all-targets --all-features
 
 scripts/package-linux.sh
 scripts/validate-linux-package.sh target/dist/cadence_<version>_amd64.deb
+scripts/verify-linux-install.sh target/dist/cadence_<version>_amd64.deb
 ```
+
+The strict lint command intentionally uses the installed stable toolchain so
+new clippy diagnostics are caught early; CI separately verifies the pinned
+Rust 1.97.1 toolchain.
 
 ## Manual verification
 
@@ -176,6 +194,13 @@ After running the application, verify the following on the supported baseline:
 11. Export a JSON backup and verify its version, categories, preferences,
     events, recurring series, and exceptions; test recovery with a copy of an
     unreadable database.
+12. Enable notifications, create a near-future reminder, and verify the
+    operating system delivers it only while Cadence is running.
+13. Install the generated `.deb` on a clean Ubuntu 26.04 machine, upgrade from
+    a prior package, remove Cadence, and confirm the local data directory is
+    retained.
+14. Verify the packaged desktop entry, icon, About dialog, and `cadence
+    --version` output before publishing a draft release.
 
 ## Project documents
 

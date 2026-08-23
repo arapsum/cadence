@@ -28,12 +28,19 @@ An event can be moved by dragging its body and resized from its start or end.
 Adjacent events are allowed, but overlapping events are rejected before they are
 saved.
 
+The sidebar shows what is happening now and what comes next. Open **Agenda** to
+scan every event in the selected calendar range.
+
 ## Recurring events
 
 Choose Daily, Weekdays, or Weekly in the event editor. Weekly routines can use
 selected weekdays and an inclusive end date. When editing or deleting a
 recurring event, choose whether the change applies to one occurrence or this
 occurrence and all following occurrences.
+
+Choose a reminder in the editor, then enable desktop notifications in
+**Settings**. Reminders are delivered only while Cadence is running and remain
+subject to the operating system's notification permission.
 
 ## Organize and recover
 
@@ -63,6 +70,7 @@ Cadence stores its database at `$CADENCE_DATA_DIR/cadence.sqlite3` when that
 variable is set. Otherwise it uses `$XDG_DATA_HOME/cadence/cadence.sqlite3`,
 falling back to `$HOME/.local/share/cadence/cadence.sqlite3`.
 
-The first release does not include cloud synchronization, notifications, an
-in-app updater, X11 support, or mobile/Windows/macOS builds. Keep a recent JSON
-backup before replacing or removing the package.
+The first release does not include cloud synchronization, an in-app updater,
+X11 support, or mobile/Windows/macOS builds. Keep a recent JSON backup before
+replacing or removing the package; package removal retains the local data
+directory.

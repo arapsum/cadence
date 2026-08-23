@@ -105,66 +105,6 @@ The core crate must not depend on GPUI. Keeping the domain, calendar geometry,
 editor rules, and persistence behind that boundary makes them cheap to test and
 lets the desktop shell evolve independently.
 
-### Historical single-package layout
-
-```text
-src/
-  main.rs                 application bootstrap and window setup
-  lib.rs                  public modules and testable core
-  app/
-    actions.rs             calendar key bindings and GPUI actions
-    day.rs                 focused one-day surface adapter
-    mod.rs                composition root and window bootstrap
-    state.rs              GPUI view state and actions
-    surface.rs             shared Day/Week surface shell and overlays
-    view.rs               root render composition
-    toolbar.rs            filters, navigation, and theme controls
-    week.rs               seven-day surface adapter
-    grid.rs               time grid, empty slots, and now indicator
-    event_card.rs         event card presentation and interaction
-    presentation.rs       display-ready snapshots and date helpers
-    style.rs              layout constants and category palette
-  domain/
-    event.rs              Event, Category, identifiers, validation
-    time.rs               day/week ranges, snapping, formatting
-    recurrence.rs         added after MVP
-  store/
-    mod.rs                repository interface
-    memory.rs             deterministic tests and early development
-    sqlite.rs             durable local implementation
-    migrations.rs
-  calendar/
-    state.rs              selected date, mode, filters, selection
-    layout.rs             event-to-rectangle and overlap algorithm
-    grid.rs               shared time-grid primitives
-    week.rs
-    day.rs
-    event_card.rs
-    now_indicator.rs
-  editor/
-    state.rs
-    view.rs
-  components/             small app-specific reusable controls
-  theme.rs                semantic tokens and category palette
-  settings.rs             locale, week start, time format, time zone
-tests/
-  calendar_math.rs
-  persistence.rs
-  user_flows.rs
-```
-
-The exact file boundaries may evolve, but the dependency direction should stay:
-
-```text
-domain <- store
-   ^         ^
-   |         |
-calendar/editor <- app/GPUI
-```
-
-The domain and layout modules must not depend on GPUI. That keeps the difficult
-date and overlap behavior cheap to unit test.
-
 ### Initial domain model
 
 Use stable opaque IDs from the beginning.
@@ -536,6 +476,9 @@ Done when:
 **Outcome:** the app actively helps the user follow the plan, rather than merely
 storing it.
 
+**Status (2026-08-22): implementation complete; scaling, localization, and
+desktop-permission behavior remain release smoke-test coverage.**
+
 Tasks:
 
 - Add a compact “Now / Next” summary to Day view.
@@ -544,6 +487,21 @@ Tasks:
 - Add search or an agenda list for fast event discovery.
 - Polish typography, density, truncation/tooltips, empty states, and animation.
 - Verify high-DPI behavior, 12h/24h clocks, localization, and dark mode.
+
+Implementation notes:
+
+- The sidebar derives a live Now / Next summary from the current clock and the
+  visible schedule. The application clock refreshes it without a restart.
+- Event forms provide fixed reminder offsets, while Settings keeps delivery
+  opt-in. Due reminders use GPUI system notifications only while Cadence is
+  running and still respect operating-system permissions.
+- The sidebar and Settings provide create, edit, delete, visibility, and
+  replacement flows for categories. Cards, agenda entries, labels, and
+  tooltips always expose the category name alongside its colour.
+- An Agenda sheet lists the events in the current range. Appearance settings
+  persist the mode, bundled GPUI theme, font family, and font size.
+- Shared semantic tokens, responsive workspace breakpoints, empty states,
+  tooltip text, and independent Day/Week scrolling provide the polish baseline.
 
 Done when:
 
@@ -559,8 +517,9 @@ Done when:
 **Implementation status:** Complete for the first Ubuntu 26.04 LTS x86_64
 Wayland target. The repository now contains a reproducible `.deb` builder,
 metadata/content validators, a draft-release workflow, and the release/user
-documentation. Clean-machine installation and publication remain deliberate
-manual gates for each tagged release.
+documentation. Automated Ubuntu 26.04 container checks cover install, upgrade,
+uninstall, and data retention; a Wayland smoke test of the actual draft artifact
+and final publication remain deliberate human gates for each tagged release.
 
 Tasks:
 
@@ -569,6 +528,20 @@ Tasks:
 - Add app metadata, icons, version display, licenses, and release notes.
 - Verify clean install, upgrade, backup, uninstall, and data retention behavior.
 - Write a short manual and list known limitations.
+
+Implementation notes:
+
+- `scripts/package-linux.sh` builds a deterministic `cadence_<version>_amd64.deb`
+  with desktop/AppStream metadata, the scalable icon, runtime dependencies, and
+  SHA-256 checksums.
+- `scripts/validate-linux-package.sh` validates package contents, desktop and
+  AppStream metadata, executable permissions, and `cadence --version`.
+- `scripts/verify-linux-install.sh` uses a clean Ubuntu 26.04 container to
+  install a synthetic prior package, upgrade to the candidate, remove it, and
+  verify retained user data.
+- CI checks formatting, strict linting, tests, and release packaging. Pushing a
+  `v*.*.*` tag verifies the changelog/version, attests the artifacts, and opens
+  a draft GitHub release with checksums.
 
 Done when:
 

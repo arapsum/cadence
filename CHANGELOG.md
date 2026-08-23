@@ -19,6 +19,8 @@ No unreleased changes yet.
 - Local SQLite persistence with schema migrations, recovery for unreadable
   databases, JSON backup export, and data-folder reveal.
 - Category management, appearance preferences, GPUI themes, and font controls.
+- A live Now / Next sidebar summary, Agenda sheet, per-event reminders, and
+  opt-in desktop notifications while Cadence is running.
 - Native client decorations, a Cadence application icon, About dialog, version
   output, desktop metadata, and an Ubuntu x86_64 Debian package.
 

@@ -14,7 +14,7 @@ and complete the manual smoke test before publishing it.
 
    ```sh
    cargo fmt --all -- --check
-   cargo clippy --workspace --locked --all-targets --all-features -- -D warnings \
+   cargo +stable clippy --workspace --locked --all-targets --all-features -- -D warnings \
      -W clippy::pedantic -W clippy::nursery -W rust-2018-idioms
    cargo test --workspace --locked --all-targets --all-features
    ```
