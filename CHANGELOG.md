@@ -6,6 +6,10 @@ All notable Cadence releases are documented here. The format follows
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+## [0.1.1] - 2026-08-23
+
 ### Fixed
 
 - Give the week overview more space than the day plan in the initial split-view

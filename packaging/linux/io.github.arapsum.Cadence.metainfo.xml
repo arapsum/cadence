@@ -16,6 +16,11 @@
     <category>Calendar</category>
   </categories>
   <releases>
+    <release version="0.1.1" date="2026-08-23">
+      <description>
+        <p>Gives the week overview more space in the initial split-view layout.</p>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-08-22">
       <description>
         <p>Initial public release of Cadence.</p>
