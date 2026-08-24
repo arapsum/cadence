@@ -6,6 +6,10 @@ All notable Cadence releases are documented here. The format follows
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+## [0.1.2] - 2026-08-24
+
 ### Added
 
 - Select multiple visible events and delete them as one undoable operation;
