@@ -16,6 +16,11 @@
     <category>Calendar</category>
   </categories>
   <releases>
+    <release version="0.1.2" date="2026-08-24">
+      <description>
+        <p>Adds Cmd/Ctrl-click multi-selection and date-aware weekly recurrence.</p>
+      </description>
+    </release>
     <release version="0.1.1" date="2026-08-23">
       <description>
         <p>Gives the week overview more space in the initial split-view layout.</p>
