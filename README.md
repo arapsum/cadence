@@ -43,6 +43,26 @@ as a quiet, spatially honest time grid rather than a dashboard.
 - Export a human-readable JSON backup or reveal the data folder from the
   toolbar.
 
+## Screenshots
+
+Cadence keeps the day plan, weekly overview, event editor, and appearance
+preferences close at hand:
+
+![Cadence week overview showing the day plan and seven-day timetable](docs/screenshots/week-overview.png)
+
+*The Week view pairs the selected day's plan with the surrounding seven-day
+overview.*
+
+![Cadence create event dialog](docs/screenshots/create-event-dialog.png)
+
+*The Create Event dialog supports titles, notes, dates, time ranges, categories,
+reminders, and recurrence.*
+
+![Cadence appearance settings with the GPUI theme catalog](docs/screenshots/settings-appearance.png)
+
+*Appearance settings expose light and dark themes, including the bundled GPUI
+theme catalog.*
+
 ## Requirements
 
 The supported release and development baseline is Ubuntu 26.04 LTS on x86_64,
