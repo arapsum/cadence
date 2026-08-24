@@ -10,6 +10,7 @@ All notable Cadence releases are documented here. The format follows
 
 - Select multiple visible events and delete them as one undoable operation;
   recurring selections cancel only their chosen dates.
+- Start or toggle bulk event selection with Cmd/Ctrl+Left Click.
 
 ### Changed
 

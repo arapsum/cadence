@@ -123,6 +123,7 @@ continues to launch the desktop application from the repository root.
 | Previous or next period | Alt+Left / Alt+Right |
 | Go to today | Cmd/Ctrl+T |
 | Create an event | Cmd/Ctrl+N |
+| Start or toggle event selection | Cmd/Ctrl+Left Click |
 | Select all visible events (selection mode) | Cmd/Ctrl+A |
 | Delete selected events (selection mode) | Delete / Backspace |
 | Cancel event selection | Escape |
