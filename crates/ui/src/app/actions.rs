@@ -25,6 +25,8 @@ cadence_actions!(
     OpenAbout,
     Undo,
     Redo,
+    SelectAllEvents,
+    DeleteSelectedEvents,
     CancelManipulation,
 );
 
@@ -49,6 +51,10 @@ pub(super) fn bind(cx: &mut App) {
         KeyBinding::new("cmd-shift-z", Redo, Some(CALENDAR_CONTEXT)),
         KeyBinding::new("ctrl-shift-z", Redo, Some(CALENDAR_CONTEXT)),
         KeyBinding::new("ctrl-y", Redo, Some(CALENDAR_CONTEXT)),
+        KeyBinding::new("cmd-a", SelectAllEvents, Some(CALENDAR_CONTEXT)),
+        KeyBinding::new("ctrl-a", SelectAllEvents, Some(CALENDAR_CONTEXT)),
+        KeyBinding::new("delete", DeleteSelectedEvents, Some(CALENDAR_CONTEXT)),
+        KeyBinding::new("backspace", DeleteSelectedEvents, Some(CALENDAR_CONTEXT)),
         KeyBinding::new("escape", CancelManipulation, Some(CALENDAR_CONTEXT)),
     ]);
 }

@@ -23,6 +23,9 @@ release environment is Ubuntu 26.04 LTS on x86_64 with a Wayland session.
 - Use the date controls or **Today** to navigate.
 - Use the category menu to focus on one type of work.
 - Select an empty time slot or choose **New event** to open the editor.
+- Choose **Select events** from the overflow menu to enter bulk-selection mode.
+  Click event cards, or focus a card and press Enter/Space, to select them.
+  Use **Select all**, **Delete selected**, or Escape to finish the operation.
 
 An event can be moved by dragging its body and resized from its start or end.
 Adjacent events are allowed, but overlapping events are rejected before they are
@@ -42,6 +45,10 @@ multi-day routine can be scheduled deliberately. Weekly routines also support
 an inclusive end date. When editing or deleting a recurring event, choose
 whether the change applies to one occurrence or this occurrence and all
 following occurrences.
+
+In bulk-selection mode, deleting recurring events cancels only the selected
+occurrence dates. The rest of each recurring series remains scheduled, and the
+complete batch can be restored with one Undo.
 
 Choose a reminder in the editor, then enable desktop notifications in
 **Settings**. Reminders are delivered only while Cadence is running and remain
@@ -66,6 +73,9 @@ the old database only after confirming that you want to start fresh.
 | Previous or next period | Alt+Left / Alt+Right |
 | Go to today | Cmd/Ctrl+T |
 | New event | Cmd/Ctrl+N |
+| Select all visible events (selection mode) | Cmd/Ctrl+A |
+| Delete selected events (selection mode) | Delete / Backspace |
+| Cancel event selection | Escape |
 | Undo | Cmd/Ctrl+Z |
 | Redo | Cmd/Ctrl+Shift+Z or Ctrl+Y |
 

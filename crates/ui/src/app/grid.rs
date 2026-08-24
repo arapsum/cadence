@@ -57,6 +57,9 @@ pub(super) fn render_plane(
             let view = cx.entity().downgrade();
             move |_, _, app| {
                 view.update(app, |view, cx| {
+                    if view.is_bulk_selecting() {
+                        return;
+                    }
                     view.activate_surface(mode.calendar_mode(), cx);
                     view.clear_selection(cx);
                 })
@@ -143,6 +146,9 @@ fn render_empty_slots(
     mode: SurfaceMode,
     cx: &Context<'_, CadenceView>,
 ) -> Vec<gpui::AnyElement> {
+    if view.is_bulk_selecting() {
+        return Vec::new();
+    }
     let empty_border = cx.theme().border.opacity(0.22);
     let empty_foreground = cx.theme().muted_foreground.opacity(0.7);
     view.surface_snapshot(mode.calendar_mode())

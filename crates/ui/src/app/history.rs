@@ -18,6 +18,8 @@ pub(super) enum ChangeKind {
     Resize,
     /// An event was deleted.
     Delete,
+    /// Multiple events were deleted as one atomic operation.
+    DeleteMany,
     /// A new category was created.
     CreateCategory,
     /// A category's editable fields were changed.
@@ -39,6 +41,7 @@ impl ChangeKind {
             Self::Move => "move event",
             Self::Resize => "resize event",
             Self::Delete => "delete event",
+            Self::DeleteMany => "delete events",
             Self::CreateCategory => "create category",
             Self::EditCategory => "edit category",
             Self::DeleteCategory => "delete category",

@@ -12,7 +12,7 @@ use super::super::{history::CalendarChange, state::CadenceView};
 
 impl CadenceView {
     pub(in crate::app) fn undo(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
-        if !self.is_interactive() || window.has_active_dialog(cx) {
+        if !self.is_calendar_editable() || window.has_active_dialog(cx) {
             return;
         }
         let Some(change) = self.history.peek_undo().cloned() else {
@@ -22,7 +22,7 @@ impl CadenceView {
     }
 
     pub(in crate::app) fn redo(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
-        if !self.is_interactive() || window.has_active_dialog(cx) {
+        if !self.is_calendar_editable() || window.has_active_dialog(cx) {
             return;
         }
         let Some(change) = self.history.peek_redo().cloned() else {

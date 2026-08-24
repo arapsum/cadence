@@ -6,6 +6,11 @@ All notable Cadence releases are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Select multiple visible events and delete them as one undoable operation;
+  recurring selections cancel only their chosen dates.
+
 ### Changed
 
 - Make weekly recurrence date-aware by defaulting to the event's weekday (for

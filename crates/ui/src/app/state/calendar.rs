@@ -118,6 +118,7 @@ impl CadenceView {
         if !self.is_interactive() {
             return;
         }
+        self.event_selection = super::EventSelection::Single;
         self.now = Timestamp::now();
         let (today, _) = local_date_time(self.now, &self.settings);
         self.state.go_to_today(today);
@@ -131,6 +132,7 @@ impl CadenceView {
         if !self.is_interactive() {
             return;
         }
+        self.event_selection = super::EventSelection::Single;
         let result = if next {
             self.state.next_period()
         } else {
@@ -147,6 +149,9 @@ impl CadenceView {
     }
 
     pub(in crate::app) fn clear_selection(&mut self, cx: &mut Context<'_, Self>) {
+        if self.is_bulk_selecting() {
+            return;
+        }
         self.state.clear_selection();
         cx.notify();
     }
@@ -155,6 +160,7 @@ impl CadenceView {
         if !self.is_interactive() {
             return;
         }
+        self.event_selection = super::EventSelection::Single;
         self.state.select_date(date);
         self.pending_scroll_minutes = Some(self.current_scroll_minutes());
         self.reset_scroll_initialization();
@@ -180,6 +186,9 @@ impl CadenceView {
         view_mode: CalendarViewMode,
         cx: &mut Context<'_, Self>,
     ) {
+        if self.is_bulk_selecting() {
+            return;
+        }
         if self.state.view_mode() == view_mode {
             return;
         }
@@ -198,6 +207,7 @@ impl CadenceView {
         if !self.is_interactive() {
             return;
         }
+        self.event_selection = super::EventSelection::Single;
         if self.state.view_mode() == view_mode {
             return;
         }
@@ -214,5 +224,9 @@ impl CadenceView {
 
     pub(in crate::app) const fn is_interactive(&self) -> bool {
         matches!(self.persistence_state, PersistenceState::Ready) && self.manipulation.is_none()
+    }
+
+    pub(in crate::app) const fn is_calendar_editable(&self) -> bool {
+        self.is_interactive() && !self.is_bulk_selecting()
     }
 }

@@ -19,7 +19,7 @@ impl CadenceView {
         cursor_offset: Point<Pixels>,
         cx: &mut Context<'_, Self>,
     ) {
-        if !self.is_interactive() {
+        if !self.is_calendar_editable() {
             return;
         }
         let Some(event) = self
@@ -272,6 +272,7 @@ impl CadenceView {
         cx: &mut Context<'_, Self>,
     ) {
         let owner = cx.entity().downgrade();
+        let rollback_this = rollback.clone();
         window.open_alert_dialog(cx, move |alert, _, _| {
             let owner_this = owner.clone();
             let owner_following = owner.clone();
@@ -288,37 +289,43 @@ impl CadenceView {
                         .cancel_text("This and following")
                         .show_cancel(true),
                 )
-                .on_ok(move |_, window, app| {
-                    owner_this
-                        .update(app, |view, cx| {
-                            window.close_all_dialogs(cx);
-                            view.apply_manipulation_scope(
-                                &manipulation_this,
-                                before_this.clone(),
-                                rollback,
-                                super::super::editor::RecurrenceScope::This,
-                                window,
-                                cx,
-                            );
-                        })
-                        .ok();
-                    true
+                .on_ok({
+                    let rollback_this = rollback_this.clone();
+                    move |_, window, app| {
+                        owner_this
+                            .update(app, |view, cx| {
+                                window.close_all_dialogs(cx);
+                                view.apply_manipulation_scope(
+                                    &manipulation_this,
+                                    before_this.clone(),
+                                    rollback_this.clone(),
+                                    super::super::editor::RecurrenceScope::This,
+                                    window,
+                                    cx,
+                                );
+                            })
+                            .ok();
+                        true
+                    }
                 })
-                .on_cancel(move |_, window, app| {
-                    owner_following
-                        .update(app, |view, cx| {
-                            window.close_all_dialogs(cx);
-                            view.apply_manipulation_scope(
-                                &manipulation_following,
-                                before_following.clone(),
-                                rollback,
-                                super::super::editor::RecurrenceScope::Following,
-                                window,
-                                cx,
-                            );
-                        })
-                        .ok();
-                    true
+                .on_cancel({
+                    let rollback = rollback.clone();
+                    move |_, window, app| {
+                        owner_following
+                            .update(app, |view, cx| {
+                                window.close_all_dialogs(cx);
+                                view.apply_manipulation_scope(
+                                    &manipulation_following,
+                                    before_following.clone(),
+                                    rollback.clone(),
+                                    super::super::editor::RecurrenceScope::Following,
+                                    window,
+                                    cx,
+                                );
+                            })
+                            .ok();
+                        true
+                    }
                 })
         });
     }

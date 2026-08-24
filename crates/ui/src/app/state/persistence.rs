@@ -249,6 +249,7 @@ impl CadenceView {
                     self.week_viewport.initialization =
                         pending.view_state.week_scroll_initialization;
                     self.pending_scroll_minutes = pending.view_state.pending_scroll_minutes;
+                    self.event_selection = pending.view_state.event_selection;
                     self.refresh_snapshot();
                 }
                 self.persistence_state = PersistenceState::Ready;

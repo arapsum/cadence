@@ -19,6 +19,8 @@ as a quiet, spatially honest time grid rather than a dashboard.
 - Create events from the toolbar or an empty time slot; inspect, edit,
   duplicate, delete, move, and resize them; undo or redo committed changes
   during the current session.
+- Select visible events in the active Day or Week surface and delete them in one
+  confirmed, undoable operation; recurring selections affect only those dates.
 - Validate event titles, categories, time ranges, and schedule conflicts before
   changing the timetable. Adjacent end/start boundaries remain valid.
 - Use pointer and keyboard interactions with light and dark themes.
@@ -121,6 +123,9 @@ continues to launch the desktop application from the repository root.
 | Previous or next period | Alt+Left / Alt+Right |
 | Go to today | Cmd/Ctrl+T |
 | Create an event | Cmd/Ctrl+N |
+| Select all visible events (selection mode) | Cmd/Ctrl+A |
+| Delete selected events (selection mode) | Delete / Backspace |
+| Cancel event selection | Escape |
 | Undo the latest change | Cmd/Ctrl+Z |
 | Redo the latest change | Cmd/Ctrl+Shift+Z or Ctrl+Y |
 
@@ -182,8 +187,8 @@ After running the application, verify the following on the supported baseline:
    flagged, and event hover/focus exposes their complete details.
 5. The current-day tint and current-time line appear when today is displayed.
 6. New event, empty-slot creation, event inspection, editing, duplication,
-   deletion, dragging, resizing, recurring scope edits, undo, and redo update
-   both Day and Week immediately.
+   deletion, multi-selection deletion, dragging, resizing, recurring scope
+   edits, undo, and redo update both Day and Week immediately.
 7. Invalid titles, categories, and time ranges show field-level errors without
    changing stored data; cancelling a dirty form asks for confirmation.
 8. Keyboard focus begins in the editor title, follows the form in order, and

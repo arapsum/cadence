@@ -137,3 +137,78 @@ fn event_entry_points_render_their_dialogs(cx: &mut TestAppContext) {
         "the newly rendered end-date picker should be revealed in the form viewport"
     );
 }
+
+#[gpui::test]
+fn bulk_selection_tracks_visible_occurrences(cx: &mut TestAppContext) {
+    cx.update(gpui_component::init);
+
+    let calendar = Rc::new(RefCell::new(None::<Entity<CadenceView>>));
+    let captured_calendar = Rc::clone(&calendar);
+    let (_, cx) = cx.add_window_view(move |window, cx| {
+        let view = cx.new(|cx| CadenceView::new(window, cx));
+        captured_calendar.replace(Some(view.clone()));
+        Root::new(view, window, cx)
+    });
+    let calendar = calendar
+        .borrow()
+        .clone()
+        .expect("calendar view was captured while building the root");
+
+    cx.update(|window, app| window.draw(app).clear(app));
+    let (surface, first_id, visible_count) = calendar.read_with(cx, |view, _| {
+        let surface = view.state.view_mode();
+        let events = &view
+            .snapshot
+            .as_ref()
+            .expect("the seeded calendar has a snapshot")
+            .surface(surface)
+            .events;
+        (
+            surface,
+            events
+                .first()
+                .expect("the seeded calendar has an event")
+                .id(),
+            events.len(),
+        )
+    });
+
+    calendar.update_in(cx, |view, _, app| {
+        view.begin_event_selection(app);
+    });
+    assert_eq!(
+        calendar.read_with(cx, |view, _| view.bulk_selectable_count()),
+        visible_count
+    );
+    assert!(calendar.read_with(cx, |view, _| view.is_bulk_selecting()));
+
+    calendar.update_in(cx, |view, _, app| {
+        view.toggle_event_selection(surface, first_id, app);
+    });
+    assert_eq!(
+        calendar.read_with(cx, |view, _| view.bulk_selection_count()),
+        1
+    );
+
+    calendar.update_in(cx, |view, _, app| {
+        view.select_all_visible_events(app);
+    });
+    assert_eq!(
+        calendar.read_with(cx, |view, _| view.bulk_selection_count()),
+        visible_count
+    );
+    assert!(calendar.read_with(cx, |view, _| view.bulk_all_selected()));
+
+    calendar.update_in(cx, |view, _, app| {
+        view.select_all_visible_events(app);
+    });
+    assert_eq!(
+        calendar.read_with(cx, |view, _| view.bulk_selection_count()),
+        0
+    );
+
+    calendar.update_in(cx, |view, _, app| {
+        view.cancel_event_selection(app);
+    });
+    assert!(!calendar.read_with(cx, |view, _| view.is_bulk_selecting()));
+}

@@ -69,6 +69,7 @@ impl CadenceView {
             manipulation: None,
             manipulation_rollback: None,
             history: CalendarHistory::new(),
+            event_selection: super::EventSelection::default(),
             settings,
             state,
             category_filter,
@@ -180,6 +181,7 @@ impl CadenceView {
                     }
                     let rollback = this.rollback_view_state();
                     let before = this.repository.snapshot().ok();
+                    this.event_selection = super::EventSelection::Single;
                     this.state.set_category_filter(*filter);
                     this.state.clear_selection();
                     this.reset_scroll_initialization();
@@ -219,6 +221,7 @@ impl CadenceView {
                 cx.set_reduce_motion(self.reduce_motion);
                 super::super::appearance::apply(&self.appearance, Some(window), cx);
                 self.repository = repository;
+                self.event_selection = super::EventSelection::Single;
                 let (today, _) = local_date_time(self.now, &self.settings);
                 self.state = CalendarState::new(
                     today,

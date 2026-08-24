@@ -40,7 +40,14 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
         mode,
         cx,
     } = *props;
-    let selected = view.state.selected_event() == Some(event.id());
+    let bulk_mode = view.is_bulk_selecting();
+    let bulk_selectable = view.bulk_selection_surface() == Some(mode.calendar_mode())
+        && view.state.view_mode() == mode.calendar_mode();
+    let selected = if bulk_mode {
+        view.is_bulk_selected(event.id())
+    } else {
+        view.state.selected_event() == Some(event.id())
+    };
     let dark = cx.theme().mode.is_dark();
     let (background, foreground, border) = category_palette(category.color_token(), dark);
     let lane_count = f32::from(position.lane_count().max(1));
@@ -77,6 +84,7 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
     let state = view;
     let view = cx.entity().downgrade();
     let key_view = view.clone();
+    let select_view = view.clone();
     let drag_view = view.clone();
     let resize_start_view = view.clone();
     let resize_end_view = view.clone();
@@ -139,14 +147,33 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
         .bg(background)
         .text_color(foreground)
         .overflow_hidden()
-        .cursor_grab()
+        .when(bulk_mode, gpui::Styled::cursor_pointer)
+        .when(!bulk_mode, gpui::Styled::cursor_grab)
+        .when(bulk_mode && !bulk_selectable, |this| {
+            this.opacity(0.68).cursor_default()
+        })
         .when(active, |this| this.opacity(0.34))
-        .tab_index(0)
+        .tab_index(if !bulk_mode || bulk_selectable {
+            0isize
+        } else {
+            -1isize
+        })
         .focus(|this| this.border_color(cx.theme().foreground))
         .hover(|this| this.opacity(0.92))
         .tooltip(move |window, cx| Tooltip::new(tooltip_text.clone()).build(window, cx))
         .on_key_down(
             move |event: &KeyDownEvent, window, app| match event.keystroke.key.as_str() {
+                "enter" | "return" | "space" if bulk_mode => {
+                    if !bulk_selectable {
+                        return;
+                    }
+                    app.stop_propagation();
+                    select_view
+                        .update(app, |view, cx| {
+                            view.toggle_event_selection(mode.calendar_mode(), occurrence_id, cx);
+                        })
+                        .ok();
+                }
                 "enter" | "return" => {
                     app.stop_propagation();
                     key_view
@@ -167,27 +194,34 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
                 _ => {}
             },
         )
-        .on_drag(move_payload, move |payload, offset, _, app| {
-            drag_view
-                .update(app, |view, cx| view.begin_manipulation(payload, offset, cx))
-                .ok();
-            app.new(|_| {
-                DragAvatar::new(
-                    avatar_title.clone(),
-                    avatar_time.clone(),
-                    avatar_background,
-                    avatar_foreground,
-                    offset,
-                )
+        .when(!bulk_mode, |this| {
+            this.on_drag(move_payload, move |payload, offset, _, app| {
+                drag_view
+                    .update(app, |view, cx| view.begin_manipulation(payload, offset, cx))
+                    .ok();
+                app.new(|_| {
+                    DragAvatar::new(
+                        avatar_title.clone(),
+                        avatar_time.clone(),
+                        avatar_background,
+                        avatar_foreground,
+                        offset,
+                    )
+                })
             })
         })
         .on_click(move |event, window, app| {
             app.stop_propagation();
             view.update(app, |this, cx| {
-                this.activate_surface(mode.calendar_mode(), cx);
-                if event.standard_click() && event.click_count() >= 2 {
+                if bulk_mode {
+                    if bulk_selectable {
+                        this.toggle_event_selection(mode.calendar_mode(), occurrence_id, cx);
+                    }
+                } else if event.standard_click() && event.click_count() >= 2 {
+                    this.activate_surface(mode.calendar_mode(), cx);
                     this.inspect_event(occurrence_id, event_date, window, cx);
                 } else {
+                    this.activate_surface(mode.calendar_mode(), cx);
                     this.select_event(occurrence_id, event_date, cx);
                 }
             })
@@ -203,6 +237,7 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
             height: position.height(),
             event_title: event.title().to_owned(),
             event_time: event_time.clone(),
+            disabled: bulk_mode,
         }))
         .child(render_category_header(
             category_name,
@@ -221,6 +256,7 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
             height: position.height(),
             event_title: event.title().to_owned(),
             event_time,
+            disabled: bulk_mode,
         }))
         .into_any_element()
 }
@@ -235,6 +271,7 @@ struct ResizeHandleProps {
     height: f32,
     event_title: String,
     event_time: String,
+    disabled: bool,
 }
 
 fn resize_handle(props: ResizeHandleProps) -> gpui::AnyElement {
@@ -248,6 +285,7 @@ fn resize_handle(props: ResizeHandleProps) -> gpui::AnyElement {
         height,
         event_title,
         event_time,
+        disabled,
     } = props;
     let handle_view = view;
     div()
@@ -258,7 +296,7 @@ fn resize_handle(props: ResizeHandleProps) -> gpui::AnyElement {
         .when(start, |this| this.top(px(0.0)))
         .when(!start, |this| this.bottom(px(0.0)))
         .h(px(10.0_f32.min((height - 4.0).max(4.0))))
-        .cursor_ns_resize()
+        .when(!disabled, gpui::Styled::cursor_ns_resize)
         .bg(foreground.opacity(0.08))
         .hover(|this| this.bg(foreground.opacity(0.2)))
         .on_mouse_down(
@@ -267,18 +305,20 @@ fn resize_handle(props: ResizeHandleProps) -> gpui::AnyElement {
                 app.stop_propagation();
             },
         )
-        .on_drag(payload, move |payload, offset, _, app| {
-            handle_view
-                .update(app, |view, cx| view.begin_manipulation(payload, offset, cx))
-                .ok();
-            app.new(|_| {
-                DragAvatar::new(
-                    event_title.clone(),
-                    event_time.clone(),
-                    background,
-                    foreground,
-                    offset,
-                )
+        .when(!disabled, |this| {
+            this.on_drag(payload, move |payload, offset, _, app| {
+                handle_view
+                    .update(app, |view, cx| view.begin_manipulation(payload, offset, cx))
+                    .ok();
+                app.new(|_| {
+                    DragAvatar::new(
+                        event_title.clone(),
+                        event_time.clone(),
+                        background,
+                        foreground,
+                        offset,
+                    )
+                })
             })
         })
         .into_any_element()

@@ -1,6 +1,6 @@
 use cadence_core::{
     domain::{
-        Category, CategoryColor, CategoryId, DateRange, Event, EventDraft, EventId,
+        Category, CategoryColor, CategoryId, DateRange, Event, EventDraft, EventId, OccurrenceId,
         RecurrenceException, RecurrenceRule, RecurrenceSeries, RecurrenceSeriesId, Settings,
         WeekStart, WeekdaySet,
     },
@@ -440,4 +440,47 @@ fn recurring_occurrences_are_range_bounded_and_exceptions_are_persisted_in_memor
         repository.occurrence(moved_id).unwrap().unwrap().date(),
         moved_date
     );
+}
+
+#[test]
+fn mixed_occurrence_deletion_removes_standalone_and_cancels_only_selected_series_date() {
+    let mut repository = InMemoryRepository::with_defaults();
+    let category_id = category(520, "Focus").id();
+    repository.create_category(category(520, "Focus")).unwrap();
+    let start = date(2026, 8, 17);
+    let standalone = event(521, category_id, start, 10, 11);
+    repository.create_event(standalone.clone()).unwrap();
+    let series = RecurrenceSeries::new(
+        RecurrenceSeriesId::from_uuid(Uuid::from_u128(522)),
+        EventDraft::new(
+            "Deep work",
+            start,
+            time(8, 0),
+            time(9, 0),
+            category_id,
+            None,
+        ),
+        RecurrenceRule::Weekly(WeekdaySet::one(jiff::civil::Weekday::Monday)),
+        None,
+        Timestamp::from_second(0).unwrap(),
+    )
+    .unwrap();
+    repository.create_series(series.clone()).unwrap();
+
+    let cancelled_id = OccurrenceId::Recurring {
+        series_id: series.id(),
+        original_date: start,
+    };
+    let following_id = OccurrenceId::Recurring {
+        series_id: series.id(),
+        original_date: date(2026, 8, 24),
+    };
+    repository.delete_event(standalone.id()).unwrap();
+    repository
+        .upsert_exception(RecurrenceException::cancelled(series.id(), start))
+        .unwrap();
+
+    assert!(repository.event(standalone.id()).unwrap().is_none());
+    assert!(repository.occurrence(cancelled_id).unwrap().is_none());
+    assert!(repository.occurrence(following_id).unwrap().is_some());
 }

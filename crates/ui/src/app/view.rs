@@ -55,9 +55,21 @@ impl Render for CadenceView {
             .on_action(cx.listener(|this, _: &actions::Redo, window, cx| {
                 this.redo(window, cx);
             }))
+            .on_action(cx.listener(|this, _: &actions::SelectAllEvents, _, cx| {
+                this.select_all_visible_events(cx);
+            }))
+            .on_action(
+                cx.listener(|this, _: &actions::DeleteSelectedEvents, window, cx| {
+                    this.confirm_delete_selected(window, cx);
+                }),
+            )
             .on_action(
                 cx.listener(|this, _: &actions::CancelManipulation, window, cx| {
-                    this.cancel_manipulation(window, cx);
+                    if this.is_bulk_selecting() {
+                        this.cancel_event_selection(cx);
+                    } else {
+                        this.cancel_manipulation(window, cx);
+                    }
                 }),
             )
             .v_flex()
