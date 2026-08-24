@@ -1,5 +1,6 @@
 pub mod actions;
 pub mod appearance;
+mod bulk_delete;
 pub mod categories;
 pub mod day;
 pub mod editor;

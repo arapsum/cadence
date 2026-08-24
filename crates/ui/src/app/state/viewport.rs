@@ -7,7 +7,7 @@ use super::super::{
     style::PIXELS_PER_MINUTE,
 };
 
-use super::CadenceView;
+use super::{CadenceView, EventSelection};
 
 /// State of the one-time scroll position applied after surface layout.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -34,7 +34,7 @@ impl SurfaceViewportState {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(in crate::app) struct RollbackViewState {
     pub(in crate::app::state) calendar_state: crate::calendar::CalendarState,
     pub(in crate::app::state) last_category: Option<crate::domain::CategoryId>,
@@ -43,6 +43,7 @@ pub(in crate::app) struct RollbackViewState {
     pub(in crate::app::state) day_scroll_initialization: ScrollInitialization,
     pub(in crate::app::state) week_scroll_initialization: ScrollInitialization,
     pub(in crate::app::state) pending_scroll_minutes: Option<f32>,
+    pub(in crate::app::state) event_selection: EventSelection,
 }
 
 impl CadenceView {
@@ -217,6 +218,7 @@ impl CadenceView {
             day_scroll_initialization: self.day_viewport.initialization,
             week_scroll_initialization: self.week_viewport.initialization,
             pending_scroll_minutes: self.pending_scroll_minutes,
+            event_selection: self.event_selection.clone(),
         }
     }
 
@@ -232,6 +234,7 @@ impl CadenceView {
         self.day_viewport.initialization = view_state.day_scroll_initialization;
         self.week_viewport.initialization = view_state.week_scroll_initialization;
         self.pending_scroll_minutes = view_state.pending_scroll_minutes;
+        self.event_selection = view_state.event_selection;
         self.refresh_snapshot();
     }
 }

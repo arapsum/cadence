@@ -59,6 +59,12 @@ pub(in crate::app::editor) struct RepeatOption {
     label: SharedString,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WeeklyDaysSource {
+    Automatic,
+    Customized,
+}
+
 impl SelectItem for RepeatOption {
     type Value = Option<RecurrenceRule>;
 
@@ -115,6 +121,7 @@ pub(in crate::app::editor) struct EventEditor {
     ends_on: Entity<DatePickerState>,
     ends_enabled: bool,
     weekly_days: WeekdaySet,
+    weekly_days_source: WeeklyDaysSource,
     all_time_options: Vec<TimeOption>,
     errors: FormErrors,
     focus_title: bool,
@@ -155,7 +162,10 @@ fn category_options_for(
     (options, index)
 }
 
-fn repeat_options_for(draft: &FormDraft) -> (Vec<RepeatOption>, Option<gpui_component::IndexPath>) {
+fn repeat_options_for(
+    recurrence: Option<RecurrenceRule>,
+    weekly_days: WeekdaySet,
+) -> (Vec<RepeatOption>, Option<gpui_component::IndexPath>) {
     let options = vec![
         RepeatOption {
             rule: None,
@@ -170,25 +180,80 @@ fn repeat_options_for(draft: &FormDraft) -> (Vec<RepeatOption>, Option<gpui_comp
             label: "Weekdays".into(),
         },
         RepeatOption {
-            rule: Some(RecurrenceRule::Weekly(match draft.recurrence {
-                Some(RecurrenceRule::Weekly(days)) => days,
-                _ => WeekdaySet::one(draft.date.weekday()),
-            })),
-            label: "Weekly".into(),
+            rule: Some(RecurrenceRule::Weekly(weekly_days)),
+            label: weekly_repeat_label(weekly_days),
         },
     ];
-    let index = options
-        .iter()
-        .position(|option| option.rule == draft.recurrence)
-        .or_else(|| {
-            draft.recurrence.map(|rule| match rule {
-                RecurrenceRule::Daily => 1,
-                RecurrenceRule::Weekdays => 2,
-                RecurrenceRule::Weekly(_) => 3,
-            })
+    let index = recurrence
+        .map(|rule| match rule {
+            RecurrenceRule::Daily => 1,
+            RecurrenceRule::Weekdays => 2,
+            RecurrenceRule::Weekly(_) => 3,
         })
         .map(gpui_component::IndexPath::new);
     (options, index)
+}
+
+fn initial_weekly_days(draft: &FormDraft) -> (WeekdaySet, WeeklyDaysSource) {
+    match draft.recurrence {
+        Some(RecurrenceRule::Weekly(days)) => (days, WeeklyDaysSource::Customized),
+        _ => (
+            WeekdaySet::one(draft.date.weekday()),
+            WeeklyDaysSource::Automatic,
+        ),
+    }
+}
+
+fn weekly_days_after_date_change(
+    source: WeeklyDaysSource,
+    current: WeekdaySet,
+    date: jiff::civil::Date,
+) -> WeekdaySet {
+    match source {
+        WeeklyDaysSource::Automatic => WeekdaySet::one(date.weekday()),
+        WeeklyDaysSource::Customized => current,
+    }
+}
+
+fn weekly_repeat_label(days: WeekdaySet) -> SharedString {
+    let selected = days.days();
+    match selected.as_slice() {
+        [] => "Weekly".into(),
+        [day] => format!("Weekly on {}", weekday_name(*day)).into(),
+        _ => format!(
+            "Weekly on {}",
+            selected
+                .iter()
+                .map(|day| weekday_short_name(*day))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+        .into(),
+    }
+}
+
+const fn weekday_name(day: Weekday) -> &'static str {
+    match day {
+        Weekday::Monday => "Monday",
+        Weekday::Tuesday => "Tuesday",
+        Weekday::Wednesday => "Wednesday",
+        Weekday::Thursday => "Thursday",
+        Weekday::Friday => "Friday",
+        Weekday::Saturday => "Saturday",
+        Weekday::Sunday => "Sunday",
+    }
+}
+
+const fn weekday_short_name(day: Weekday) -> &'static str {
+    match day {
+        Weekday::Monday => "Mon",
+        Weekday::Tuesday => "Tue",
+        Weekday::Wednesday => "Wed",
+        Weekday::Thursday => "Thu",
+        Weekday::Friday => "Fri",
+        Weekday::Saturday => "Sat",
+        Weekday::Sunday => "Sun",
+    }
 }
 
 fn reminder_options_for(
@@ -269,7 +334,8 @@ impl EventEditor {
             )
         });
 
-        let (repeat_options, repeat_index) = repeat_options_for(draft);
+        let (weekly_days, weekly_days_source) = initial_weekly_days(draft);
+        let (repeat_options, repeat_index) = repeat_options_for(draft.recurrence, weekly_days);
         let repeat = cx.new(|cx| SelectState::new(repeat_options, repeat_index, window, cx));
         let (reminder_options, reminder_index) = reminder_options_for(draft);
         let reminder = cx.new(|cx| SelectState::new(reminder_options, reminder_index, window, cx));
@@ -293,10 +359,8 @@ impl EventEditor {
             reminder,
             ends_on,
             ends_enabled,
-            weekly_days: match draft.recurrence {
-                Some(RecurrenceRule::Weekly(days)) => days,
-                _ => WeekdaySet::one(draft.date.weekday()),
-            },
+            weekly_days,
+            weekly_days_source,
             all_time_options,
             errors: FormErrors::default(),
             focus_title: true,
@@ -323,12 +387,19 @@ impl EventEditor {
                 cx.notify();
             }));
         let date = self.date.clone();
-        self.subscriptions
-            .push(cx.subscribe(&date, |this, _, _: &DatePickerEvent, cx| {
+        self.subscriptions.push(cx.subscribe_in(
+            &date,
+            window,
+            |this, _, _: &DatePickerEvent, window, cx| {
+                let date = this.selected_date(cx);
+                this.weekly_days =
+                    weekly_days_after_date_change(this.weekly_days_source, this.weekly_days, date);
+                this.refresh_repeat_options(window, cx);
                 this.errors.date = None;
                 this.errors.conflict = None;
                 cx.notify();
-            }));
+            },
+        ));
         let start_time = self.start_time.clone();
         self.subscriptions.push(cx.subscribe_in(
             &start_time,
@@ -463,6 +534,23 @@ impl EventEditor {
         });
     }
 
+    fn selected_date(&self, cx: &App) -> jiff::civil::Date {
+        self.date
+            .read(cx)
+            .date()
+            .start()
+            .map_or(self.initial.date, jiff_date)
+    }
+
+    fn refresh_repeat_options(&self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let recurrence = self.repeat.read(cx).selected_value().copied().flatten();
+        let (options, index) = repeat_options_for(recurrence, self.weekly_days);
+        self.repeat.update(cx, |repeat, cx| {
+            repeat.set_items(options, window, cx);
+            repeat.set_selected_index(index, window, cx);
+        });
+    }
+
     fn toggle_end_date(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.ends_enabled = !self.ends_enabled;
         self.errors.conflict = None;
@@ -479,9 +567,11 @@ impl EventEditor {
         cx.notify();
     }
 
-    fn toggle_weekday(&mut self, day: Weekday, cx: &mut Context<'_, Self>) {
+    fn toggle_weekday(&mut self, day: Weekday, window: &mut Window, cx: &mut Context<'_, Self>) {
         if let Ok(days) = self.weekly_days.toggled(day) {
             self.weekly_days = days;
+            self.weekly_days_source = WeeklyDaysSource::Customized;
+            self.refresh_repeat_options(window, cx);
             self.errors.conflict = None;
             cx.notify();
         }
@@ -519,9 +609,9 @@ impl EventEditor {
                 .label(label)
                 .when(active, Button::primary)
                 .when(!active, Button::outline)
-                .on_click(move |_, _, app| {
+                .on_click(move |_, window, app| {
                     owner
-                        .update(app, |editor, cx| editor.toggle_weekday(day, cx))
+                        .update(app, |editor, cx| editor.toggle_weekday(day, window, cx))
                         .ok();
                 })
                 .into_any_element()
@@ -692,4 +782,91 @@ fn field<E: IntoElement>(label: &'static str, input: E, error: Option<String>) -
                     .child(error),
             )
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use jiff::civil::Date;
+
+    fn draft(date: Date, recurrence: Option<RecurrenceRule>) -> FormDraft {
+        FormDraft {
+            title: String::new(),
+            notes: String::new(),
+            date,
+            start_time: Time::constant(10, 0, 0, 0),
+            end_time: Time::constant(11, 45, 0, 0),
+            category_id: None,
+            recurrence,
+            ends_on: None,
+            reminder: None,
+        }
+    }
+
+    #[test]
+    fn weekly_recurrence_defaults_to_the_event_date() {
+        let date = Date::constant(2026, 8, 17);
+        let (days, source) = initial_weekly_days(&draft(date, None));
+
+        assert_eq!(days, WeekdaySet::one(Weekday::Monday));
+        assert_eq!(source, WeeklyDaysSource::Automatic);
+    }
+
+    #[test]
+    fn existing_weekly_recurrence_keeps_its_selected_days() {
+        let date = Date::constant(2026, 8, 17);
+        let selected = WeekdaySet::one(Weekday::Wednesday);
+        let (days, source) =
+            initial_weekly_days(&draft(date, Some(RecurrenceRule::Weekly(selected))));
+
+        assert_eq!(days, selected);
+        assert_eq!(source, WeeklyDaysSource::Customized);
+    }
+
+    #[test]
+    fn automatic_weekly_day_follows_date_but_custom_days_do_not() {
+        let monday = Date::constant(2026, 8, 17);
+        let tuesday = Date::constant(2026, 8, 18);
+        let custom = WeekdaySet::one(Weekday::Monday);
+
+        assert_eq!(
+            weekly_days_after_date_change(WeeklyDaysSource::Automatic, custom, tuesday),
+            WeekdaySet::one(Weekday::Tuesday)
+        );
+        assert_eq!(
+            weekly_days_after_date_change(WeeklyDaysSource::Customized, custom, tuesday),
+            custom
+        );
+        assert_eq!(
+            weekly_days_after_date_change(WeeklyDaysSource::Automatic, custom, monday),
+            WeekdaySet::one(Weekday::Monday)
+        );
+    }
+
+    #[test]
+    fn weekly_option_label_identifies_single_and_multiple_days() {
+        assert_eq!(
+            weekly_repeat_label(WeekdaySet::one(Weekday::Monday)).to_string(),
+            "Weekly on Monday"
+        );
+        let selected = WeekdaySet::one(Weekday::Monday)
+            .toggled(Weekday::Wednesday)
+            .expect("adding Wednesday leaves Monday selected");
+        assert_eq!(
+            weekly_repeat_label(selected).to_string(),
+            "Weekly on Mon, Wed"
+        );
+    }
+
+    #[test]
+    fn refreshing_weekly_options_updates_the_rule_value_with_the_label() {
+        let selected = WeekdaySet::one(Weekday::Monday);
+        let updated = WeekdaySet::one(Weekday::Wednesday);
+        let (options, index) = repeat_options_for(Some(RecurrenceRule::Weekly(selected)), updated);
+        let option = options.get(3).expect("weekly option is present");
+
+        assert_eq!(index, Some(gpui_component::IndexPath::new(3)));
+        assert_eq!(option.rule, Some(RecurrenceRule::Weekly(updated)));
+        assert_eq!(option.label.to_string(), "Weekly on Wednesday");
+    }
 }

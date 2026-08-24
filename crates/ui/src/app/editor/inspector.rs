@@ -176,7 +176,7 @@ impl CadenceView {
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
-        if !self.is_interactive() {
+        if !self.is_calendar_editable() {
             return;
         }
         self.state.select_event(event_id, date);
@@ -202,7 +202,7 @@ impl CadenceView {
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
-        if !self.is_interactive() {
+        if !self.is_calendar_editable() {
             return;
         }
         let event_id = event.id();

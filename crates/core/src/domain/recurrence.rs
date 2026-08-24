@@ -674,6 +674,44 @@ mod tests {
     }
 
     #[test]
+    fn weekly_series_preserves_monday_time_across_month_and_year_boundaries() {
+        let start = Date::constant(2026, 12, 28); // Monday
+        let series = RecurrenceSeries::new(
+            RecurrenceSeriesId::from_uuid(Uuid::from_u128(7)),
+            EventDraft::new(
+                "Monday focus",
+                start,
+                Time::constant(10, 0, 0, 0),
+                Time::constant(11, 45, 0, 0),
+                category(),
+                None,
+            ),
+            RecurrenceRule::Weekly(WeekdaySet::one(Weekday::Monday)),
+            None,
+            Timestamp::from_second(0).expect("valid timestamp"),
+        )
+        .expect("series is valid");
+
+        let occurrences = expand_series(&series, &[], range(start, Date::constant(2027, 1, 12)));
+
+        assert_eq!(
+            occurrences
+                .iter()
+                .map(EventOccurrence::date)
+                .collect::<Vec<_>>(),
+            vec![
+                Date::constant(2026, 12, 28),
+                Date::constant(2027, 1, 4),
+                Date::constant(2027, 1, 11),
+            ]
+        );
+        assert!(occurrences.iter().all(|occurrence| {
+            occurrence.start_time() == Time::constant(10, 0, 0, 0)
+                && occurrence.end_time() == Time::constant(11, 45, 0, 0)
+        }));
+    }
+
+    #[test]
     fn exceptions_cancel_and_replace_one_occurrence() {
         let start = Date::constant(2026, 2, 27);
         let timestamp = Timestamp::from_second(0).expect("valid timestamp");

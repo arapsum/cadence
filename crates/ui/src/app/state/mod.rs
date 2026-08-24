@@ -2,9 +2,11 @@ mod calendar;
 mod lifecycle;
 mod manipulation;
 mod persistence;
+mod selection;
 mod viewport;
 
 pub(in crate::app) use persistence::{HistoryEffect, PersistenceState};
+pub(in crate::app) use selection::EventSelection;
 pub(in crate::app) use viewport::{RollbackViewState, ScrollInitialization};
 
 use std::{collections::HashSet, path::PathBuf};
@@ -39,6 +41,7 @@ pub(super) struct CadenceView {
     pub(super) manipulation: Option<Manipulation>,
     manipulation_rollback: Option<RollbackViewState>,
     pub(super) history: CalendarHistory,
+    pub(super) event_selection: EventSelection,
     pub(super) settings: Settings,
     pub(super) state: CalendarState,
     pub(super) category_filter: Entity<SelectState<Vec<FilterOption>>>,

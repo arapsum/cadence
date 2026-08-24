@@ -44,7 +44,7 @@ impl std::fmt::Display for EditorCommitError {
 
 impl CadenceView {
     pub(in crate::app) fn new_event(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
-        if !self.is_interactive() {
+        if !self.is_calendar_editable() {
             return;
         }
         let (today, current_time) =
@@ -83,7 +83,7 @@ impl CadenceView {
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
-        if !self.is_interactive() {
+        if !self.is_calendar_editable() {
             return;
         }
         let end_time = start_time
@@ -128,6 +128,9 @@ impl CadenceView {
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
+        if !self.is_calendar_editable() {
+            return;
+        }
         let categories = match self.repository.categories() {
             Ok(categories) => categories,
             Err(error) => {

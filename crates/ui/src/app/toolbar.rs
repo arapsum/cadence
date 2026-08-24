@@ -57,7 +57,7 @@ pub(super) fn render_titlebar_history(
     view: &CadenceView,
     cx: &Context<'_, CadenceView>,
 ) -> gpui::AnyElement {
-    let interactive = view.is_interactive();
+    let interactive = view.is_interactive() && !view.is_bulk_selecting();
     let undo_button = Button::new("undo")
         .ghost()
         .small()
@@ -103,6 +103,9 @@ pub(super) fn render_titlebar_actions(
     window: &Window,
     cx: &Context<'_, CadenceView>,
 ) -> gpui::AnyElement {
+    if view.is_bulk_selecting() {
+        return render_bulk_selection_actions(view, cx);
+    }
     let width = window.viewport_size().width.as_f32();
     let show_filter = width >= 960.0;
     let show_today = width >= 760.0;
@@ -190,6 +193,60 @@ fn render_mode_control(view: &CadenceView, cx: &Context<'_, CadenceView>) -> gpu
         .into_any_element()
 }
 
+fn render_bulk_selection_actions(
+    view: &CadenceView,
+    cx: &Context<'_, CadenceView>,
+) -> gpui::AnyElement {
+    let selected_count = view.bulk_selection_count();
+    let all_selected = view.bulk_all_selected();
+    let selectable_count = view.bulk_selectable_count();
+    div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .child(
+            div()
+                .text_sm()
+                .font_medium()
+                .text_color(cx.theme().foreground)
+                .child(format!("{selected_count} selected")),
+        )
+        .child(
+            Button::new("bulk-select-all")
+                .outline()
+                .small()
+                .label(if all_selected {
+                    "Clear all"
+                } else {
+                    "Select all"
+                })
+                .disabled(selectable_count == 0)
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.select_all_visible_events(cx);
+                })),
+        )
+        .child(
+            Button::new("bulk-delete-selected")
+                .danger()
+                .small()
+                .label(format!("Delete {selected_count}"))
+                .disabled(selected_count == 0)
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.confirm_delete_selected(window, cx);
+                })),
+        )
+        .child(
+            Button::new("bulk-cancel")
+                .ghost()
+                .small()
+                .label("Cancel")
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.cancel_event_selection(cx);
+                })),
+        )
+        .into_any_element()
+}
+
 fn render_overflow_menu(
     view: &CadenceView,
     show_filter: bool,
@@ -199,6 +256,7 @@ fn render_overflow_menu(
 ) -> impl IntoElement {
     let owner = cx.entity().downgrade();
     let interactive = view.is_interactive();
+    let selectable_events = view.bulk_selectable_count_for_active_surface();
     let appearance_mode = view.appearance.mode;
     let selected_filter = view.state.category_filter();
     let filters = std::iter::once(FilterOption::all())
@@ -237,7 +295,15 @@ fn render_overflow_menu(
                 selected_filter,
                 &filters,
             );
-            add_secondary_items(menu, &owner, interactive, appearance_mode, window, cx)
+            add_secondary_items(
+                menu,
+                &owner,
+                interactive,
+                selectable_events > 0,
+                appearance_mode,
+                window,
+                cx,
+            )
         })
 }
 
@@ -327,6 +393,7 @@ fn add_secondary_items(
     menu: PopupMenu,
     owner: &gpui::WeakEntity<CadenceView>,
     interactive: bool,
+    selectable_events: bool,
     appearance_mode: AppearanceMode,
     window: &mut Window,
     cx: &mut gpui::Context<'_, PopupMenu>,
@@ -336,8 +403,18 @@ fn add_secondary_items(
     let appearance_owner = owner.clone();
     let settings_owner = owner.clone();
     let about_owner = owner.clone();
+    let selection_owner = owner.clone();
     let menu = menu
         .separator()
+        .item(
+            PopupMenuItem::new("Select events")
+                .disabled(!interactive || !selectable_events)
+                .on_click(move |_, _, cx| {
+                    selection_owner
+                        .update(cx, CadenceView::begin_event_selection)
+                        .ok();
+                }),
+        )
         .item(
             PopupMenuItem::new("Agenda")
                 .icon(IconName::Calendar)

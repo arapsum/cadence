@@ -6,7 +6,16 @@ All notable Cadence releases are documented here. The format follows
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### Added
+
+- Select multiple visible events and delete them as one undoable operation;
+  recurring selections cancel only their chosen dates.
+- Start or toggle bulk event selection with Cmd/Ctrl+Left Click.
+
+### Changed
+
+- Make weekly recurrence date-aware by defaulting to the event's weekday (for
+  example, “Weekly on Monday”) while retaining custom weekday selections.
 
 ## [0.1.1] - 2026-08-23
 
