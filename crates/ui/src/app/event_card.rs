@@ -74,6 +74,10 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
     };
     let element_key = format!("{occurrence_id:?}");
     let event_date = event.date();
+    let test_card = matches!(mode, SurfaceMode::Day)
+        && event_date == view.state.selected_date()
+        && event.start_time().hour() == 7
+        && event.start_time().minute() == 30;
     let accessibility_label = format!("{title}, {category_name}, {event_date}, {event_time}");
     let compact = position.height() < 42.0;
     let tall = position.height() >= 68.0;
@@ -122,7 +126,6 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
     });
     div()
         .id(format!("{}-event-card-{element_key}", mode.key()))
-        .debug_selector(|| "calendar-event-card".into())
         .role(gpui::Role::Button)
         .aria_label(accessibility_label)
         .aria_selected(selected)
@@ -161,6 +164,9 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
         })
         .focus(|this| this.border_color(cx.theme().foreground))
         .hover(|this| this.opacity(0.92))
+        .when(test_card, |this| {
+            this.debug_selector(|| "calendar-event-card".into())
+        })
         .tooltip(move |window, cx| Tooltip::new(tooltip_text.clone()).build(window, cx))
         .on_key_down(
             move |event: &KeyDownEvent, window, app| match event.keystroke.key.as_str() {

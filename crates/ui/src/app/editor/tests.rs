@@ -10,6 +10,7 @@ use jiff::civil::Time;
 use super::super::state::CadenceView;
 use super::{form::TimeOption, form::end_time_options_after};
 use crate::{
+    calendar::CalendarViewMode,
     domain::RecurrenceRule,
     editor::{EditorMode, FormDraft},
 };
@@ -229,6 +230,9 @@ fn secondary_click_enters_and_toggles_bulk_selection(cx: &mut TestAppContext) {
         .clone()
         .expect("calendar view was captured while building the root");
 
+    calendar.update_in(cx, |view, _, _| {
+        view.initialize_scroll(CalendarViewMode::Day, (0.0, 500.0));
+    });
     cx.update(|window, app| window.draw(app).clear(app));
     let event_card = cx
         .debug_bounds("calendar-event-card")
