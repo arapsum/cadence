@@ -1,8 +1,8 @@
 use std::{cell::RefCell, rc::Rc};
 
 use gpui::{
-    AppContext as _, Entity, Modifiers, ScrollDelta, ScrollWheelEvent, TestAppContext, TouchPhase,
-    point, px,
+    AppContext as _, Entity, Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, ScrollDelta,
+    ScrollWheelEvent, TestAppContext, TouchPhase, point, px,
 };
 use gpui_component::Root;
 use jiff::civil::Time;
@@ -210,5 +210,70 @@ fn bulk_selection_tracks_visible_occurrences(cx: &mut TestAppContext) {
     calendar.update_in(cx, |view, _, app| {
         view.cancel_event_selection(app);
     });
+    assert!(!calendar.read_with(cx, |view, _| view.is_bulk_selecting()));
+}
+
+#[gpui::test]
+fn secondary_click_enters_and_toggles_bulk_selection(cx: &mut TestAppContext) {
+    cx.update(gpui_component::init);
+
+    let calendar = Rc::new(RefCell::new(None::<Entity<CadenceView>>));
+    let captured_calendar = Rc::clone(&calendar);
+    let (_, cx) = cx.add_window_view(move |window, cx| {
+        let view = cx.new(|cx| CadenceView::new(window, cx));
+        captured_calendar.replace(Some(view.clone()));
+        Root::new(view, window, cx)
+    });
+    let calendar = calendar
+        .borrow()
+        .clone()
+        .expect("calendar view was captured while building the root");
+
+    cx.update(|window, app| window.draw(app).clear(app));
+    let event_card = cx
+        .debug_bounds("calendar-event-card")
+        .expect("an event card was rendered");
+    cx.simulate_click(event_card.center(), Modifiers::secondary_key());
+
+    assert!(calendar.read_with(cx, |view, _| view.is_bulk_selecting()));
+    assert_eq!(
+        calendar.read_with(cx, |view, _| view.bulk_selection_count()),
+        1
+    );
+
+    cx.update(|window, app| window.draw(app).clear(app));
+    let event_card = cx
+        .debug_bounds("calendar-event-card")
+        .expect("the selected event card was rendered");
+    cx.simulate_click(event_card.center(), Modifiers::secondary_key());
+
+    assert_eq!(
+        calendar.read_with(cx, |view, _| view.bulk_selection_count()),
+        0
+    );
+
+    calendar.update_in(cx, |view, _, app| {
+        view.cancel_event_selection(app);
+    });
+    cx.update(|window, app| window.draw(app).clear(app));
+    let event_card = cx
+        .debug_bounds("calendar-event-card")
+        .expect("the event card was rendered for the double-click check");
+    let modifiers = Modifiers::secondary_key();
+    cx.simulate_event(MouseDownEvent {
+        position: event_card.center(),
+        modifiers,
+        button: MouseButton::Left,
+        click_count: 2,
+        first_mouse: false,
+    });
+    cx.simulate_event(MouseUpEvent {
+        position: event_card.center(),
+        modifiers,
+        button: MouseButton::Left,
+        click_count: 2,
+    });
+
+    assert!(!cx.update(gpui_component::WindowExt::has_active_dialog));
     assert!(!calendar.read_with(cx, |view, _| view.is_bulk_selecting()));
 }

@@ -122,6 +122,7 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
     });
     div()
         .id(format!("{}-event-card-{element_key}", mode.key()))
+        .debug_selector(|| "calendar-event-card".into())
         .role(gpui::Role::Button)
         .aria_label(accessibility_label)
         .aria_selected(selected)
@@ -213,14 +214,22 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
         .on_click(move |event, window, app| {
             app.stop_propagation();
             view.update(app, |this, cx| {
-                if bulk_mode {
-                    if bulk_selectable {
+                if event.standard_click() && event.modifiers().secondary() {
+                    if event.click_count() == 1 {
+                        this.toggle_event_selection_from_shortcut(
+                            mode.calendar_mode(),
+                            occurrence_id,
+                            cx,
+                        );
+                    }
+                } else if bulk_mode {
+                    if bulk_selectable && event.standard_click() {
                         this.toggle_event_selection(mode.calendar_mode(), occurrence_id, cx);
                     }
                 } else if event.standard_click() && event.click_count() >= 2 {
                     this.activate_surface(mode.calendar_mode(), cx);
                     this.inspect_event(occurrence_id, event_date, window, cx);
-                } else {
+                } else if event.standard_click() {
                     this.activate_surface(mode.calendar_mode(), cx);
                     this.select_event(occurrence_id, event_date, cx);
                 }

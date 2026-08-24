@@ -154,6 +154,24 @@ impl CadenceView {
         cx.notify();
     }
 
+    /// Enters bulk selection when needed and toggles an occurrence from a
+    /// modifier-assisted pointer click.
+    pub(in crate::app) fn toggle_event_selection_from_shortcut(
+        &mut self,
+        surface: CalendarViewMode,
+        occurrence_id: OccurrenceId,
+        cx: &mut Context<'_, Self>,
+    ) {
+        if !self.is_interactive() {
+            return;
+        }
+        if !self.is_bulk_selecting() {
+            self.activate_surface(surface, cx);
+            self.begin_event_selection(cx);
+        }
+        self.toggle_event_selection(surface, occurrence_id, cx);
+    }
+
     /// Selects every visible occurrence, or clears the set when all are selected.
     pub(in crate::app) fn select_all_visible_events(&mut self, cx: &mut Context<'_, Self>) {
         let Some(surface) = self.bulk_selection_surface() else {
