@@ -33,10 +33,15 @@ scan every event in the selected calendar range.
 
 ## Recurring events
 
-Choose Daily, Weekdays, or Weekly in the event editor. Weekly routines can use
-selected weekdays and an inclusive end date. When editing or deleting a
-recurring event, choose whether the change applies to one occurrence or this
-occurrence and all following occurrences.
+Choose Daily, Weekdays, or Weekly in the event editor. A new weekly routine
+defaults to the weekday of its event date and shows that choice explicitly—for
+example, “Weekly on Monday.” Change the date before customizing the weekday
+buttons and the weekly day follows it automatically. Once you select custom
+weekday buttons, those days are preserved while you adjust the date, so a
+multi-day routine can be scheduled deliberately. Weekly routines also support
+an inclusive end date. When editing or deleting a recurring event, choose
+whether the change applies to one occurrence or this occurrence and all
+following occurrences.
 
 Choose a reminder in the editor, then enable desktop notifications in
 **Settings**. Reminders are delivered only while Cadence is running and remain

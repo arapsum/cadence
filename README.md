@@ -24,9 +24,11 @@ as a quiet, spatially honest time grid rather than a dashboard.
 - Use pointer and keyboard interactions with light and dark themes.
 - Drag event bodies across time and days, resize their start or end, preview
   snapped changes, and cancel an in-progress manipulation with Escape.
-- Schedule Daily, Weekdays, or Weekly routines on selected weekdays with an
-  optional inclusive end date; edit or delete one occurrence or this and all
-  following occurrences without expanding the series into copied rows.
+- Schedule Daily, Weekdays, or Weekly routines; weekly routines default to the
+  event date's weekday (for example, “Weekly on Monday”) and can be customized
+  to multiple weekdays with an optional inclusive end date. Edit or delete one
+  occurrence or this and all following occurrences without expanding the series
+  into copied rows.
 - Store events, categories, settings, and calendar preferences locally with
   transactional writes and numbered schema migrations, including recurring
   series and per-occurrence exceptions.

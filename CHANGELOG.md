@@ -6,7 +6,10 @@ All notable Cadence releases are documented here. The format follows
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### Changed
+
+- Make weekly recurrence date-aware by defaulting to the event's weekday (for
+  example, “Weekly on Monday”) while retaining custom weekday selections.
 
 ## [0.1.1] - 2026-08-23
 
