@@ -8,6 +8,18 @@ All notable Cadence releases are documented here. The format follows
 
 No unreleased changes yet.
 
+## [0.1.4] - 2026-08-26
+
+### Added
+
+- Open application preferences in a dedicated, single-instance Settings window
+  that stays synchronized with the main calendar and closes with it.
+
+### Changed
+
+- Reduce the shared main and Settings title toolbar height for a more compact
+  workspace.
+
 ## [0.1.3] - 2026-08-26
 
 ### Changed
