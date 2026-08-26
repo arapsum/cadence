@@ -24,6 +24,19 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Verify release version
+        run: scripts/check-release-version.sh "$GITHUB_REF_NAME"
+
+      - name: Verify tagged commit belongs to main
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Release tag must reference a commit on main." >&2
+            exit 1
+          fi
 
       - name: Install Linux build and packaging dependencies
         run: |
@@ -47,21 +60,13 @@ jobs:
             pkg-config
 
       - name: Configure pinned Rust
-        run: |
-          rustup toolchain install 1.97.1 --profile minimal
-          rustup component add --toolchain 1.97.1 clippy rustfmt
+        run: rustup toolchain install 1.97.1 --profile minimal
 
-      - name: Verify release version
-        run: scripts/check-release-version.sh "$GITHUB_REF_NAME"
-
-      - name: Verify formatting
-        run: cargo fmt --all -- --check
-
-      - name: Lint all targets and features
-        run: cargo clippy --workspace --locked --all-targets --all-features -- -D warnings -W clippy::pedantic -W clippy::nursery -W rust-2018-idioms
-
-      - name: Run tests
-        run: cargo test --workspace --locked --all-targets --all-features
+      - name: Restore Rust release cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: release
+          save-if: false
 
       - name: Build release binary
         run: CADENCE_BUILD_COMMIT="${GITHUB_SHA::12}" cargo build --locked --release -p cadence-desktop

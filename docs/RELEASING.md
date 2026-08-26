@@ -19,20 +19,32 @@ and complete the manual smoke test before publishing it.
    cargo test --workspace --locked --all-targets --all-features
    ```
 
-5. Commit the release preparation and create an annotated tag:
+5. Commit the release preparation on a `release/v<version>` branch, open a
+   pull request to protected `main`, and wait for both required CI checks.
+6. Merge the release pull request and wait for the `main` CI run to pass. This
+   verifies the exact merged commit and refreshes the Rust release cache used
+   by the tag workflow.
+7. Update local `main`, verify its version, and create the annotated tag from
+   that commit:
 
    ```sh
+   git switch main
+   git pull --ff-only origin main
+   scripts/check-release-version.sh v<version>
    git tag -a v<version> -m "Cadence <version>"
-   git push origin main v<version>
+   git push origin v<version>
    ```
 
 ## Automated release
 
-The `Release` workflow verifies that the tag, Cargo version, changelog, and
-metadata agree. It builds the locked release binary, creates a deterministic
-`.deb`, validates desktop/AppStream metadata and package contents, and runs a
-clean Ubuntu installation/upgrade/uninstall check. It then publishes SHA-256
-checksums and build-provenance attestations and creates a draft GitHub release.
+The required pull-request and `main` CI runs own formatting, lint, tests, and
+package validation. The tag-triggered `Release` workflow verifies that the tag
+belongs to `main` and that its Cargo version, changelog, and metadata agree. It
+then restores the release cache, builds the locked release binary, creates a
+deterministic `.deb`, validates desktop/AppStream metadata and package contents,
+and runs a clean Ubuntu installation/upgrade/uninstall check. Finally, it
+publishes SHA-256 checksums and build-provenance attestations and creates a draft
+GitHub release.
 
 The equivalent local commands are:
 

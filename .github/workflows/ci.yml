@@ -27,8 +27,32 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Determine quality-check scope
+        id: quality-scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]] \
+            || ! git cat-file -e "$BASE_SHA^{commit}"; then
+            required=true
+          elif git diff --quiet "$BASE_SHA" "$GITHUB_SHA" -- \
+            Cargo.lock \
+            Cargo.toml \
+            rust-toolchain.toml \
+            .cargo \
+            .github/workflows \
+            crates; then
+            required=false
+          else
+            required=true
+          fi
+          echo "required=$required" >> "$GITHUB_OUTPUT"
 
       - name: Install Linux build dependencies
+        if: steps.quality-scope.outputs.required == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
@@ -47,21 +71,33 @@ jobs:
             pkg-config
 
       - name: Configure pinned Rust
+        if: steps.quality-scope.outputs.required == 'true'
         run: |
           rustup toolchain install 1.97.1 --profile minimal
           rustup component add --toolchain 1.97.1 clippy rustfmt
 
+      - name: Restore Rust quality cache
+        if: steps.quality-scope.outputs.required == 'true'
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: quality
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
       - name: Verify formatting
+        if: steps.quality-scope.outputs.required == 'true'
         run: cargo fmt --all -- --check
 
       - name: Lint all targets and features
+        if: steps.quality-scope.outputs.required == 'true'
         run: cargo clippy --workspace --locked --all-targets --all-features -- -D warnings -W clippy::pedantic -W clippy::nursery -W rust-2018-idioms
 
       - name: Run tests
+        if: steps.quality-scope.outputs.required == 'true'
         run: cargo test --workspace --locked --all-targets --all-features
 
-      - name: Build release profile
-        run: cargo build --workspace --locked --release
+      - name: Skip quality checks for documentation-only changes
+        if: steps.quality-scope.outputs.required != 'true'
+        run: echo "No quality-check inputs changed."
 
   package:
     name: Build and validate Ubuntu package
@@ -71,8 +107,34 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Determine package-check scope
+        id: package-scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]] \
+            || ! git cat-file -e "$BASE_SHA^{commit}"; then
+            required=true
+          elif git diff --quiet "$BASE_SHA" "$GITHUB_SHA" -- \
+            Cargo.lock \
+            Cargo.toml \
+            rust-toolchain.toml \
+            .cargo \
+            .github/workflows \
+            crates \
+            packaging \
+            scripts; then
+            required=false
+          else
+            required=true
+          fi
+          echo "required=$required" >> "$GITHUB_OUTPUT"
 
       - name: Install Linux build and metadata dependencies
+        if: steps.package-scope.outputs.required == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
@@ -94,17 +156,31 @@ jobs:
             pkg-config
 
       - name: Configure pinned Rust
+        if: steps.package-scope.outputs.required == 'true'
         run: |
           rustup toolchain install 1.97.1 --profile minimal
-          rustup component add --toolchain 1.97.1 clippy rustfmt
+
+      - name: Restore Rust release cache
+        if: steps.package-scope.outputs.required == 'true'
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: release
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
       - name: Build release binary
+        if: steps.package-scope.outputs.required == 'true'
         run: cargo build --locked --release -p cadence-desktop
 
       - name: Build Debian package
+        if: steps.package-scope.outputs.required == 'true'
         run: scripts/package-linux.sh --skip-build
 
       - name: Validate Debian package
+        if: steps.package-scope.outputs.required == 'true'
         run: |
           version=$(sed -nE 's/^version = "([0-9][^"]*)"/\1/p' Cargo.toml | head -n 1)
           scripts/validate-linux-package.sh "target/dist/cadence_${version}_amd64.deb"
+
+      - name: Skip package checks for documentation-only changes
+        if: steps.package-scope.outputs.required != 'true'
+        run: echo "No package inputs changed."
