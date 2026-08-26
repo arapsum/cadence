@@ -1,21 +1,16 @@
 use gpui::{Context, IntoElement, Window, div, prelude::*, px};
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Placement, StyledExt as _, WindowExt as _,
+    ActiveTheme as _, Placement, StyledExt as _, WindowExt as _,
     button::{Button, ButtonVariants as _},
-    group_box::GroupBoxVariant,
-    setting::{SettingField, SettingGroup, SettingItem, SettingPage, Settings},
-    window_paddings,
 };
 
 use crate::{APPLICATION_NAME, BuildInfo};
 use crate::{domain::format_time, store::TimetableRepository};
 
 use super::{
-    appearance::AppearanceControls,
-    categories::CategoryManager,
     history::{CalendarChange, ChangeKind},
     state::{CadenceView, HistoryEffect},
-    style::{category_dot, dialog_margin_top},
+    style::category_dot,
     toolbar::FilterOption,
 };
 
@@ -106,59 +101,6 @@ impl CadenceView {
         });
     }
 
-    /// Opens the persisted application-preferences dialog.
-    pub(in crate::app) fn open_settings(&self, window: &mut Window, cx: &mut Context<'_, Self>) {
-        let week_start = format!("{:?}", self.settings.week_starts_on());
-        let clock_format = match self.settings.clock_format() {
-            crate::domain::ClockFormat::TwelveHour => "12-hour",
-            crate::domain::ClockFormat::TwentyFourHour => "24-hour",
-        };
-        let owner = cx.entity().downgrade();
-        let view = cx.entity();
-        let category_manager = cx.new(|cx| CategoryManager::new(view, cx));
-        let appearance_controls =
-            cx.new(|cx| AppearanceControls::new(owner.clone(), &self.appearance, window, cx));
-        window.open_dialog(cx, move |dialog, dialog_window, _| {
-            let viewport = dialog_window.viewport_size();
-            let padding = window_paddings(dialog_window);
-            let available_width = viewport.width - padding.left - padding.right;
-            let available_height = viewport.height - padding.top - padding.bottom;
-            let dialog_width = (available_width - px(48.0)).clamp(px(560.0), px(900.0));
-            let dialog_height = (available_height - px(96.0)).clamp(px(440.0), px(620.0));
-            let margin_top = dialog_margin_top(available_height, dialog_height);
-
-            let general_page = general_settings_page(&owner, week_start.clone(), clock_format);
-            let notifications_page = notifications_settings_page(&owner);
-            let categories_page = categories_settings_page(category_manager.clone());
-            let appearance_page = appearance_settings_page(appearance_controls.clone());
-
-            let settings = Settings::new("cadence-settings")
-                .sidebar_width(px(190.0))
-                .with_group_variant(GroupBoxVariant::Outline)
-                .pages([
-                    general_page,
-                    appearance_page,
-                    notifications_page,
-                    categories_page,
-                ]);
-
-            dialog
-                .margin_top(margin_top)
-                .title("Settings")
-                .w(dialog_width)
-                .h(dialog_height)
-                .child(div().size_full().overflow_hidden().child(settings))
-                .footer(
-                    div().flex().justify_end().child(
-                        Button::new("settings-close")
-                            .primary()
-                            .label("Done")
-                            .on_click(|_, window, cx| window.close_dialog(cx)),
-                    ),
-                )
-        });
-    }
-
     /// Opens the application identity and support-information dialog.
     pub(in crate::app) fn open_about(window: &mut Window, cx: &mut Context<'_, Self>) {
         let build = BuildInfo::current();
@@ -206,7 +148,7 @@ impl CadenceView {
         });
     }
 
-    fn set_notifications(&mut self, enabled: bool, cx: &mut Context<'_, Self>) {
+    pub(in crate::app) fn set_notifications(&mut self, enabled: bool, cx: &mut Context<'_, Self>) {
         let Ok(before) = self.repository.snapshot() else {
             return;
         };
@@ -216,7 +158,7 @@ impl CadenceView {
         cx.notify();
     }
 
-    fn set_reduce_motion(&mut self, enabled: bool, cx: &mut Context<'_, Self>) {
+    pub(in crate::app) fn set_reduce_motion(&mut self, enabled: bool, cx: &mut Context<'_, Self>) {
         let Ok(before) = self.repository.snapshot() else {
             return;
         };
@@ -367,117 +309,4 @@ impl CadenceView {
             select.set_selected_value(&selected, window, cx);
         });
     }
-}
-
-fn general_settings_page(
-    owner: &gpui::WeakEntity<CadenceView>,
-    week_start: String,
-    clock_format: &'static str,
-) -> SettingPage {
-    let motion_reader = owner.clone();
-    let motion_writer = owner.clone();
-    SettingPage::new("General")
-        .icon(Icon::new(IconName::Settings2))
-        .default_open(true)
-        .resettable(false)
-        .description("Calendar display and accessibility preferences.")
-        .groups([
-            SettingGroup::new().title("Calendar").items([
-                SettingItem::new(
-                    "Week starts on",
-                    SettingField::render(move |_, _, cx| {
-                        div()
-                            .text_sm()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(week_start.clone())
-                    }),
-                )
-                .description("The first column shown in week view."),
-                SettingItem::new(
-                    "Clock format",
-                    SettingField::render(move |_, _, cx| {
-                        div()
-                            .text_sm()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(clock_format)
-                    }),
-                )
-                .description("How event and time-grid labels are displayed."),
-            ]),
-            SettingGroup::new().title("Accessibility").item(
-                SettingItem::new(
-                    "Reduce motion",
-                    SettingField::switch(
-                        move |cx| {
-                            motion_reader
-                                .read_with(cx, |view, _| view.reduce_motion)
-                                .unwrap_or(false)
-                        },
-                        move |enabled, cx| {
-                            motion_writer
-                                .update(cx, |view, cx| {
-                                    view.set_reduce_motion(enabled, cx);
-                                })
-                                .ok();
-                        },
-                    ),
-                )
-                .description("Minimise non-essential interface animation."),
-            ),
-        ])
-}
-
-fn notifications_settings_page(owner: &gpui::WeakEntity<CadenceView>) -> SettingPage {
-    let notification_reader = owner.clone();
-    let notification_writer = owner.clone();
-    SettingPage::new("Notifications")
-        .icon(Icon::new(IconName::Bell))
-        .resettable(false)
-        .description("Control reminders delivered while Cadence is running.")
-        .group(
-            SettingGroup::new().title("Desktop reminders").item(
-                SettingItem::new(
-                    "Enable notifications",
-                    SettingField::switch(
-                        move |cx| {
-                            notification_reader
-                                .read_with(cx, |view, _| view.notifications_enabled)
-                                .unwrap_or(false)
-                        },
-                        move |enabled, cx| {
-                            notification_writer
-                                .update(cx, |view, cx| {
-                                    view.set_notifications(enabled, cx);
-                                })
-                                .ok();
-                        },
-                    ),
-                )
-                .description("Operating-system notification permissions still apply to reminders."),
-            ),
-        )
-}
-
-fn categories_settings_page(manager: gpui::Entity<CategoryManager>) -> SettingPage {
-    SettingPage::new("Categories")
-        .icon(Icon::new(IconName::Palette))
-        .resettable(false)
-        .description("Create, edit, hide, and safely remove calendar categories.")
-        .group(
-            SettingGroup::new()
-                .title("Calendar categories")
-                .item(SettingItem::render(move |_, _, _| manager.clone())),
-        )
-}
-
-fn appearance_settings_page(manager: gpui::Entity<AppearanceControls>) -> SettingPage {
-    SettingPage::new("Appearance")
-        .icon(Icon::new(IconName::Palette))
-        .resettable(false)
-        .description("Choose the theme, appearance mode, and application typography.")
-        .group(
-            SettingGroup::new()
-                .title("Theme and typography")
-                .item(SettingItem::render(move |_, _, _| manager.clone())),
-        )
 }
