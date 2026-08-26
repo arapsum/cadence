@@ -231,6 +231,13 @@ fn day_plan_event_selection_remains_available(cx: &mut TestAppContext) {
         .expect("calendar view was captured while building the root");
 
     cx.update(|window, app| window.draw(app).clear(app));
+    let week_panel = cx
+        .debug_bounds("week-workspace-panel")
+        .expect("the Week workspace was rendered");
+    assert!(
+        week_panel.size.height > px(400.0),
+        "the Week workspace should fill the available calendar height"
+    );
     let day_header = cx
         .debug_bounds("calendar-day-header")
         .expect("the selected week header was rendered");
@@ -245,6 +252,13 @@ fn day_plan_event_selection_remains_available(cx: &mut TestAppContext) {
     assert!(
         cx.debug_bounds("calendar-event-card").is_some(),
         "the opened day plan should lay out its events"
+    );
+    let day_surface = cx
+        .debug_bounds("day-calendar-surface")
+        .expect("the Day plan surface was rendered");
+    assert!(
+        day_surface.size.height > px(400.0),
+        "the Day plan surface should fill the sheet body"
     );
     let occurrence = calendar.read_with(cx, |view, _| {
         view.snapshot

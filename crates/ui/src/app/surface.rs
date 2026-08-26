@@ -162,6 +162,9 @@ pub(super) fn render(
 
     div()
         .id(format!("{}-calendar-surface", mode.key()))
+        .when(mode == SurfaceMode::Day, |this| {
+            this.debug_selector(|| "day-calendar-surface".into())
+        })
         .relative()
         .flex_1()
         .min_h_0()

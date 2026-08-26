@@ -48,6 +48,7 @@ fn render_week_panel(
 
     div()
         .id("week-workspace-panel")
+        .debug_selector(|| "week-workspace-panel".into())
         .v_flex()
         .size_full()
         .min_w_0()

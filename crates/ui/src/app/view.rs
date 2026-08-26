@@ -179,6 +179,7 @@ fn render_day_plan_sheet(
                 )
                 .child(
                     div()
+                        .v_flex()
                         .flex_1()
                         .min_h_0()
                         .child(super::day::render(view, window, cx)),
@@ -270,6 +271,7 @@ fn render_content(
         }
         PersistenceState::Ready | PersistenceState::Writing => div()
             .relative()
+            .v_flex()
             .flex_1()
             .min_h_0()
             .child(workspace::render(view, window, cx))
