@@ -4,10 +4,9 @@ use gpui_component::{
     button::{Button, ButtonVariants as _},
     menu::{DropdownMenu as _, PopupMenu, PopupMenuItem},
     select::{Select, SelectItem},
-    tab::{Tab, TabBar},
 };
 
-use crate::calendar::{CalendarViewMode, CategoryFilter};
+use crate::calendar::CategoryFilter;
 use crate::{
     domain::CategoryColor,
     store::{AppearanceMode, TimetableRepository},
@@ -138,7 +137,6 @@ pub(super) fn render_titlebar_actions(
         .flex()
         .items_center()
         .gap_2()
-        .child(render_mode_control(view, cx))
         .when(show_filter, |this| this.child(filter));
     let trailing = div()
         .flex()
@@ -167,29 +165,6 @@ pub(super) fn render_titlebar_actions(
         .w_full()
         .child(leading)
         .child(trailing)
-        .into_any_element()
-}
-
-fn render_mode_control(view: &CadenceView, cx: &Context<'_, CadenceView>) -> gpui::AnyElement {
-    TabBar::new("calendar-view-mode")
-        .segmented()
-        .small()
-        .selected_index(match view.state.view_mode() {
-            CalendarViewMode::Day => 0,
-            CalendarViewMode::Week => 1,
-        })
-        .on_click(cx.listener(|this, index: &usize, _, cx| {
-            this.set_view_mode(
-                if *index == 0 {
-                    CalendarViewMode::Day
-                } else {
-                    CalendarViewMode::Week
-                },
-                cx,
-            );
-        }))
-        .child(Tab::new().label("Day"))
-        .child(Tab::new().label("Week"))
         .into_any_element()
 }
 

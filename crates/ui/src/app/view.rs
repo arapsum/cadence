@@ -1,11 +1,10 @@
 use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px};
 use gpui_component::{
-    ActiveTheme as _, Root, StyledExt as _,
+    ActiveTheme as _, FocusTrapElement as _, IconName, Root, Sizable as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
     skeleton::Skeleton,
 };
 
-use crate::calendar::CalendarViewMode;
 use crate::components::title_bar::CadenceTitleBar;
 
 use super::{
@@ -22,12 +21,6 @@ impl Render for CadenceView {
         let notification_layer = Root::render_notification_layer(window, cx);
         div()
             .key_context(actions::CALENDAR_CONTEXT)
-            .on_action(cx.listener(|this, _: &actions::ShowDay, _, cx| {
-                this.set_view_mode(CalendarViewMode::Day, cx);
-            }))
-            .on_action(cx.listener(|this, _: &actions::ShowWeek, _, cx| {
-                this.set_view_mode(CalendarViewMode::Week, cx);
-            }))
             .on_action(cx.listener(|this, _: &actions::PreviousPeriod, _, cx| {
                 this.shift_period(false, cx);
             }))
@@ -65,7 +58,9 @@ impl Render for CadenceView {
             )
             .on_action(
                 cx.listener(|this, _: &actions::CancelManipulation, window, cx| {
-                    if this.is_bulk_selecting() {
+                    if this.day_plan_open && this.manipulation.is_none() {
+                        this.close_day_plan(window, cx);
+                    } else if this.is_bulk_selecting() {
                         this.cancel_event_selection(cx);
                     } else {
                         this.cancel_manipulation(window, cx);
@@ -73,6 +68,7 @@ impl Render for CadenceView {
                 }),
             )
             .v_flex()
+            .relative()
             .size_full()
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
@@ -99,6 +95,98 @@ impl Render for CadenceView {
             .children(dialog_layer)
             .children(notification_layer)
     }
+}
+
+fn render_day_plan_sheet(
+    view: &mut CadenceView,
+    window: &Window,
+    cx: &mut Context<'_, CadenceView>,
+) -> gpui::AnyElement {
+    let owner = cx.entity().downgrade();
+    let title = view
+        .state
+        .selected_date()
+        .strftime("%A, %B %-d")
+        .to_string();
+    let focus = view.day_plan_focus.clone();
+
+    div()
+        .absolute()
+        .inset_0()
+        .child(
+            div()
+                .id("day-plan-sheet-overlay")
+                .absolute()
+                .inset_0()
+                .occlude()
+                .bg(cx.theme().background.opacity(0.52))
+                .on_click(move |_, window, app| {
+                    owner
+                        .update(app, |view, cx| view.close_day_plan(window, cx))
+                        .ok();
+                }),
+        )
+        .child(
+            div()
+                .id("day-plan-sheet")
+                .debug_selector(|| "day-plan-sheet".into())
+                .absolute()
+                .top(px(0.0))
+                .right_0()
+                .bottom_0()
+                .w(px(440.0))
+                .min_w(px(360.0))
+                .v_flex()
+                .occlude()
+                .bg(cx.theme().background)
+                .border_l_1()
+                .border_color(cx.theme().border)
+                .shadow_xl()
+                .track_focus(&focus)
+                .on_click(|_, _, app| app.stop_propagation())
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .h(px(48.0))
+                        .flex_shrink_0()
+                        .px_4()
+                        .border_b_1()
+                        .border_color(cx.theme().border.opacity(0.72))
+                        .child(
+                            div()
+                                .v_flex()
+                                .gap_0()
+                                .child(div().text_sm().font_semibold().child("Day plan"))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(title),
+                                ),
+                        )
+                        .child(
+                            Button::new("close-day-plan-sheet")
+                                .ghost()
+                                .small()
+                                .icon(IconName::Close)
+                                .tooltip("Close day plan (Escape)")
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.close_day_plan(window, cx);
+                                })),
+                        ),
+                )
+                .child(
+                    div()
+                        .v_flex()
+                        .flex_1()
+                        .min_h_0()
+                        .child(super::day::render(view, window, cx)),
+                )
+                .focus_trap("day-plan-sheet-focus", &focus),
+        )
+        .into_any_element()
 }
 
 fn render_content(
@@ -181,9 +269,16 @@ fn render_content(
                 )
                 .into_any_element()
         }
-        PersistenceState::Ready | PersistenceState::Writing => {
-            workspace::render(view, window, cx).into_any_element()
-        }
+        PersistenceState::Ready | PersistenceState::Writing => div()
+            .relative()
+            .v_flex()
+            .flex_1()
+            .min_h_0()
+            .child(workspace::render(view, window, cx))
+            .when(view.day_plan_open, |this| {
+                this.child(render_day_plan_sheet(view, window, cx))
+            })
+            .into_any_element(),
     }
 }
 

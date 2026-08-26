@@ -16,10 +16,15 @@ sudo apt install ./cadence_<version>_amd64.deb
 Launch **Cadence** from the application menu or run `cadence`. The supported
 release environment is Ubuntu 26.04 LTS on x86_64 with a Wayland session.
 
-## Plan a day or week
+## Plan your week
 
-- Use **Day** for a focused, vertically scrollable plan.
-- Use **Week** to compare seven days and spot the shape of the week.
+- **Week** is the main calendar, so you can compare seven days and spot the
+  shape of the week at a glance.
+- Click a weekday header, or focus it and press Enter/Space, to open that
+  date's focused **Day plan** in a sheet. The sheet keeps the full time grid,
+  including event creation, editing, drag-and-resize, and scrolling.
+- Close the Day plan with its close button, Escape, or a click outside the
+  sheet. The selected date remains highlighted in Week.
 - Use the date controls or **Today** to navigate.
 - Use the category menu to focus on one type of work.
 - Select an empty time slot or choose **New event** to open the editor.
@@ -69,15 +74,14 @@ the old database only after confirming that you want to start fresh.
 
 | Action | Shortcut |
 | --- | --- |
-| Show Day | Cmd/Ctrl+1 |
-| Show Week | Cmd/Ctrl+2 |
+| Open a day plan | Click a weekday header, or Enter/Space when focused |
 | Previous or next period | Alt+Left / Alt+Right |
 | Go to today | Cmd/Ctrl+T |
 | New event | Cmd/Ctrl+N |
 | Start or toggle event selection | Cmd/Ctrl+Left Click |
 | Select all visible events (selection mode) | Cmd/Ctrl+A |
 | Delete selected events (selection mode) | Delete / Backspace |
-| Cancel event selection | Escape |
+| Close Day plan or cancel event selection | Escape |
 | Undo | Cmd/Ctrl+Z |
 | Redo | Cmd/Ctrl+Shift+Z or Ctrl+Y |
 

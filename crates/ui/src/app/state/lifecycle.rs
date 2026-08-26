@@ -12,8 +12,8 @@ use crate::{
     domain::DateRange,
     domain::Settings,
     store::{
-        AppearancePreferences, CalendarViewModePreference, InMemoryRepository, StorageClient,
-        StorageError, TimetableRepository, database_path, default_categories,
+        AppearancePreferences, InMemoryRepository, StorageClient, StorageError,
+        TimetableRepository, database_path, default_categories,
     },
 };
 
@@ -72,6 +72,9 @@ impl CadenceView {
             event_selection: super::EventSelection::default(),
             settings,
             state,
+            day_plan_open: false,
+            day_plan_focus: cx.focus_handle(),
+            day_plan_previous_focus: None,
             category_filter,
             day_viewport: SurfaceViewportState::new(),
             week_viewport: SurfaceViewportState::new(),
@@ -226,10 +229,7 @@ impl CadenceView {
                 self.state = CalendarState::new(
                     today,
                     self.settings.week_starts_on(),
-                    match snapshot.preferences.view_mode {
-                        CalendarViewModePreference::Day => CalendarViewMode::Day,
-                        CalendarViewModePreference::Week => CalendarViewMode::Week,
-                    },
+                    CalendarViewMode::Week,
                 );
                 let filter = snapshot
                     .preferences

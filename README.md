@@ -11,8 +11,9 @@ as a quiet, spatially honest time grid rather than a dashboard.
 
 ## What it does
 
-- Switch between a seven-day Week view and a focused Day view.
-- Navigate by day or week, jump to today, and filter by category.
+- Keep the seven-day Week view visible and open any focused Day plan from its
+  weekday header.
+- Navigate by week, jump to today, and filter by category.
 - Keep one event per time interval across every category, with a fixed time
   gutter, sticky day headers, current-time treatment, and horizontal or
   vertical scrolling where needed.
@@ -45,13 +46,13 @@ as a quiet, spatially honest time grid rather than a dashboard.
 
 ## Screenshots
 
-Cadence keeps the day plan, weekly overview, event editor, and appearance
+Cadence keeps the week overview, focused day plans, event editor, and appearance
 preferences close at hand:
 
-![Cadence week overview showing the day plan and seven-day timetable](docs/screenshots/week-overview.png)
+![Cadence week overview and focused day plan](docs/screenshots/week-overview.png)
 
-*The Week view pairs the selected day's plan with the surrounding seven-day
-overview.*
+*Open a focused day plan from any Week header without losing the surrounding
+weekly context.*
 
 ![Cadence create event dialog](docs/screenshots/create-event-dialog.png)
 
@@ -138,8 +139,7 @@ continues to launch the desktop application from the repository root.
 
 | Action | Shortcut |
 | --- | --- |
-| Show Day | Cmd/Ctrl+1 |
-| Show Week | Cmd/Ctrl+2 |
+| Open a day plan | Click a weekday header, or Enter/Space when focused |
 | Previous or next period | Alt+Left / Alt+Right |
 | Go to today | Cmd/Ctrl+T |
 | Create an event | Cmd/Ctrl+N |
@@ -150,7 +150,7 @@ continues to launch the desktop application from the repository root.
 | Undo the latest change | Cmd/Ctrl+Z |
 | Redo the latest change | Cmd/Ctrl+Shift+Z or Ctrl+Y |
 
-In Day mode, previous and next move one day; in Week mode, they move one week.
+Previous and next always move one week.
 
 ## Local data
 
@@ -200,8 +200,9 @@ Rust 1.97.1 toolchain.
 After running the application, verify the following on the supported baseline:
 
 1. The window can be moved, resized, minimized, maximized/restored, and closed.
-2. The category filter, Day/Week control, navigation, and theme control work;
-   the selected date and filter survive a mode change.
+2. The category filter, weekday-header Day plan sheet, navigation, and theme
+   control work; the selected date and filter remain visible after the sheet
+   closes.
 3. The fixed header and time gutter remain aligned while the grid scrolls.
    Narrow windows retain usable cards through horizontal Week scrolling.
 4. Adjacent events do not collide; conflicting legacy records are visibly
@@ -209,14 +210,13 @@ After running the application, verify the following on the supported baseline:
 5. The current-day tint and current-time line appear when today is displayed.
 6. New event, empty-slot creation, event inspection, editing, duplication,
    deletion, multi-selection deletion, dragging, resizing, recurring scope
-   edits, undo, and redo update both Day and Week immediately.
+   edits, undo, and redo update the Week and open Day plan immediately.
 7. Invalid titles, categories, and time ranges show field-level errors without
    changing stored data; cancelling a dirty form asks for confirmation.
 8. Keyboard focus begins in the editor title, follows the form in order, and
    returns to the invoking card or slot when the dialog closes.
-9. Restart the app and confirm events, categories, settings, mode, and filter
-   survive while the selected date returns to today and the scroll position is
-   fresh.
+9. Restart the app and confirm events, categories, settings, and filter
+   survive while Week opens on today with a fresh scroll position.
 10. Create a Daily or Weekly routine, cancel one occurrence, edit This and
     following, and verify the unaffected predecessor/exception history.
 11. Export a JSON backup and verify its version, categories, preferences,

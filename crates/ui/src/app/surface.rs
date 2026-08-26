@@ -162,6 +162,9 @@ pub(super) fn render(
 
     div()
         .id(format!("{}-calendar-surface", mode.key()))
+        .when(mode == SurfaceMode::Day, |this| {
+            this.debug_selector(|| "day-calendar-surface".into())
+        })
         .relative()
         .flex_1()
         .min_h_0()
@@ -268,14 +271,17 @@ fn render_header_cell(cell: HeaderCell, cx: &Context<'_, CadenceView>) -> gpui::
         owner,
     } = cell;
     let key_owner = owner.clone();
-    let calendar_mode = mode.calendar_mode();
     div()
         .id(format!("{}-calendar-day-header-{date}", mode.key()))
-        .role(gpui::Role::Button)
-        .aria_label(format!("{day_name} {day_number}, {month}"))
-        .aria_selected(is_selected)
-        .tab_index(0)
-        .cursor_pointer()
+        .when(mode == SurfaceMode::Week, |this| {
+            this.role(gpui::Role::Button)
+                .aria_label(format!(
+                    "Open day plan for {day_name} {day_number}, {month}"
+                ))
+                .aria_selected(is_selected)
+                .tab_index(0)
+                .cursor_pointer()
+        })
         .w(px(column_width))
         .h(px(DAY_HEADER_HEIGHT))
         .flex()
@@ -298,24 +304,8 @@ fn render_header_cell(cell: HeaderCell, cx: &Context<'_, CadenceView>) -> gpui::
             .border_b_2()
             .border_color(cx.theme().primary)
         })
-        .on_click(move |_, _, app| {
-            owner
-                .update(app, |this, cx| {
-                    this.activate_surface(calendar_mode, cx);
-                    this.select_date(date, cx);
-                })
-                .ok();
-        })
-        .on_key_down(move |event: &KeyDownEvent, _, app| {
-            if matches!(event.keystroke.key.as_str(), "enter" | "return" | "space") {
-                app.stop_propagation();
-                key_owner
-                    .update(app, |this, cx| {
-                        this.activate_surface(calendar_mode, cx);
-                        this.select_date(date, cx);
-                    })
-                    .ok();
-            }
+        .when(mode == SurfaceMode::Week && is_selected, |this| {
+            this.debug_selector(|| "calendar-day-header".into())
         })
         .child(
             div()
@@ -350,6 +340,23 @@ fn render_header_cell(cell: HeaderCell, cx: &Context<'_, CadenceView>) -> gpui::
             } else {
                 Hsla::transparent_black()
             }))
+        })
+        .on_click(move |_, window, app| {
+            if mode == SurfaceMode::Week {
+                owner
+                    .update(app, |this, cx| this.open_day_plan(date, window, cx))
+                    .ok();
+            }
+        })
+        .on_key_down(move |event: &KeyDownEvent, window, app| {
+            if mode == SurfaceMode::Week
+                && matches!(event.keystroke.key.as_str(), "enter" | "return" | "space")
+            {
+                app.stop_propagation();
+                key_owner
+                    .update(app, |this, cx| this.open_day_plan(date, window, cx))
+                    .ok();
+            }
         })
         .into_any_element()
 }

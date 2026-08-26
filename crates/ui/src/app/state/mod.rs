@@ -11,7 +11,7 @@ pub(in crate::app) use viewport::{RollbackViewState, ScrollInitialization};
 
 use std::{collections::HashSet, path::PathBuf};
 
-use gpui::{Entity, Subscription, Task};
+use gpui::{Entity, FocusHandle, Subscription, Task};
 use gpui_component::select::SelectState;
 use jiff::Timestamp;
 
@@ -44,6 +44,9 @@ pub(super) struct CadenceView {
     pub(super) event_selection: EventSelection,
     pub(super) settings: Settings,
     pub(super) state: CalendarState,
+    pub(super) day_plan_open: bool,
+    pub(super) day_plan_focus: FocusHandle,
+    pub(super) day_plan_previous_focus: Option<FocusHandle>,
     pub(super) category_filter: Entity<SelectState<Vec<FilterOption>>>,
     pub(super) day_viewport: viewport::SurfaceViewportState,
     pub(super) week_viewport: viewport::SurfaceViewportState,

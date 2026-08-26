@@ -220,14 +220,12 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
         .on_click(move |event, window, app| {
             app.stop_propagation();
             view.update(app, |this, cx| {
-                if event.standard_click() && event.modifiers().secondary() {
-                    if event.click_count() == 1 {
-                        this.toggle_event_selection_from_shortcut(
-                            mode.calendar_mode(),
-                            occurrence_id,
-                            cx,
-                        );
-                    }
+                if event.modifiers().secondary() && event.click_count() == 1 {
+                    this.toggle_event_selection_from_shortcut(
+                        mode.calendar_mode(),
+                        occurrence_id,
+                        cx,
+                    );
                 } else if bulk_mode {
                     if bulk_selectable && event.standard_click() {
                         this.toggle_event_selection(mode.calendar_mode(), occurrence_id, cx);
