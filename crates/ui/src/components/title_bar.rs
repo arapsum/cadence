@@ -8,7 +8,7 @@ use gpui_component::{
     h_flex,
 };
 
-const TITLE_BAR_HEIGHT: gpui::Pixels = px(60.);
+const TITLE_BAR_HEIGHT: gpui::Pixels = px(48.);
 
 /// Cadence's custom title bar and native-style window controls.
 #[derive(IntoElement)]
