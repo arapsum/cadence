@@ -157,14 +157,14 @@ fn settings_entry_point_opens_one_separate_window(cx: &mut TestAppContext) {
     });
 
     cx.update(|window, app| {
-        calendar.update(app, |view, app| view.open_settings(window, app));
+        calendar.update(app, |_, app| CadenceView::open_settings(window, app));
     });
     cx.run_until_parked();
     assert_eq!(cx.read(|app| app.windows().len()), 2);
     assert!(!cx.update(gpui_component::WindowExt::has_active_dialog));
 
-    calendar.update_in(cx, |view, window, app| {
-        view.open_settings(window, app);
+    calendar.update_in(cx, |_, window, app| {
+        CadenceView::open_settings(window, app);
     });
     cx.run_until_parked();
     assert_eq!(cx.read(|app| app.windows().len()), 2);
@@ -182,7 +182,7 @@ fn settings_entry_point_opens_one_separate_window(cx: &mut TestAppContext) {
     assert_eq!(cx.read(|app| app.windows().len()), 1);
 
     cx.update(|window, app| {
-        calendar.update(app, |view, app| view.open_settings(window, app));
+        calendar.update(app, |_, app| CadenceView::open_settings(window, app));
     });
     cx.run_until_parked();
     assert_eq!(cx.read(|app| app.windows().len()), 2);

@@ -445,7 +445,7 @@ fn appearance_states(
 
 impl AppearanceControls {
     pub(super) fn new(
-        owner: Entity<CadenceView>,
+        owner: &Entity<CadenceView>,
         initial: &AppearancePreferences,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
@@ -463,17 +463,15 @@ impl AppearanceControls {
             subscriptions: Vec::new(),
         };
         controls.subscribe(cx);
-        controls.subscriptions.push(cx.observe_in(
-            &owner,
-            window,
-            |controls, owner, window, cx| {
+        controls
+            .subscriptions
+            .push(cx.observe_in(owner, window, |controls, owner, window, cx| {
                 let appearance = owner.read(cx).appearance.clone();
                 if appearance != controls.last_synced {
                     controls.sync(&appearance, window, cx);
                 }
                 cx.notify();
-            },
-        ));
+            }));
         controls
     }
 

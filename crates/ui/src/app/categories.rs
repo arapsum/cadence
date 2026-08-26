@@ -400,8 +400,8 @@ pub(in crate::app) struct CategoryManager {
 }
 
 impl CategoryManager {
-    pub(in crate::app) fn new(owner: Entity<CadenceView>, cx: &mut Context<'_, Self>) -> Self {
-        let subscription = cx.observe(&owner, |_this, _, cx| {
+    pub(in crate::app) fn new(owner: &Entity<CadenceView>, cx: &mut Context<'_, Self>) -> Self {
+        let subscription = cx.observe(owner, |_this, _, cx| {
             cx.notify();
         });
         Self {

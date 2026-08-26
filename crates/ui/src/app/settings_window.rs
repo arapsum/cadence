@@ -20,7 +20,8 @@ const SETTINGS_WINDOW_CONTEXT: &str = "CadenceSettings";
 struct SettingsWindowRegistry {
     handle: Option<WindowHandle<Root>>,
     owner_window_id: Option<WindowId>,
-    _close_subscription: Option<Subscription>,
+    #[allow(dead_code)]
+    close_subscription: Option<Subscription>,
 }
 
 impl Global for SettingsWindowRegistry {}
@@ -58,7 +59,7 @@ pub(super) fn init(cx: &mut App) {
         }
     });
     cx.update_global::<SettingsWindowRegistry, _>(|registry, _| {
-        registry._close_subscription = Some(close_subscription);
+        registry.close_subscription = Some(close_subscription);
     });
 }
 
@@ -71,15 +72,15 @@ pub(super) struct SettingsWindow {
 }
 
 impl SettingsWindow {
-    fn new(owner: Entity<CadenceView>, window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
+    fn new(owner: &Entity<CadenceView>, window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
         let appearance = owner.read(cx).appearance.clone();
-        let category_manager = cx.new(|cx| CategoryManager::new(owner.clone(), cx));
+        let category_manager = cx.new(|cx| CategoryManager::new(owner, cx));
         let appearance_controls =
-            cx.new(|cx| AppearanceControls::new(owner.clone(), &appearance, window, cx));
+            cx.new(|cx| AppearanceControls::new(owner, &appearance, window, cx));
         let focus_handle = cx.focus_handle();
 
-        let owner_observer = cx.observe_in(&owner, window, |_, _, _, cx| cx.notify());
-        let owner_release = cx.observe_release_in(&owner, window, |_, _, window, _| {
+        let owner_observer = cx.observe_in(owner, window, |_, _, _, cx| cx.notify());
+        let owner_release = cx.observe_release_in(owner, window, |_, _, window, _| {
             window.remove_window();
         });
 
@@ -144,7 +145,7 @@ impl Render for SettingsWindow {
 
 impl CadenceView {
     /// Opens or activates the single Settings utility window.
-    pub(in crate::app) fn open_settings(&self, window: &mut Window, cx: &mut Context<'_, Self>) {
+    pub(in crate::app) fn open_settings(window: &Window, cx: &mut Context<'_, Self>) {
         let owner = cx.entity();
         let origin_window = window.window_handle();
         let origin = origin_window.downcast::<Root>();
@@ -185,7 +186,7 @@ fn open_settings_window(
 
         match cx.open_window(options, move |window, cx| {
             window.set_window_title("Cadence — Settings");
-            let settings_window = cx.new(|cx| SettingsWindow::new(owner.clone(), window, cx));
+            let settings_window = cx.new(|cx| SettingsWindow::new(&owner, window, cx));
             cx.new(|cx| Root::new(settings_window, window, cx))
         }) {
             Ok(handle) => {
