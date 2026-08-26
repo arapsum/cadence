@@ -113,7 +113,6 @@ fn render_day_plan_sheet(
     div()
         .absolute()
         .inset_0()
-        .relative()
         .child(
             div()
                 .id("day-plan-sheet-overlay")
