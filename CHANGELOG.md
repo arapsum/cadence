@@ -8,6 +8,18 @@ All notable Cadence releases are documented here. The format follows
 
 No unreleased changes yet.
 
+## [0.1.3] - 2026-08-26
+
+### Changed
+
+- Make Week the sole persistent calendar workspace and open an interactive Day
+  plan sheet when a weekday header is selected.
+
+### Fixed
+
+- Ensure the Week workspace and Day plan sheet surfaces fill their available
+  height.
+
 ## [0.1.2] - 2026-08-24
 
 ### Added
