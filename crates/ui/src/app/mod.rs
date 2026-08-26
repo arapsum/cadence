@@ -10,6 +10,7 @@ pub mod guidance;
 pub mod history;
 pub mod interaction;
 pub mod presentation;
+mod settings_window;
 pub mod sidebar;
 pub mod state;
 pub mod style;
@@ -24,6 +25,7 @@ use gpui_component::{Root, WindowExt as _};
 
 pub fn init(cx: &mut App) {
     appearance::register_themes(cx);
+    settings_window::init(cx);
     actions::bind(cx);
 }
 

@@ -415,7 +415,7 @@ fn add_secondary_items(
                 .icon(IconName::Settings)
                 .on_click(move |_, window, cx| {
                     settings_owner
-                        .update(cx, |view, cx| view.open_settings(window, cx))
+                        .update(cx, |_, cx| CadenceView::open_settings(window, cx))
                         .ok();
                 }),
         );

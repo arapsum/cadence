@@ -7,7 +7,7 @@ use gpui::{
 use gpui_component::Root;
 use jiff::civil::Time;
 
-use super::super::state::CadenceView;
+use super::super::{settings_window, state::CadenceView};
 use super::{form::TimeOption, form::end_time_options_after};
 use crate::{
     calendar::CalendarViewMode,
@@ -55,7 +55,6 @@ fn event_entry_points_render_their_dialogs(cx: &mut TestAppContext) {
         .borrow()
         .clone()
         .expect("calendar view was captured while building the root");
-
     cx.update(|window, app| window.draw(app).clear(app));
     let new_event = cx
         .debug_bounds("new-event")
@@ -67,12 +66,6 @@ fn event_entry_points_render_their_dialogs(cx: &mut TestAppContext) {
     cx.update(|window, app| window.draw(app).clear(app));
     assert!(cx.debug_bounds("event-editor-form").is_some());
 
-    cx.update(gpui_component::WindowExt::close_all_dialogs);
-    calendar.update_in(cx, |view, window, app| {
-        view.open_settings(window, app);
-    });
-    cx.update(|window, app| window.draw(app).clear(app));
-    assert!(cx.update(gpui_component::WindowExt::has_active_dialog));
     cx.update(gpui_component::WindowExt::close_all_dialogs);
     calendar.update_in(cx, |_, window, app| {
         CadenceView::open_about(window, app);
@@ -137,6 +130,67 @@ fn event_entry_points_render_their_dialogs(cx: &mut TestAppContext) {
         end_date.intersects(&form),
         "the newly rendered end-date picker should be revealed in the form viewport"
     );
+}
+
+#[gpui::test]
+fn settings_entry_point_opens_one_separate_window(cx: &mut TestAppContext) {
+    cx.update(gpui_component::init);
+    cx.update(settings_window::init);
+
+    let calendar = Rc::new(RefCell::new(None::<Entity<CadenceView>>));
+    let captured_calendar = Rc::clone(&calendar);
+    let (_, cx) = cx.add_window_view(move |window, cx| {
+        let view = cx.new(|cx| CadenceView::new(window, cx));
+        captured_calendar.replace(Some(view.clone()));
+        Root::new(view, window, cx)
+    });
+    let calendar = calendar
+        .borrow()
+        .clone()
+        .expect("calendar view was captured while building the root");
+    let main_window_id = cx.read(|app| {
+        app.windows()
+            .into_iter()
+            .next()
+            .expect("main window is open")
+            .window_id()
+    });
+
+    cx.update(|window, app| {
+        calendar.update(app, |_, app| CadenceView::open_settings(window, app));
+    });
+    cx.run_until_parked();
+    assert_eq!(cx.read(|app| app.windows().len()), 2);
+    assert!(!cx.update(gpui_component::WindowExt::has_active_dialog));
+
+    calendar.update_in(cx, |_, window, app| {
+        CadenceView::open_settings(window, app);
+    });
+    cx.run_until_parked();
+    assert_eq!(cx.read(|app| app.windows().len()), 2);
+
+    let settings = cx.read(|app| {
+        app.windows()
+            .into_iter()
+            .find(|window| window.window_id() != main_window_id)
+            .expect("settings window is open")
+    });
+    settings
+        .update(&mut cx.cx, |_, window, _| window.remove_window())
+        .expect("settings window can close independently");
+    cx.run_until_parked();
+    assert_eq!(cx.read(|app| app.windows().len()), 1);
+
+    cx.update(|window, app| {
+        calendar.update(app, |_, app| CadenceView::open_settings(window, app));
+    });
+    cx.run_until_parked();
+    assert_eq!(cx.read(|app| app.windows().len()), 2);
+
+    drop(calendar);
+    cx.update(|window, _| window.remove_window());
+    cx.run_until_parked();
+    assert_eq!(cx.read(|app| app.windows().len()), 0);
 }
 
 #[gpui::test]

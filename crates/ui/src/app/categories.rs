@@ -395,23 +395,23 @@ impl Render for CategoryDeleteDialog {
 }
 
 pub(in crate::app) struct CategoryManager {
-    owner: Entity<CadenceView>,
+    owner: gpui::WeakEntity<CadenceView>,
     _subscriptions: Vec<Subscription>,
 }
 
 impl CategoryManager {
-    pub(in crate::app) fn new(owner: Entity<CadenceView>, cx: &mut Context<'_, Self>) -> Self {
-        let subscription = cx.observe(&owner, |_this, _, cx| {
+    pub(in crate::app) fn new(owner: &Entity<CadenceView>, cx: &mut Context<'_, Self>) -> Self {
+        let subscription = cx.observe(owner, |_this, _, cx| {
             cx.notify();
         });
         Self {
-            owner,
+            owner: owner.downgrade(),
             _subscriptions: vec![subscription],
         }
     }
 
     fn render_header(&self, interactive: bool, cx: &Context<'_, Self>) -> impl IntoElement {
-        let owner = self.owner.downgrade();
+        let owner = self.owner.clone();
         div()
             .flex()
             .items_center()
@@ -448,7 +448,7 @@ impl CategoryManager {
         let name = category.name().to_owned();
         let color = category.color_token();
         let visible = category.is_visible();
-        let owner = self.owner.downgrade();
+        let owner = self.owner.clone();
         let edit_owner = owner.clone();
         let delete_owner = owner.clone();
         let visibility_owner = owner;
@@ -512,12 +512,15 @@ impl CategoryManager {
 
 impl Render for CategoryManager {
     fn render(&mut self, _: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
-        let (categories, interactive) = self.owner.read_with(cx, |view, _| {
-            (
-                view.repository.categories().unwrap_or_default(),
-                view.is_interactive(),
-            )
-        });
+        let (categories, interactive) = self
+            .owner
+            .read_with(cx, |view, _| {
+                (
+                    view.repository.categories().unwrap_or_default(),
+                    view.is_interactive(),
+                )
+            })
+            .unwrap_or_default();
         let only_category = categories.len() == 1;
         let rows = categories
             .iter()

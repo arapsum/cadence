@@ -55,7 +55,7 @@ pub(super) fn render(
                     .icon(IconName::Settings)
                     .on_click(move |_, window, app| {
                         settings_owner
-                            .update(app, |view, cx| view.open_settings(window, cx))
+                            .update(app, |_, cx| CadenceView::open_settings(window, cx))
                             .ok();
                     }),
             ),

@@ -299,6 +299,7 @@ impl SelectItem for FontSizeOption {
 /// Stateful appearance controls embedded in the settings page.
 pub(super) struct AppearanceControls {
     owner: gpui::WeakEntity<CadenceView>,
+    last_synced: AppearancePreferences,
     mode: Entity<SelectState<Vec<AppearanceModeOption>>>,
     light_theme: Entity<SelectState<Vec<ThemeOption>>>,
     dark_theme: Entity<SelectState<Vec<ThemeOption>>>,
@@ -444,7 +445,7 @@ fn appearance_states(
 
 impl AppearanceControls {
     pub(super) fn new(
-        owner: gpui::WeakEntity<CadenceView>,
+        owner: &Entity<CadenceView>,
         initial: &AppearancePreferences,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
@@ -452,7 +453,8 @@ impl AppearanceControls {
         let options = appearance_options(cx);
         let states = appearance_states(initial, options, window, cx);
         let mut controls = Self {
-            owner,
+            owner: owner.downgrade(),
+            last_synced: initial.clone(),
             mode: states.mode,
             light_theme: states.light_theme,
             dark_theme: states.dark_theme,
@@ -462,6 +464,39 @@ impl AppearanceControls {
         };
         controls.subscribe(cx);
         controls
+            .subscriptions
+            .push(cx.observe_in(owner, window, |controls, owner, window, cx| {
+                let appearance = owner.read(cx).appearance.clone();
+                if appearance != controls.last_synced {
+                    controls.sync(&appearance, window, cx);
+                }
+                cx.notify();
+            }));
+        controls
+    }
+
+    fn sync(
+        &mut self,
+        appearance: &AppearancePreferences,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.last_synced = appearance.clone();
+        self.mode.update(cx, |state, cx| {
+            state.set_selected_value(&appearance.mode, window, cx);
+        });
+        self.light_theme.update(cx, |state, cx| {
+            state.set_selected_value(&appearance.light_theme.as_str().into(), window, cx);
+        });
+        self.dark_theme.update(cx, |state, cx| {
+            state.set_selected_value(&appearance.dark_theme.as_str().into(), window, cx);
+        });
+        self.font_family.update(cx, |state, cx| {
+            state.set_selected_value(&appearance.font_family.as_str().into(), window, cx);
+        });
+        self.font_size.update(cx, |state, cx| {
+            state.set_selected_value(&appearance.font_size, window, cx);
+        });
     }
 
     fn subscribe(&mut self, cx: &mut Context<'_, Self>) {
