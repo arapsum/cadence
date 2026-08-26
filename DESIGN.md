@@ -31,24 +31,24 @@ resulting positions to the 1.5 px/minute 24-hour plane.
 The current-day column receives a subtle tint and a green dot in its header. A
 green line and dot track the local wall-clock time and refresh every 30 seconds.
 
-## M3 shared Day/Week surface
+## M3 week workspace and day-plan sheet
 
-Day and Week are two adapters around one calendar surface renderer. The domain
-state owns the selected date and active mode; it derives a one-day range in Day
-mode and the configured seven-day range in Week mode. The layout engine accepts
-either range without changing event top offsets, heights, or overlap lanes.
+Week is the only calendar workspace at every window size. It keeps seven
+columns at a 132 px minimum and exposes horizontal scrolling when the window
+is narrower than the full plane. Selecting a weekday header opens the matching
+one-column Day plan in a focused right-side sheet, keeping the weekly context
+visible behind the overlay.
 
-The Day surface uses one full-width column, so tall cards can show an optional
-two-line notes block. Week keeps seven columns at a 132 px minimum and exposes
-horizontal scrolling when the window is narrower than the full plane. Both
-surfaces use the same tracked vertical scroll handle and preserve its offset in
-minutes when switching modes. Week reveals the selected day after a switch;
-Day starts at horizontal offset zero.
+The Day sheet reuses the same minute-based renderer, event cards, and editing
+paths as Week. Its initial vertical position follows the current Week position,
+then it maintains an independent scroll offset. The selected date stays
+highlighted after the sheet closes; its close button, Escape, and overlay
+dismissal restore focus to the invoking header.
 
-The toolbar uses a segmented Day/Week `TabBar`. The calendar root registers
-`ShowDay`, `ShowWeek`, `PreviousPeriod`, `NextPeriod`, and `GoToToday` actions in
-the `CadenceCalendar` key context. Cmd/Ctrl+1 and Cmd/Ctrl+2 switch modes,
-Alt+Left/Right navigate, and Cmd/Ctrl+T returns to today.
+The calendar root retains `PreviousPeriod`, `NextPeriod`, and `GoToToday` in
+the `CadenceCalendar` key context. Alt+Left/Right always navigate by week and
+Cmd/Ctrl+T returns to today. Day/Week controls and mode-switching shortcuts are
+intentionally absent.
 
 ## Validation
 
@@ -100,8 +100,8 @@ banner.
 
 Opening a database is a distinct state rather than a blocking render path. The
 window opens immediately with a calendar-shaped skeleton and a centered
-`Opening timetable…` message, then restores the saved Day/Week mode and category
-filter while anchoring the active range on today and resetting scroll. A fresh database contains the six default
+`Opening timetable…` message, then restores the category filter while anchoring
+the Week range on today and resetting scroll. A fresh database contains the six default
 categories and an intentional empty timetable, so the empty state teaches the
 next action instead of presenting seeded sample work.
 
@@ -143,7 +143,7 @@ The editor's `Repeats` control offers only the useful first-release rules:
 Never, Daily, Weekdays, and Weekly with a Monday-first weekday toggle row. An
 optional end date is inclusive. A schedule is stored as a series template plus
 exceptions, not as a pre-expanded list of events. The repository expands only
-the active Day/Week `DateRange`, and occurrence cards use a stable series/date
+the active Week range or currently open Day-sheet `DateRange`, and occurrence cards use a stable series/date
 identity even when an exception moves its displayed date.
 
 Editing or deleting a recurring card presents two explicit scopes: This event,

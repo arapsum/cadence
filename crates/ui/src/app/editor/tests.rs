@@ -1,8 +1,8 @@
 use std::{cell::RefCell, rc::Rc};
 
 use gpui::{
-    AppContext as _, Entity, Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, ScrollDelta,
-    ScrollWheelEvent, TestAppContext, TouchPhase, point, px,
+    AppContext as _, Entity, Modifiers, ScrollDelta, ScrollWheelEvent, TestAppContext, TouchPhase,
+    point, px,
 };
 use gpui_component::Root;
 use jiff::civil::Time;
@@ -215,7 +215,7 @@ fn bulk_selection_tracks_visible_occurrences(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn secondary_click_enters_and_toggles_bulk_selection(cx: &mut TestAppContext) {
+fn day_plan_event_selection_remains_available(cx: &mut TestAppContext) {
     cx.update(gpui_component::init);
 
     let calendar = Rc::new(RefCell::new(None::<Entity<CadenceView>>));
@@ -230,14 +230,32 @@ fn secondary_click_enters_and_toggles_bulk_selection(cx: &mut TestAppContext) {
         .clone()
         .expect("calendar view was captured while building the root");
 
+    cx.update(|window, app| window.draw(app).clear(app));
+    let day_header = cx
+        .debug_bounds("calendar-day-header")
+        .expect("the selected week header was rendered");
+    cx.simulate_click(day_header.center(), Modifiers::none());
+    assert!(calendar.read_with(cx, |view, _| view.day_plan_open));
+
     calendar.update_in(cx, |view, _, _| {
         view.initialize_scroll(CalendarViewMode::Day, (0.0, 500.0));
     });
     cx.update(|window, app| window.draw(app).clear(app));
-    let event_card = cx
-        .debug_bounds("calendar-event-card")
-        .expect("an event card was rendered");
-    cx.simulate_click(event_card.center(), Modifiers::secondary_key());
+    assert!(cx.debug_bounds("day-plan-sheet").is_some());
+    assert!(
+        cx.debug_bounds("calendar-event-card").is_some(),
+        "the opened day plan should lay out its events"
+    );
+    let occurrence = calendar.read_with(cx, |view, _| {
+        view.snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.surface(CalendarViewMode::Day).events.first())
+            .expect("the opened day plan contains an event")
+            .id()
+    });
+    calendar.update_in(cx, |view, _, app| {
+        view.toggle_event_selection_from_shortcut(CalendarViewMode::Day, occurrence, app);
+    });
 
     assert!(calendar.read_with(cx, |view, _| view.is_bulk_selecting()));
     assert_eq!(
@@ -245,11 +263,9 @@ fn secondary_click_enters_and_toggles_bulk_selection(cx: &mut TestAppContext) {
         1
     );
 
-    cx.update(|window, app| window.draw(app).clear(app));
-    let event_card = cx
-        .debug_bounds("calendar-event-card")
-        .expect("the selected event card was rendered");
-    cx.simulate_click(event_card.center(), Modifiers::secondary_key());
+    calendar.update_in(cx, |view, _, app| {
+        view.toggle_event_selection_from_shortcut(CalendarViewMode::Day, occurrence, app);
+    });
 
     assert_eq!(
         calendar.read_with(cx, |view, _| view.bulk_selection_count()),
@@ -259,25 +275,5 @@ fn secondary_click_enters_and_toggles_bulk_selection(cx: &mut TestAppContext) {
     calendar.update_in(cx, |view, _, app| {
         view.cancel_event_selection(app);
     });
-    cx.update(|window, app| window.draw(app).clear(app));
-    let event_card = cx
-        .debug_bounds("calendar-event-card")
-        .expect("the event card was rendered for the double-click check");
-    let modifiers = Modifiers::secondary_key();
-    cx.simulate_event(MouseDownEvent {
-        position: event_card.center(),
-        modifiers,
-        button: MouseButton::Left,
-        click_count: 2,
-        first_mouse: false,
-    });
-    cx.simulate_event(MouseUpEvent {
-        position: event_card.center(),
-        modifiers,
-        button: MouseButton::Left,
-        click_count: 2,
-    });
-
-    assert!(!cx.update(gpui_component::WindowExt::has_active_dialog));
     assert!(!calendar.read_with(cx, |view, _| view.is_bulk_selecting()));
 }

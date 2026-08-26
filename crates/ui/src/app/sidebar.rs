@@ -9,7 +9,7 @@ use gpui_component::{
 };
 
 use crate::{
-    calendar::{CalendarViewMode, CategoryFilter},
+    calendar::CategoryFilter,
     domain::{CategoryColor, CategoryId},
 };
 
@@ -22,11 +22,8 @@ pub(super) fn render(
     cx: &Context<'_, CadenceView>,
 ) -> impl IntoElement {
     let owner = cx.entity().downgrade();
-    let day_owner = owner.clone();
-    let week_owner = owner.clone();
     let agenda_owner = owner.clone();
     let settings_owner = owner.clone();
-    let active_mode = view.state.view_mode();
     let interactive = view.is_interactive();
     let categories = view
         .snapshot
@@ -38,30 +35,10 @@ pub(super) fn render(
     let navigation = SidebarGroup::new("Views").child(
         SidebarMenu::new()
             .child(
-                SidebarMenuItem::new("Day")
-                    .icon(IconName::Calendar)
-                    .active(active_mode == CalendarViewMode::Day)
-                    .disable(!interactive)
-                    .on_click(move |_, _, app| {
-                        day_owner
-                            .update(app, |view, cx| {
-                                view.set_view_mode(CalendarViewMode::Day, cx);
-                            })
-                            .ok();
-                    }),
-            )
-            .child(
                 SidebarMenuItem::new("Week")
                     .icon(IconName::LayoutDashboard)
-                    .active(active_mode == CalendarViewMode::Week)
-                    .disable(!interactive)
-                    .on_click(move |_, _, app| {
-                        week_owner
-                            .update(app, |view, cx| {
-                                view.set_view_mode(CalendarViewMode::Week, cx);
-                            })
-                            .ok();
-                    }),
+                    .active(true)
+                    .disable(true),
             )
             .child(
                 SidebarMenuItem::new("Agenda")

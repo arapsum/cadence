@@ -8,7 +8,7 @@ use super::super::presentation::{
 };
 use crate::domain::find_occurrence_conflicts;
 
-use super::{CadenceView, HistoryEffect, PersistenceState};
+use super::{CadenceView, PersistenceState};
 
 impl CadenceView {
     pub(in crate::app) fn refresh_snapshot(&mut self) {
@@ -133,11 +133,14 @@ impl CadenceView {
             return;
         }
         self.event_selection = super::EventSelection::Single;
+        let surface = self.state.view_mode();
+        self.state.set_view_mode(CalendarViewMode::Week);
         let result = if next {
             self.state.next_period()
         } else {
             self.state.previous_period()
         };
+        self.state.set_view_mode(surface);
         if let Err(error) = result {
             self.error = Some(error.to_string());
         } else {
@@ -153,18 +156,6 @@ impl CadenceView {
             return;
         }
         self.state.clear_selection();
-        cx.notify();
-    }
-
-    pub(in crate::app) fn select_date(&mut self, date: Date, cx: &mut Context<'_, Self>) {
-        if !self.is_interactive() {
-            return;
-        }
-        self.event_selection = super::EventSelection::Single;
-        self.state.select_date(date);
-        self.pending_scroll_minutes = Some(self.current_scroll_minutes());
-        self.reset_scroll_initialization();
-        self.refresh_snapshot();
         cx.notify();
     }
 
@@ -199,25 +190,49 @@ impl CadenceView {
         cx.notify();
     }
 
-    pub(in crate::app) fn set_view_mode(
+    pub(in crate::app) fn open_day_plan(
         &mut self,
-        view_mode: CalendarViewMode,
+        date: Date,
+        window: &mut gpui::Window,
         cx: &mut Context<'_, Self>,
     ) {
         if !self.is_interactive() {
             return;
         }
         self.event_selection = super::EventSelection::Single;
-        if self.state.view_mode() == view_mode {
+        self.day_plan_previous_focus = window.focused(cx);
+        self.pending_scroll_minutes = Some(self.current_scroll_minutes());
+        self.state.select_date(date);
+        self.state.set_view_mode(CalendarViewMode::Day);
+        self.day_plan_open = true;
+        self.reset_scroll_initialization();
+        self.refresh_snapshot();
+        if let Err(error) = self.repository.replace_preferences(self.preferences()) {
+            self.error = Some(error.to_string());
+        }
+        self.day_plan_focus.focus(window, cx);
+        cx.notify();
+    }
+
+    pub(in crate::app) fn close_day_plan(
+        &mut self,
+        window: &mut gpui::Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        if !self.day_plan_open {
             return;
         }
-        let rollback = self.rollback_view_state();
-        let before = self.repository.snapshot().ok();
-        self.pending_scroll_minutes = Some(self.current_scroll_minutes());
-        self.state.set_view_mode(view_mode);
-        let _ = self.repository.replace_preferences(self.preferences());
-        if let Some(before) = before {
-            self.persist_snapshot(before, rollback, HistoryEffect::None, cx);
+        if self.is_bulk_selecting() {
+            self.cancel_event_selection(cx);
+        }
+        self.cancel_manipulation(window, cx);
+        self.day_plan_open = false;
+        self.state.set_view_mode(CalendarViewMode::Week);
+        if let Err(error) = self.repository.replace_preferences(self.preferences()) {
+            self.error = Some(error.to_string());
+        }
+        if let Some(handle) = self.day_plan_previous_focus.take() {
+            window.focus(&handle, cx);
         }
         cx.notify();
     }
