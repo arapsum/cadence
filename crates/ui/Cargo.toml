@@ -18,3 +18,7 @@ jiff.workspace = true
 gpui = { workspace = true, features = ["test-support"] }
 serde_json.workspace = true
 uuid.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+async-channel.workspace = true
+ksni.workspace = true

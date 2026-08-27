@@ -4,7 +4,7 @@ members = ["crates/core", "crates/ui", "crates/desktop"]
 default-members = ["crates/desktop"]
 
 [workspace.package]
-version = "0.1.6"
+version = "0.1.7"
 edition = "2024"
 rust-version = "1.97.1"
 authors = ["Kibet arap Sum <kibetarapsum@gmail.com>"]
@@ -31,6 +31,7 @@ jiff = { version = "0.2.35", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.145"
 async-channel = "2.5.0"
+ksni = { version = "0.3.6", default-features = false, features = ["async-io"] }
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 
 [profile.release]
