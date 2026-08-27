@@ -19,7 +19,9 @@ release environment is Ubuntu 26.04 LTS on x86_64 with a Wayland session.
 ## Plan your week
 
 - **Week** is the main calendar, so you can compare seven days and spot the
-  shape of the week at a glance.
+  shape of the week at a glance. Scroll horizontally to slide the seven-day
+  viewport through adjacent dates; the range label follows the window instead
+  of stopping at one fixed calendar week.
 - Click a weekday header, or focus it and press Enter/Space, to open that
   date's focused **Day plan** in a sheet. The sheet keeps the full time grid,
   including event creation, editing, drag-and-resize, and scrolling.
@@ -64,8 +66,11 @@ subject to the operating system's notification permission.
 
 Create and edit categories in **Settings**. Category assignments are preserved
 when you change themes, while their event surfaces, borders, indicators, and
-filter dots adapt to the active palette. Appearance settings include light,
-dark, or system mode, GPUI themes, font family, and font size.
+filter dots adapt to the active palette. **Themes** and **Typography** are
+separate settings pages. Hover or keyboard-focus a theme or font to preview it
+across the application; click it or press Enter/Space to commit. Leaving the
+option or closing Settings restores the last committed appearance. The pages
+also provide light, dark, or system mode and font-size controls.
 
 Undo and redo apply to committed changes in the current session. **Export**
 creates a versioned, human-readable JSON backup. If a database cannot be opened,

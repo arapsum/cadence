@@ -5,15 +5,15 @@ a week. Built with Rust, [GPUI](https://gpui.rs/), and [GPUI
 Component](https://longbridge.github.io/gpui-component/), it keeps the calendar
 as a quiet, spatially honest time grid rather than a dashboard.
 
-> **Project status:** Milestones M0–M9 are implemented. Cadence is release-ready
+> **Project status:** Milestones M0–M10 are implemented. Cadence is release-ready
 > for Ubuntu 26.04 LTS on x86_64 under Wayland; tagging a version creates a
 > draft GitHub release for a final manual smoke test before publication.
 
 ## What it does
 
-- Keep the seven-day Week view visible and open any focused Day plan from its
-  weekday header.
-- Navigate by week, jump to today, and filter by category.
+- Keep a seven-day Week viewport visible, scroll continuously through adjacent
+  dates, and open any focused Day plan from its weekday header.
+- Navigate by rolling date range, jump to today, and filter by category.
 - Keep one event per time interval across every category, with a fixed time
   gutter, sticky day headers, current-time treatment, and horizontal or
   vertical scrolling where needed.
@@ -42,7 +42,10 @@ as a quiet, spatially honest time grid rather than a dashboard.
 - Set per-event reminders and opt into desktop notifications while Cadence is
   running; operating-system notification permissions still apply.
 - Choose a light, dark, or system appearance mode, a bundled GPUI theme, and
-  the application font family and size.
+  the application font family and size from separate Themes and Typography
+  settings pages. Hover or focus an option to preview it globally; click or
+  press Enter/Space to commit, and leave Settings to restore the committed
+  appearance.
 - Export a human-readable JSON backup or reveal the data folder from the
   toolbar.
 
@@ -63,8 +66,8 @@ reminders, and recurrence.*
 
 ![Cadence appearance settings with the GPUI theme catalog](docs/screenshots/settings-appearance.png)
 
-*Appearance settings expose light and dark themes, including the bundled GPUI
-theme catalog.*
+*Themes and Typography are separate settings pages; hovering or focusing an
+option previews the global appearance before it is committed.*
 
 ## Requirements
 
@@ -202,11 +205,12 @@ Rust 1.97.1 toolchain.
 After running the application, verify the following on the supported baseline:
 
 1. The window can be moved, resized, minimized, maximized/restored, and closed.
-2. The category filter, weekday-header Day plan sheet, navigation, and theme
-   control work; the selected date and filter remain visible after the sheet
-   closes.
+2. The category filter, weekday-header Day plan sheet, rolling date navigation,
+   and appearance controls work; the selected date and filter remain visible
+   after the sheet closes.
 3. The fixed header and time gutter remain aligned while the grid scrolls.
-   Narrow windows retain usable cards through horizontal Week scrolling.
+   Horizontal Week scrolling advances the date range continuously, keeps seven
+   day columns visible, and retains usable cards in narrow windows.
 4. Adjacent events do not collide; conflicting legacy records are visibly
    flagged, and event hover/focus exposes their complete details.
 5. The current-day tint and current-time line appear when today is displayed.
@@ -218,18 +222,23 @@ After running the application, verify the following on the supported baseline:
 8. Keyboard focus begins in the editor title, follows the form in order, and
    returns to the invoking card or slot when the dialog closes.
 9. Restart the app and confirm events, categories, settings, and filter
-   survive while Week opens on today with a fresh scroll position.
-10. Create a Daily or Weekly routine, cancel one occurrence, edit This and
+   survive while Week opens on today's seven-day window with a fresh scroll
+   position.
+10. Open Settings and confirm Themes and Typography are separate pages. Hover
+    or focus themes and fonts to preview them across the app; click or press
+    Enter/Space to commit, and leave or close Settings to restore the committed
+    appearance.
+11. Create a Daily or Weekly routine, cancel one occurrence, edit This and
     following, and verify the unaffected predecessor/exception history.
-11. Export a JSON backup and verify its version, categories, preferences,
+12. Export a JSON backup and verify its version, categories, preferences,
     events, recurring series, and exceptions; test recovery with a copy of an
     unreadable database.
-12. Enable notifications, create a near-future reminder, and verify the
+13. Enable notifications, create a near-future reminder, and verify the
     operating system delivers it only while Cadence is running.
-13. Install the generated `.deb` on a clean Ubuntu 26.04 machine, upgrade from
+14. Install the generated `.deb` on a clean Ubuntu 26.04 machine, upgrade from
     a prior package, remove Cadence, and confirm the local data directory is
     retained.
-14. Verify the packaged desktop entry, icon, About dialog, and `cadence
+15. Verify the packaged desktop entry, icon, About dialog, and `cadence
     --version` output before publishing a draft release.
 
 ## Project documents
