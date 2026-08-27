@@ -37,6 +37,8 @@ as a quiet, spatially honest time grid rather than a dashboard.
   series and per-occurrence exceptions.
 - Manage custom categories, use the agenda sheet to scan the current range,
   and follow a compact Now / Next summary in the sidebar.
+- Category colours adapt to the active light or dark theme, including event
+  surfaces, borders, indicators, filters, and summaries.
 - Set per-event reminders and opt into desktop notifications while Cadence is
   running; operating-system notification permissions still apply.
 - Choose a light, dark, or system appearance mode, a bundled GPUI theme, and
