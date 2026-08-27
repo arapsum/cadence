@@ -456,7 +456,7 @@ fn week_visible_days_i32() -> i32 {
     clippy::cast_sign_loss
 )]
 fn floor_to_i32(value: f32) -> Option<i32> {
-    if !value.is_finite() || value < 0.0 || value > 2_147_483_647.0 {
+    if !value.is_finite() || !(0.0..=2_147_483_647.0).contains(&value) {
         None
     } else {
         Some(value.floor() as i32)
