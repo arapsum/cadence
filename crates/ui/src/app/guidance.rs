@@ -178,30 +178,34 @@ impl CadenceView {
         self.update_appearance(|appearance| appearance.mode = mode, cx);
     }
 
-    pub(in crate::app) fn set_light_theme(&mut self, theme: String, cx: &mut Context<'_, Self>) {
-        self.update_appearance(|appearance| appearance.light_theme = theme, cx);
+    /// Commits a complete appearance preference candidate from the Settings window.
+    pub(in crate::app) fn commit_appearance(
+        &mut self,
+        appearance: &crate::store::AppearancePreferences,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.update_appearance(|current| *current = appearance.clone(), cx);
     }
 
-    pub(in crate::app) fn set_dark_theme(&mut self, theme: String, cx: &mut Context<'_, Self>) {
-        self.update_appearance(|appearance| appearance.dark_theme = theme, cx);
-    }
-
-    pub(in crate::app) fn set_font_family(&mut self, family: String, cx: &mut Context<'_, Self>) {
-        self.update_appearance(|appearance| appearance.font_family = family, cx);
-    }
-
-    pub(in crate::app) fn set_font_size(&mut self, size: u16, cx: &mut Context<'_, Self>) {
-        if !crate::store::AppearancePreferences::FONT_SIZES.contains(&size) {
+    /// Applies a temporary appearance candidate without touching persistence.
+    pub(in crate::app) fn preview_appearance(
+        &self,
+        appearance: &crate::store::AppearancePreferences,
+        cx: &mut Context<'_, Self>,
+    ) {
+        if !self.is_interactive() {
             return;
         }
-        self.update_appearance(|appearance| appearance.font_size = size, cx);
+        let appearance = super::appearance::normalize(appearance, cx);
+        super::appearance::apply(&appearance, None, cx);
+        cx.notify();
     }
 
-    pub(in crate::app) fn reset_appearance(&mut self, cx: &mut Context<'_, Self>) {
-        self.update_appearance(
-            |appearance| *appearance = crate::store::AppearancePreferences::default(),
-            cx,
-        );
+    /// Restores the last committed appearance after a temporary preview ends.
+    #[allow(clippy::needless_pass_by_ref_mut)]
+    pub(in crate::app) fn restore_appearance(&mut self, cx: &mut Context<'_, Self>) {
+        super::appearance::apply(&self.appearance, None, cx);
+        cx.notify();
     }
 
     fn update_appearance(

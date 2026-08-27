@@ -3,9 +3,11 @@
 ## M2 week surface
 
 The main canvas follows the supplied timetable reference: a quiet toolbar above
-a rounded calendar frame, a fixed Time gutter, seven day columns, and a
-full-midnight-to-midnight scroll plane. Sunday remains the default week start
-and the default display format is 12-hour time.
+a rounded calendar frame, a fixed Time gutter, a seven-day viewport, and a
+full-midnight-to-midnight scroll plane. The viewport slides through a buffered
+date range as the user scrolls, so the calendar is never trapped on one fixed
+week. Sunday remains the default week start and the default display format is
+12-hour time.
 
 The header and gutter are overlays on the same body ScrollHandle. Their
 translated tracks use the body offset, so the week stays aligned while either
@@ -34,10 +36,10 @@ green line and dot track the local wall-clock time and refresh every 30 seconds.
 ## M3 week workspace and day-plan sheet
 
 Week is the only calendar workspace at every window size. It keeps seven
-columns at a 132 px minimum and exposes horizontal scrolling when the window
-is narrower than the full plane. Selecting a weekday header opens the matching
-one-column Day plan in a focused right-side sheet, keeping the weekly context
-visible behind the overlay.
+columns at a 132 px minimum and exposes horizontal scrolling through adjacent
+dates when the window is narrower than the full plane. Selecting a weekday
+header opens the matching one-column Day plan in a focused right-side sheet,
+keeping the weekly context visible behind the overlay.
 
 The Day sheet reuses the same minute-based renderer, event cards, and editing
 paths as Week. Its initial vertical position follows the current Week position,
@@ -49,6 +51,26 @@ The calendar root retains `PreviousPeriod`, `NextPeriod`, and `GoToToday` in
 the `CadenceCalendar` key context. Alt+Left/Right always navigate by week and
 Cmd/Ctrl+T returns to today. Day/Week controls and mode-switching shortcuts are
 intentionally absent.
+
+## M10 rolling Week viewport and appearance previews
+
+The Week surface renders a 21-day buffer (the visible seven days plus one week
+on either side). The logical seven-day window is derived from the horizontal
+scroll position rather than from the buffer's first date. When scrolling nears
+either buffer edge, the state layer shifts the buffer by seven days and
+compensates the scroll offset by the same number of columns; this keeps the
+viewport continuous without rebuilding the visible layout around a fixed week.
+Resizing preserves the logical date under the viewport by rescaling the
+scroll offset against the measured seven-column width. Refreshes and failed
+persistence writes restore both the logical window and its buffer anchor.
+
+Settings uses a shared `AppearancePreviewState` entity for the separate Themes
+and Typography pages. Hover and keyboard focus apply a normalized candidate to
+all Cadence windows without persisting it. Clicking an option or pressing
+Enter/Space commits the candidate to settings; leaving the option or closing
+Settings restores the last committed preferences. The preview entity owns the
+subscriptions and is shared by both pages so a theme/font preview is visible in
+the calendar, sidebar, sheets, and settings window at the same time.
 
 ## Validation
 

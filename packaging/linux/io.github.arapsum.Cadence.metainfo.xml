@@ -16,6 +16,11 @@
     <category>Calendar</category>
   </categories>
   <releases>
+    <release version="0.1.6" date="2026-08-27">
+      <description>
+        <p>Adds a continuously scrollable seven-day Week viewport and separates Themes and Typography settings with live previews.</p>
+      </description>
+    </release>
     <release version="0.1.5" date="2026-08-27">
       <description>
         <p>Adapts category colours to the active theme across the calendar, filters, and settings.</p>

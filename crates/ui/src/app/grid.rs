@@ -315,7 +315,16 @@ fn render_event_cards(
         })
         .collect::<Vec<_>>();
 
-    if snapshot.events.is_empty() {
+    let has_visible_events = match mode {
+        SurfaceMode::Day => !snapshot.events.is_empty(),
+        SurfaceMode::Week => view.visible_week_range().is_some_and(|range| {
+            snapshot
+                .events
+                .iter()
+                .any(|event| range.contains(event.date()))
+        }),
+    };
+    if !has_visible_events {
         let message = match view.state.category_filter() {
             CategoryFilter::All => match mode {
                 SurfaceMode::Day => "Nothing scheduled this day",

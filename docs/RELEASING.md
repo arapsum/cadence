@@ -6,7 +6,9 @@ and complete the manual smoke test before publishing it.
 
 ## Prepare a release
 
-1. Update the workspace version in the root `Cargo.toml`.
+1. Update the workspace version in the root `Cargo.toml` and the three
+   first-party package entries (`cadence-core`, `cadence-ui`, and
+   `cadence-desktop`) in `Cargo.lock`.
 2. Add a matching `## [version] - YYYY-MM-DD` section to `CHANGELOG.md`.
 3. Update the AppStream release entry in
    `packaging/linux/io.github.arapsum.Cadence.metainfo.xml`.

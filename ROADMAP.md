@@ -7,10 +7,10 @@ Build a local-first desktop timetable that answers two questions quickly:
 1. **What should I be doing today?**
 2. **How is my week structured?**
 
-The visual direction is the supplied reference: a seven-column week, a fixed time
-gutter, color-coded event cards, date navigation, category filtering, and a
-scrollable time grid. The day view uses the same event model and time scale, but
-gives one day enough width for more detail and easier editing.
+The visual direction is the supplied reference: a seven-day Week viewport, a
+fixed time gutter, color-coded event cards, date navigation, category filtering,
+and a scrollable time grid. A focused Day plan sheet reuses the same event model
+and time scale while giving one day enough width for detail and editing.
 
 The first release should be a dependable personal planning tool, not a complete
 Google Calendar replacement.
@@ -19,7 +19,7 @@ Google Calendar replacement.
 
 ### MVP
 
-- Week and day views
+- Week workspace with a focused Day plan sheet
 - Previous, next, and Today navigation
 - A visible current-time indicator
 - Create, inspect, edit, and delete an event
@@ -222,9 +222,11 @@ Tasks:
 
 - Build the toolbar: title, category filter, Today, date range, previous/next.
 - Build a sticky day header and time gutter.
-- Render seven day columns and hourly/half-hour grid lines.
+- Render a seven-day viewport and hourly/half-hour grid lines.
 - Render color-coded event cards with title, category, and time.
 - Add vertical scrolling and scroll initially near the current/first event time.
+- Add horizontal scrolling through adjacent dates while keeping seven columns
+  visible.
 - Add a current-day treatment and a live current-time line.
 - Enforce one event per time interval in repository mutations and retain the
   pure layout engine's overlap lanes for legacy-data presentation.
@@ -248,43 +250,46 @@ Done when:
 - Resizing the window preserves usable headers, gutter, and columns.
 - No-event days and an entirely empty week have intentional empty states.
 
-### M3 — Day view and shared navigation
+### M3 — Week workspace, day-plan sheet, and shared navigation
 
 **Status (2026-08-20): implementation complete; manual Wayland visual pass
 pending.**
 
-**Outcome:** the user can switch between a weekly overview and a focused daily
-plan without losing context.
+**Outcome:** the user can open a focused daily plan without leaving the weekly
+overview or losing context.
 
 Tasks:
 
-- Add a Day/Week segmented control and keyboard actions. `TabBar` actions and
-  Cmd/Ctrl+1, Cmd/Ctrl+2, Alt+Left/Right, and Cmd/Ctrl+T are wired.
+- Keep Week as the only persistent calendar workspace and open a Day plan from
+  a focused weekday header. Alt+Left/Right and Cmd/Ctrl+T remain the shared
+  navigation actions.
 - Reuse the grid, event card, layout, and current-time components through the
-  shared `surface` renderer; the Day surface is one full-width column and the
-  Week surface remains seven minimum-width columns.
+  shared `surface` renderer; the Day sheet is one full-width column and the
+  Week surface remains a seven-column viewport.
 - Give day cards room for notes/category details where height permits. Seeded
   deep-work events now carry notes, which are shown in sufficiently tall Day
   cards and remain available in tooltips.
 - Preserve the selected date, filter, and approximate scroll position when
-  switching views. Day and Week use the same minute-based vertical scroll
-  coordinate.
+  opening and closing the sheet. Day and Week use the same minute-based
+  vertical scroll coordinate.
 - Make Today select the current date and reveal the current-time line.
 
 Implementation notes:
 
-- `CalendarState` derives a one-day or seven-day `DateRange` from the selected
-  date and moves by a day or week according to the active mode.
+- `CalendarState` keeps the selected date while the UI derives a one-day
+  `DateRange` for the sheet and a rolling seven-day window for Week.
 - `layout_events` accepts any supported date range, so Day and Week share the
   same overlap lanes and event geometry.
 - `crates/ui/src/app/day.rs` and `crates/ui/src/app/week.rs` are thin surface
-  adapters over `crates/ui/src/app/surface.rs`; toolbar and root action handling
-  are mode-aware.
+  adapters over `crates/ui/src/app/surface.rs`; the sheet and root action
+  handling share the same state.
 
 Done when:
 
-- Switching Week -> Day opens the selected day; Day -> Week opens its week.
-- Previous/next means one day in Day mode and one week in Week mode.
+- Clicking or focusing a Week header opens the selected day; closing the sheet
+  returns to the same weekly context.
+- Previous/next moves the selected Week window by one week; horizontal scrolling
+  moves it continuously by day.
 - Both views produce identical geometry for the same start/end times.
 - The primary flow is usable at the minimum supported window size.
 
@@ -549,6 +554,42 @@ Done when:
 - Upgrading preserves an existing timetable.
 - The release procedure can be repeated from a tag.
 
+### M10 — Rolling Week and appearance previews
+
+**Status (2026-08-27): implementation complete; visual Wayland verification
+remains part of the v0.1.6 release gate.**
+
+**Outcome:** Week behaves as a continuous seven-day viewport, and appearance
+choices are easy to compare before committing them.
+
+Tasks:
+
+- Keep a 21-day query/render buffer around the seven visible dates and rebase it
+  by one week near either edge without a visible jump.
+- Preserve the logical date window across resize, refresh, and persistence
+  rollback.
+- Separate Settings into Themes and Typography pages with searchable catalogs
+  and a Termy-inspired hierarchy.
+- Apply theme and font candidates globally on hover or keyboard focus; commit on
+  click/Enter/Space and restore the committed appearance when a preview ends.
+
+Implementation notes:
+
+- `state::viewport` derives the logical Week start from the horizontal scroll
+  offset and compensates the offset whenever the buffered range is rebased.
+- `appearance::preview` owns the shared reversible candidate state, while
+  `appearance::themes` and `appearance::typography` render the two settings
+  pages independently.
+
+Done when:
+
+- The range label follows the seven dates under the viewport while the Week
+  header and body remain aligned.
+- Settings previews are visible in the main and Settings windows without
+  writing until the user commits a choice.
+- Strict formatting, lint, tests, package metadata, and release-version checks
+  pass for v0.1.6.
+
 ## Acceptance journey for the MVP
 
 A release candidate should pass this uninterrupted scenario:
@@ -558,8 +599,9 @@ A release candidate should pass this uninterrupted scenario:
 3. Attempt a second overlapping event, see the conflict message, then create
    an adjacent event successfully.
 4. Filter to one category and clear the filter.
-5. Switch to Day view and edit the second event's time.
-6. Navigate away and back using only the keyboard.
+5. Open the selected weekday's Day plan sheet and edit the second event's time.
+6. Close the sheet, scroll the Week viewport into the adjacent date range, and
+   navigate back using only the keyboard.
 7. Delete the first event, undo it, then restart the app.
 8. Confirm both final events, settings, selected mode, and correct local times.
 9. Export a backup and verify that it contains both events.

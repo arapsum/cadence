@@ -38,13 +38,6 @@ impl SurfaceMode {
         }
     }
 
-    const fn column_count(self) -> usize {
-        match self {
-            Self::Day => 1,
-            Self::Week => 7,
-        }
-    }
-
     const fn has_horizontal_scroll(self) -> bool {
         matches!(self, Self::Week)
     }
@@ -59,27 +52,81 @@ pub(super) fn render(
 ) -> impl IntoElement {
     let calendar_mode = mode.calendar_mode();
     let available_width = (view.surface_width(calendar_mode) - TIME_GUTTER_WIDTH).max(24.0);
-    let column_count = mode.column_count();
-    let plane_width = if mode == SurfaceMode::Week {
-        available_width.max(MIN_COLUMN_WIDTH * 7.0)
+    let column_count = match mode {
+        SurfaceMode::Day => 1,
+        SurfaceMode::Week => view
+            .surface_snapshot(calendar_mode)
+            .map_or(super::state::WEEK_VISIBLE_DAYS, |snapshot| {
+                super::presentation::dates_in_range(snapshot.range).len()
+            }),
+    };
+    let visible_width = if mode == SurfaceMode::Week {
+        available_width.max(
+            MIN_COLUMN_WIDTH
+                * f32::from(
+                    u16::try_from(super::state::WEEK_VISIBLE_DAYS)
+                        .expect("visible week columns fit in u16"),
+                ),
+        )
     } else {
         available_width
     };
-    let column_width =
-        plane_width / f32::from(u16::try_from(column_count).expect("surface columns fit in u16"));
+    let visible_columns = f32::from(
+        u16::try_from(if mode == SurfaceMode::Week {
+            super::state::WEEK_VISIBLE_DAYS
+        } else {
+            1
+        })
+        .expect("surface columns fit in u16"),
+    );
+    let column_width = visible_width / visible_columns;
+    let plane_width =
+        column_width * f32::from(u16::try_from(column_count).expect("surface columns fit in u16"));
 
     if view.viewport(calendar_mode).initialization == super::state::ScrollInitialization::Pending {
         let initial = view.initial_scroll_offset(calendar_mode, column_width);
+        // Prime the handle immediately so the first painted frame keeps the
+        // selected week header in view. The deferred pass below still runs
+        // after layout to apply the same offset once the scroll bounds exist.
+        view.viewport_mut(calendar_mode)
+            .handle
+            .set_offset(gpui::point(gpui::px(-initial.0), gpui::px(-initial.1)));
         view.viewport_mut(calendar_mode).initialization =
             super::state::ScrollInitialization::Scheduled;
         let scroll_view = cx.entity().downgrade();
         window.defer(cx, move |_, cx| {
             scroll_view
                 .update(cx, |view, _| {
-                    view.initialize_scroll(calendar_mode, initial);
+                    let measured_column_width = if calendar_mode == CalendarViewMode::Week {
+                        let available_width =
+                            (view.week_surface_width - TIME_GUTTER_WIDTH).max(24.0);
+                        available_width.max(
+                            MIN_COLUMN_WIDTH
+                                * f32::from(
+                                    u16::try_from(super::state::WEEK_VISIBLE_DAYS)
+                                        .expect("visible week columns fit in u16"),
+                                ),
+                        ) / f32::from(
+                            u16::try_from(super::state::WEEK_VISIBLE_DAYS)
+                                .expect("visible week columns fit in u16"),
+                        )
+                    } else {
+                        (view.day_surface_width - TIME_GUTTER_WIDTH).max(24.0)
+                    };
+                    view.initialize_scroll(
+                        calendar_mode,
+                        view.initial_scroll_offset(calendar_mode, measured_column_width),
+                    );
                 })
                 .ok();
         });
+    }
+
+    if mode == SurfaceMode::Week
+        && view.viewport(calendar_mode).initialization
+            == super::state::ScrollInitialization::Initialized
+    {
+        view.schedule_week_scroll_sync(window, column_width, cx);
     }
 
     let scroll_handle = view.viewport(calendar_mode).handle.clone();

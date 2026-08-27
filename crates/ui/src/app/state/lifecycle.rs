@@ -9,8 +9,8 @@ use jiff::{SignedDuration, Timestamp, tz::TimeZone};
 
 use crate::{
     calendar::{CalendarState, CalendarViewMode, CategoryFilter},
-    domain::DateRange,
     domain::Settings,
+    domain::{DateRange, start_of_week},
     store::{
         AppearancePreferences, InMemoryRepository, StorageClient, StorageError,
         TimetableRepository, database_path, default_categories,
@@ -28,6 +28,12 @@ impl CadenceView {
         let settings = Settings::default();
         let now = Timestamp::now();
         let (today, _) = local_date_time(now, &settings);
+        let week_visible_start = start_of_week(today, settings.week_starts_on()).unwrap_or(today);
+        let week_buffer_start = super::viewport::shift_date(
+            week_visible_start,
+            -i32::try_from(super::viewport::WEEK_BUFFER_DAYS).expect("week buffer fits in i32"),
+        )
+        .unwrap_or(week_visible_start);
         let mut repository = InMemoryRepository::new(settings.clone());
         for category in default_categories() {
             let _ = repository.create_category(category);
@@ -80,6 +86,9 @@ impl CadenceView {
             week_viewport: SurfaceViewportState::new(),
             day_surface_width: 400.0,
             week_surface_width: 720.0,
+            week_visible_start,
+            week_buffer_start,
+            week_scroll_sync_scheduled: false,
             snapshot: None,
             now,
             pending_scroll_minutes: None,
@@ -230,6 +239,9 @@ impl CadenceView {
                     today,
                     self.settings.week_starts_on(),
                     CalendarViewMode::Week,
+                );
+                self.set_week_window_start(
+                    start_of_week(today, self.settings.week_starts_on()).unwrap_or(today),
                 );
                 let filter = snapshot
                     .preferences

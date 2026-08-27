@@ -27,15 +27,14 @@ impl CadenceView {
                 return;
             }
         };
-        let week_range =
-            match DateRange::week(self.state.selected_date(), self.settings.week_starts_on()) {
-                Ok(range) => range,
-                Err(error) => {
-                    self.error = Some(error.to_string());
-                    self.snapshot = None;
-                    return;
-                }
-            };
+        let week_range = match self.week_query_range() {
+            Ok(range) => range,
+            Err(error) => {
+                self.error = Some(error.to_string());
+                self.snapshot = None;
+                return;
+            }
+        };
 
         let categories = match self.repository.categories() {
             Ok(categories) => categories,
@@ -122,6 +121,10 @@ impl CadenceView {
         self.now = Timestamp::now();
         let (today, _) = local_date_time(self.now, &self.settings);
         self.state.go_to_today(today);
+        if let Ok(week_start) = crate::domain::start_of_week(today, self.settings.week_starts_on())
+        {
+            self.set_week_window_start(week_start);
+        }
         self.pending_scroll_minutes = None;
         self.reset_scroll_initialization();
         self.refresh_snapshot();
@@ -144,6 +147,12 @@ impl CadenceView {
         if let Err(error) = result {
             self.error = Some(error.to_string());
         } else {
+            if let Ok(week_start) = crate::domain::start_of_week(
+                self.state.selected_date(),
+                self.settings.week_starts_on(),
+            ) {
+                self.set_week_window_start(week_start);
+            }
             self.pending_scroll_minutes = None;
             self.reset_scroll_initialization();
             self.refresh_snapshot();

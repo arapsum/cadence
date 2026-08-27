@@ -248,6 +248,9 @@ impl CadenceView {
                     self.day_viewport.initialization = pending.view_state.day_scroll_initialization;
                     self.week_viewport.initialization =
                         pending.view_state.week_scroll_initialization;
+                    self.week_visible_start = pending.view_state.week_visible_start;
+                    self.week_buffer_start = pending.view_state.week_buffer_start;
+                    self.week_scroll_sync_scheduled = false;
                     self.pending_scroll_minutes = pending.view_state.pending_scroll_minutes;
                     self.event_selection = pending.view_state.event_selection;
                     self.refresh_snapshot();

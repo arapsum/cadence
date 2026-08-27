@@ -8,6 +8,24 @@ All notable Cadence releases are documented here. The format follows
 
 No unreleased changes yet.
 
+## [0.1.6] - 2026-08-27
+
+### Added
+
+- Keep Week as a seven-day viewport while allowing continuous horizontal
+  scrolling through a buffered timeline; the date range follows the viewport
+  instead of staying fixed to one calendar week.
+- Split Settings into Themes and Typography pages with searchable catalogs,
+  light/dark/system controls, and a Termy-inspired hierarchy.
+- Preview a theme or font globally on hover or keyboard focus; click, Enter, or
+  Space commits the choice, while leaving or closing Settings restores the
+  committed appearance.
+
+### Fixed
+
+- Keep the selected week aligned after surface resize and preserve the rolling
+  window during persistence rollback.
+
 ## [0.1.5] - 2026-08-27
 
 ### Changed

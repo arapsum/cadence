@@ -11,7 +11,11 @@ use gpui_component::{
 
 use crate::{APPLICATION_ID, domain::ClockFormat};
 
-use super::{appearance::AppearanceControls, categories::CategoryManager, state::CadenceView};
+use super::{
+    appearance::{AppearancePreviewState, ThemeBrowser, TypographyBrowser},
+    categories::CategoryManager,
+    state::CadenceView,
+};
 use crate::components::title_bar::CadenceTitleBar;
 
 const SETTINGS_WINDOW_CONTEXT: &str = "CadenceSettings";
@@ -66,7 +70,9 @@ pub(super) fn init(cx: &mut App) {
 pub(super) struct SettingsWindow {
     owner: WeakEntity<CadenceView>,
     category_manager: Entity<CategoryManager>,
-    appearance_controls: Entity<AppearanceControls>,
+    _appearance_preview: Entity<AppearancePreviewState>,
+    theme_browser: Entity<ThemeBrowser>,
+    typography_browser: Entity<TypographyBrowser>,
     focus_handle: FocusHandle,
     _subscriptions: Vec<Subscription>,
 }
@@ -75,13 +81,21 @@ impl SettingsWindow {
     fn new(owner: &Entity<CadenceView>, window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
         let appearance = owner.read(cx).appearance.clone();
         let category_manager = cx.new(|cx| CategoryManager::new(owner, cx));
-        let appearance_controls =
-            cx.new(|cx| AppearanceControls::new(owner, &appearance, window, cx));
+        let appearance_preview =
+            cx.new(|cx| AppearancePreviewState::new(owner, appearance, window, cx));
+        let theme_browser =
+            cx.new(|cx| ThemeBrowser::new(owner, appearance_preview.clone(), window, cx));
+        let typography_browser =
+            cx.new(|cx| TypographyBrowser::new(owner, appearance_preview.clone(), window, cx));
         let focus_handle = cx.focus_handle();
 
         let owner_observer = cx.observe_in(owner, window, |_, _, _, cx| cx.notify());
         let owner_release = cx.observe_release_in(owner, window, |_, _, window, _| {
             window.remove_window();
+        });
+        let preview_release = appearance_preview.clone();
+        let preview_release_subscription = cx.on_release(move |_, cx| {
+            preview_release.update(cx, |state, cx| state.restore_with_app(cx));
         });
 
         focus_handle.focus(window, cx);
@@ -89,13 +103,15 @@ impl SettingsWindow {
         Self {
             owner: owner.downgrade(),
             category_manager,
-            appearance_controls,
+            _appearance_preview: appearance_preview,
+            theme_browser,
+            typography_browser,
             focus_handle,
-            _subscriptions: vec![owner_observer, owner_release],
+            _subscriptions: vec![owner_observer, owner_release, preview_release_subscription],
         }
     }
 
-    fn pages(&self, cx: &App) -> [SettingPage; 4] {
+    fn pages(&self, cx: &App) -> [SettingPage; 5] {
         let (week_start, clock_format) = self
             .owner
             .read_with(cx, |view, _| {
@@ -112,7 +128,8 @@ impl SettingsWindow {
 
         [
             general_settings_page(&self.owner, week_start, clock_format),
-            appearance_settings_page(self.appearance_controls.clone()),
+            themes_settings_page(self.theme_browser.clone()),
+            typography_settings_page(self.typography_browser.clone()),
             notifications_settings_page(&self.owner),
             categories_settings_page(self.category_manager.clone()),
         ]
@@ -122,7 +139,7 @@ impl SettingsWindow {
 impl Render for SettingsWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let settings = Settings::new("cadence-settings")
-            .sidebar_width(px(190.0))
+            .sidebar_width(px(208.0))
             .with_group_variant(GroupBoxVariant::Outline)
             .pages(self.pages(cx));
 
@@ -309,14 +326,32 @@ fn categories_settings_page(manager: Entity<CategoryManager>) -> SettingPage {
         )
 }
 
-fn appearance_settings_page(manager: Entity<AppearanceControls>) -> SettingPage {
-    SettingPage::new("Appearance")
+fn themes_settings_page(browser: Entity<ThemeBrowser>) -> SettingPage {
+    SettingPage::new("Themes")
         .icon(Icon::new(IconName::Palette))
         .resettable(false)
-        .description("Choose the theme, appearance mode, and application typography.")
-        .group(
-            SettingGroup::new()
-                .title("Theme and typography")
-                .item(SettingItem::render(move |_, _, _| manager.clone())),
-        )
+        .description("Browse bundled themes and preview them before applying.")
+        .group(SettingGroup::new().title("Theme catalog").item(
+            SettingItem::render(move |_, _, _| browser.clone()).keywords([
+                "theme",
+                "themes",
+                "colors",
+                "appearance",
+            ]),
+        ))
+}
+
+fn typography_settings_page(browser: Entity<TypographyBrowser>) -> SettingPage {
+    SettingPage::new("Typography")
+        .icon(Icon::new(IconName::Settings2))
+        .resettable(false)
+        .description("Choose the application font and text scale with live previews.")
+        .group(SettingGroup::new().title("Font and scale").item(
+            SettingItem::render(move |_, _, _| browser.clone()).keywords([
+                "typography",
+                "font",
+                "fonts",
+                "text size",
+            ]),
+        ))
 }
