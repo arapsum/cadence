@@ -7,7 +7,7 @@ mod viewport;
 
 pub(in crate::app) use persistence::{HistoryEffect, PersistenceState};
 pub(in crate::app) use selection::EventSelection;
-pub(in crate::app) use viewport::{RollbackViewState, ScrollInitialization};
+pub(in crate::app) use viewport::{RollbackViewState, ScrollInitialization, WEEK_VISIBLE_DAYS};
 
 use std::{collections::HashSet, path::PathBuf};
 
@@ -28,6 +28,7 @@ use super::{
 
 use persistence::PendingWrite;
 
+#[allow(clippy::struct_excessive_bools)]
 pub(super) struct CadenceView {
     pub(super) repository: InMemoryRepository,
     pub(super) storage: StorageClient,
@@ -52,6 +53,12 @@ pub(super) struct CadenceView {
     pub(super) week_viewport: viewport::SurfaceViewportState,
     pub(super) day_surface_width: f32,
     pub(super) week_surface_width: f32,
+    /// First date represented by the logical seven-day week viewport.
+    pub(super) week_visible_start: jiff::civil::Date,
+    /// First date rendered in the rolling week buffer.
+    pub(super) week_buffer_start: jiff::civil::Date,
+    /// Prevents duplicate deferred scroll-window reconciliation callbacks.
+    pub(super) week_scroll_sync_scheduled: bool,
     pub(super) snapshot: Option<WorkspaceSnapshot>,
     pub(super) now: Timestamp,
     pub(super) pending_scroll_minutes: Option<f32>,

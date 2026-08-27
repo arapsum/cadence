@@ -31,20 +31,7 @@ fn render_week_panel(
     window: &Window,
     cx: &mut Context<'_, CadenceView>,
 ) -> gpui::AnyElement {
-    let range = view
-        .surface_snapshot(crate::calendar::CalendarViewMode::Week)
-        .map_or_else(String::new, |surface| {
-            format!(
-                "{} – {}",
-                surface.range.start().strftime("%b %-d"),
-                surface
-                    .range
-                    .end()
-                    .yesterday()
-                    .unwrap_or_else(|_| surface.range.start())
-                    .strftime("%b %-d, %Y")
-            )
-        });
+    let range = view.range_label();
 
     div()
         .id("week-workspace-panel")
