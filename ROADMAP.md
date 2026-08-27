@@ -590,6 +590,46 @@ Done when:
 - Strict formatting, lint, tests, package metadata, and release-version checks
   pass for v0.1.6.
 
+### M11 — Runtime integrations (v0.1.7)
+
+**Status (2026-08-27): implementation complete; desktop notification and tray
+behavior remain part of the Wayland smoke-test gate.**
+
+**Outcome:** reminders carry useful context, keyboard users can move through
+the rolling Week viewport without leaving the home row, and minimizing keeps
+Cadence available without stopping its clock.
+
+Tasks:
+
+- Format reminder bodies with the event category, human-readable date, start
+  time, and reminder offset instead of exposing internal identifiers.
+- Route notification body and action responses back to the exact Day plan and
+  event, restoring a minimized window before presenting the event inspector.
+- Bind `h`/`l` to one-day horizontal Week movement and `j`/`k` to one-hour
+  vertical movement in a Week-only keyboard context.
+- Register a Linux StatusNotifier item with Show and Quit actions while
+  preserving the existing close behavior.
+
+Implementation notes:
+
+- Reminder delivery tracks a catch-up cursor and occurrence targets in memory,
+  so a short scheduling delay does not duplicate notifications and a click
+  cannot lose the event identity.
+- The tray bridge uses the freedesktop StatusNotifier protocol and sends only
+  lightweight commands into GPUI's foreground executor; the main window stays
+  the owner of activation and application shutdown.
+- The Week key context is attached to the scroll surface, leaving text inputs,
+  dialogs, and the Settings window free to use the same letters normally.
+
+Done when:
+
+- A reminder body/action opens the matching event on its date, including after
+  minimizing the window.
+- `h`/`l` shift the visible date range by one day and `j`/`k` shift the time
+  viewport by one hour without changing selection.
+- The Linux tray can restore or quit a minimized Cadence process, and strict
+  formatting, lint, tests, and package checks pass for v0.1.7.
+
 ## Acceptance journey for the MVP
 
 A release candidate should pass this uninterrupted scenario:

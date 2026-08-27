@@ -10,6 +10,7 @@ pub mod guidance;
 pub mod history;
 pub mod interaction;
 pub mod presentation;
+mod runtime;
 mod settings_window;
 pub mod sidebar;
 pub mod state;
@@ -31,6 +32,7 @@ pub fn init(cx: &mut App) {
 
 pub fn mount(window: &mut Window, cx: &mut App) -> Entity<Root> {
     let view = cx.new(|cx| state::CadenceView::new(window, cx));
+    runtime::install(window.window_handle(), view.downgrade(), cx);
     let close_view = view.downgrade();
     window.on_window_should_close(cx, move |window, cx| {
         let can_close = close_view

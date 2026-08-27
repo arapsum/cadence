@@ -5,7 +5,7 @@ a week. Built with Rust, [GPUI](https://gpui.rs/), and [GPUI
 Component](https://longbridge.github.io/gpui-component/), it keeps the calendar
 as a quiet, spatially honest time grid rather than a dashboard.
 
-> **Project status:** Milestones M0–M10 are implemented. Cadence is release-ready
+> **Project status:** Milestones M0–M11 are implemented. Cadence is release-ready
 > for Ubuntu 26.04 LTS on x86_64 under Wayland; tagging a version creates a
 > draft GitHub release for a final manual smoke test before publication.
 
@@ -40,7 +40,9 @@ as a quiet, spatially honest time grid rather than a dashboard.
 - Category colours adapt to the active light or dark theme, including event
   surfaces, borders, indicators, filters, and summaries.
 - Set per-event reminders and opt into desktop notifications while Cadence is
-  running; operating-system notification permissions still apply.
+  running; notification actions open the exact event, and minimizing to the
+  Linux tray keeps delivery active. Operating-system notification permissions
+  still apply.
 - Choose a light, dark, or system appearance mode, a bundled GPUI theme, and
   the application font family and size from separate Themes and Typography
   settings pages. Hover or focus an option to preview it globally; click or
@@ -146,6 +148,8 @@ continues to launch the desktop application from the repository root.
 | --- | --- |
 | Open a day plan | Click a weekday header, or Enter/Space when focused |
 | Previous or next period | Alt+Left / Alt+Right |
+| Slide the Week window by one day | `h` / `l` |
+| Scroll the Week time grid by one hour | `j` / `k` |
 | Go to today | Cmd/Ctrl+T |
 | Create an event | Cmd/Ctrl+N |
 | Start or toggle event selection | Cmd/Ctrl+Left Click |
@@ -155,7 +159,8 @@ continues to launch the desktop application from the repository root.
 | Undo the latest change | Cmd/Ctrl+Z |
 | Redo the latest change | Cmd/Ctrl+Shift+Z or Ctrl+Y |
 
-Previous and next always move one week.
+Previous and next always move one week. Vim bindings are active when the Week
+surface has focus; they move the viewport without changing the selected event.
 
 ## Local data
 
@@ -234,12 +239,20 @@ After running the application, verify the following on the supported baseline:
     events, recurring series, and exceptions; test recovery with a copy of an
     unreadable database.
 13. Enable notifications, create a near-future reminder, and verify the
-    operating system delivers it only while Cadence is running.
+    operating system delivers it while Cadence is running. Click the reminder
+    body or **View event** action and confirm Cadence opens the matching Day
+    plan and event. Minimize the window and verify delivery continues; use the
+    tray menu to restore and quit.
 14. Install the generated `.deb` on a clean Ubuntu 26.04 machine, upgrade from
     a prior package, remove Cadence, and confirm the local data directory is
     retained.
 15. Verify the packaged desktop entry, icon, About dialog, and `cadence
     --version` output before publishing a draft release.
+
+On GNOME, a StatusNotifier/AppIndicator extension may be needed for the tray
+icon to be shown by the desktop shell. The application remains usable and
+notifications still follow the operating system permission when no tray host
+is available.
 
 ## Project documents
 

@@ -1,4 +1,4 @@
-use std::{collections::HashSet, path::PathBuf, time::Duration};
+use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use gpui::{AppContext as _, Context, SystemNotification, SystemNotificationAction, Window};
 use gpui_component::{
@@ -10,7 +10,7 @@ use jiff::{SignedDuration, Timestamp, tz::TimeZone};
 use crate::{
     calendar::{CalendarState, CalendarViewMode, CategoryFilter},
     domain::Settings,
-    domain::{DateRange, start_of_week},
+    domain::{DateRange, format_time, start_of_week},
     store::{
         AppearancePreferences, InMemoryRepository, StorageClient, StorageError,
         TimetableRepository, database_path, default_categories,
@@ -20,8 +20,11 @@ use crate::{
 use super::super::{presentation::local_date_time, toolbar::FilterOption};
 
 use super::{
-    CadenceView, CalendarHistory, HistoryEffect, PersistenceState, viewport::SurfaceViewportState,
+    CadenceView, CalendarHistory, HistoryEffect, PersistenceState, ReminderTarget,
+    viewport::SurfaceViewportState,
 };
+
+const REMINDER_CATCH_UP_MINUTES: i64 = 5;
 
 impl CadenceView {
     pub(in crate::app) fn new(window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
@@ -80,6 +83,7 @@ impl CadenceView {
             state,
             day_plan_open: false,
             day_plan_focus: cx.focus_handle(),
+            week_viewport_focus: cx.focus_handle(),
             day_plan_previous_focus: None,
             category_filter,
             day_viewport: SurfaceViewportState::new(),
@@ -97,7 +101,8 @@ impl CadenceView {
             notifications_enabled: false,
             reduce_motion: false,
             appearance: AppearancePreferences::default(),
-            delivered_reminders: HashSet::new(),
+            delivered_reminders: HashMap::new(),
+            reminder_check_at: now,
             subscriptions: Vec::new(),
         };
 
@@ -134,10 +139,21 @@ impl CadenceView {
     }
 
     fn deliver_due_reminders(&mut self, cx: &Context<'_, Self>) {
-        if !self.notifications_enabled || !self.is_interactive() {
+        if !self.notifications_enabled
+            || !matches!(
+                self.persistence_state,
+                PersistenceState::Ready | PersistenceState::Writing
+            )
+        {
             return;
         }
-        let (today, _) = local_date_time(self.now, &self.settings);
+        let now = self.now;
+        let catch_up_start = now
+            .checked_sub(SignedDuration::from_mins(REMINDER_CATCH_UP_MINUTES))
+            .unwrap_or(now);
+        let window_start = self.reminder_check_at.max(catch_up_start);
+        self.reminder_check_at = now;
+        let (today, _) = local_date_time(now, &self.settings);
         let end = today
             .tomorrow()
             .and_then(jiff::civil::Date::tomorrow)
@@ -167,19 +183,124 @@ impl CadenceView {
                 continue;
             };
             let tag = format!("cadence-reminder-{:?}-{}", event.id(), event.date());
-            if due <= self.now && self.delivered_reminders.insert(tag.clone()) {
-                cx.show_system_notification(SystemNotification {
-                    tag: tag.into(),
-                    title: event.title().into(),
-                    body: format!("{} starts at {}.", event.category_id(), event.start_time())
-                        .into(),
-                    actions: vec![SystemNotificationAction {
-                        id: "open".into(),
-                        label: "Open Cadence".into(),
-                    }],
-                });
+            if due <= window_start || due > now || self.delivered_reminders.contains_key(&tag) {
+                continue;
             }
+            let category = self
+                .repository
+                .category(event.category_id())
+                .ok()
+                .flatten()
+                .map_or_else(
+                    || "Uncategorized".to_owned(),
+                    |category| category.name().to_owned(),
+                );
+            cx.show_system_notification(SystemNotification {
+                tag: tag.clone().into(),
+                title: event.title().into(),
+                body: Self::reminder_body(
+                    &category,
+                    event.date(),
+                    event.start_time(),
+                    reminder.minutes(),
+                    today,
+                    self.settings.clock_format(),
+                )
+                .into(),
+                actions: vec![SystemNotificationAction {
+                    id: "open-event".into(),
+                    label: "View event".into(),
+                }],
+            });
+            self.delivered_reminders.insert(
+                tag,
+                ReminderTarget {
+                    occurrence_id: event.id(),
+                    date: event.date(),
+                },
+            );
         }
+    }
+
+    pub(in crate::app) fn handle_notification_response(
+        &mut self,
+        tag: &str,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let Some(target) = self.delivered_reminders.remove(tag) else {
+            return;
+        };
+        self.open_notification_target(target, window, cx);
+    }
+
+    fn open_notification_target(
+        &mut self,
+        target: ReminderTarget,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        if !matches!(
+            self.persistence_state,
+            PersistenceState::Ready | PersistenceState::Writing
+        ) {
+            return;
+        }
+
+        let should_persist = matches!(self.persistence_state, PersistenceState::Ready);
+        let before = should_persist
+            .then(|| self.repository.snapshot().ok())
+            .flatten();
+        let rollback = should_persist.then(|| self.rollback_view_state());
+
+        self.event_selection = super::EventSelection::Single;
+        if !self.day_plan_open {
+            self.day_plan_previous_focus = window.focused(cx);
+        }
+        self.pending_scroll_minutes = Some(self.current_scroll_minutes());
+        self.state.select_date(target.date);
+        self.state
+            .set_view_mode(crate::calendar::CalendarViewMode::Day);
+        self.day_plan_open = true;
+        self.reset_scroll_initialization();
+        self.refresh_snapshot();
+        self.day_plan_focus.focus(window, cx);
+
+        if should_persist {
+            self.inspect_event(target.occurrence_id, target.date, window, cx);
+        }
+
+        if let (Some(before), Some(rollback)) = (before, rollback) {
+            let _ = self.repository.replace_preferences(self.preferences());
+            self.persist_snapshot(before, rollback, HistoryEffect::None, cx);
+        }
+        cx.notify();
+    }
+
+    fn reminder_body(
+        category: &str,
+        date: jiff::civil::Date,
+        start_time: jiff::civil::Time,
+        reminder_minutes: u16,
+        today: jiff::civil::Date,
+        clock_format: crate::domain::ClockFormat,
+    ) -> String {
+        let day_label = if date == today {
+            "Today".to_owned()
+        } else if date == today.tomorrow().unwrap_or(today) {
+            "Tomorrow".to_owned()
+        } else {
+            date.strftime("%a, %b %-d").to_string()
+        };
+        let notice = match reminder_minutes {
+            0 => "Starting now".to_owned(),
+            1 => "1 minute reminder".to_owned(),
+            minutes => format!("{minutes} minute reminder"),
+        };
+        format!(
+            "{category} · {day_label} at {} · {notice}",
+            format_time(start_time, clock_format)
+        )
     }
 
     fn subscribe_category_filter(&mut self, cx: &mut Context<'_, Self>) {
@@ -267,6 +388,8 @@ impl CadenceView {
                 });
                 self.persistence_state = PersistenceState::Ready;
                 self.error = None;
+                self.reminder_check_at = self.now;
+                self.delivered_reminders.clear();
                 self.reset_scroll_initialization();
                 self.pending_scroll_minutes = None;
                 self.refresh_snapshot();
@@ -318,4 +441,42 @@ fn start_clock(view: &mut CadenceView, cx: &Context<'_, CadenceView>) {
             }
         }
     }));
+}
+
+#[cfg(test)]
+mod tests {
+    use jiff::civil::{Date, Time};
+
+    use super::CadenceView;
+    use crate::domain::ClockFormat;
+
+    #[test]
+    fn reminder_body_uses_human_readable_context() {
+        let today = Date::constant(2026, 8, 27);
+        let start = Time::constant(7, 45, 0, 0);
+
+        assert_eq!(
+            CadenceView::reminder_body("Routine", today, start, 15, today, ClockFormat::TwelveHour,),
+            "Routine · Today at 07:45 AM · 15 minute reminder"
+        );
+    }
+
+    #[test]
+    fn reminder_body_labels_tomorrow_and_zero_minute_reminders() {
+        let today = Date::constant(2026, 8, 27);
+        let tomorrow = today.tomorrow().expect("valid date");
+        let start = Time::constant(9, 0, 0, 0);
+
+        assert_eq!(
+            CadenceView::reminder_body(
+                "Focus",
+                tomorrow,
+                start,
+                0,
+                today,
+                ClockFormat::TwentyFourHour,
+            ),
+            "Focus · Tomorrow at 09:00 · Starting now"
+        );
+    }
 }

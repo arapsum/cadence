@@ -220,6 +220,8 @@ impl CadenceView {
                 {
                     self.settings = pending.rollback.settings.clone();
                     self.notifications_enabled = pending.rollback.preferences.notifications_enabled;
+                    self.reminder_check_at = self.now;
+                    self.delivered_reminders.clear();
                     self.reduce_motion = pending.rollback.preferences.reduce_motion;
                     self.appearance = pending.rollback.preferences.appearance.clone();
                     cx.set_reduce_motion(self.reduce_motion);

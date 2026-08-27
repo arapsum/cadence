@@ -8,6 +8,23 @@ All notable Cadence releases are documented here. The format follows
 
 No unreleased changes yet.
 
+## [0.1.7] - 2026-08-27
+
+### Added
+
+- Make desktop reminders actionable: notification text now includes the event
+  category, date, and start time, and opening a reminder restores Cadence to
+  the exact Day plan and event.
+- Add Vim-style Week viewport navigation: `h` and `l` slide the seven-day
+  window by one day, while `j` and `k` scroll the time grid by one hour.
+- Keep Cadence running when its window is minimized and expose a Linux
+  StatusNotifier tray menu for restoring or quitting the application.
+
+### Fixed
+
+- Remove internal occurrence identifiers from user-visible notification bodies.
+- Preserve reminder delivery while the main window is minimized.
+
 ## [0.1.6] - 2026-08-27
 
 ### Added

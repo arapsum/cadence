@@ -64,7 +64,9 @@ launch, backup, and uninstall checks manually on a clean Ubuntu 26.04 machine.
 
 Install the draft package on a clean supported machine, launch it under Wayland,
 create a test event, restart the app, export a backup, and verify the package's
-desktop entry, icon, About dialog, and `cadence --version` output. Publish the
+desktop entry, icon, About dialog, and `cadence --version` output. For v0.1.7,
+also enable a reminder, minimize Cadence, restore it from the StatusNotifier
+tray menu, and confirm the notification opens the matching event. Publish the
 draft only after those checks pass.
 
 If a release is withdrawn, mark the GitHub release as a draft again or delete
