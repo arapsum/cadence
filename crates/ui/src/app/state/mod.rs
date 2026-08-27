@@ -9,7 +9,7 @@ pub(in crate::app) use persistence::{HistoryEffect, PersistenceState};
 pub(in crate::app) use selection::EventSelection;
 pub(in crate::app) use viewport::{RollbackViewState, ScrollInitialization, WEEK_VISIBLE_DAYS};
 
-use std::{collections::HashSet, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf};
 
 use gpui::{Entity, FocusHandle, Subscription, Task};
 use gpui_component::select::SelectState;
@@ -47,6 +47,7 @@ pub(super) struct CadenceView {
     pub(super) state: CalendarState,
     pub(super) day_plan_open: bool,
     pub(super) day_plan_focus: FocusHandle,
+    pub(super) week_viewport_focus: FocusHandle,
     pub(super) day_plan_previous_focus: Option<FocusHandle>,
     pub(super) category_filter: Entity<SelectState<Vec<FilterOption>>>,
     pub(super) day_viewport: viewport::SurfaceViewportState,
@@ -67,6 +68,13 @@ pub(super) struct CadenceView {
     pub(super) notifications_enabled: bool,
     pub(super) reduce_motion: bool,
     pub(super) appearance: AppearancePreferences,
-    pub(super) delivered_reminders: HashSet<String>,
+    pub(super) delivered_reminders: HashMap<String, ReminderTarget>,
+    pub(super) reminder_check_at: Timestamp,
     pub(super) subscriptions: Vec<Subscription>,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(super) struct ReminderTarget {
+    pub(super) occurrence_id: crate::domain::OccurrenceId,
+    pub(super) date: jiff::civil::Date,
 }

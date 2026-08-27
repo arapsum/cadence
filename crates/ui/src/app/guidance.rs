@@ -154,6 +154,8 @@ impl CadenceView {
             return;
         };
         self.notifications_enabled = enabled;
+        self.reminder_check_at = self.now;
+        self.delivered_reminders.clear();
         let _ = self.repository.replace_preferences(self.preferences());
         self.persist_snapshot(before, self.rollback_view_state(), HistoryEffect::None, cx);
         cx.notify();
