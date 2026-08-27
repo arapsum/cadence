@@ -62,7 +62,9 @@ subject to the operating system's notification permission.
 
 ## Organize and recover
 
-Create and edit categories in **Settings**. Appearance settings include light,
+Create and edit categories in **Settings**. Category assignments are preserved
+when you change themes, while their event surfaces, borders, indicators, and
+filter dots adapt to the active palette. Appearance settings include light,
 dark, or system mode, GPUI themes, font family, and font size.
 
 Undo and redo apply to committed changes in the current session. **Export**

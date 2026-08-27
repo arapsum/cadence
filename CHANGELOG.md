@@ -8,6 +8,16 @@ All notable Cadence releases are documented here. The format follows
 
 No unreleased changes yet.
 
+## [0.1.5] - 2026-08-27
+
+### Changed
+
+- Make category colours follow the active theme across event cards, indicators,
+  filters, summaries, and category settings while preserving saved category
+  assignments.
+- Derive category surfaces, borders, and indicators from semantic theme colours
+  with contrast safeguards for readable text and controls.
+
 ## [0.1.4] - 2026-08-26
 
 ### Added

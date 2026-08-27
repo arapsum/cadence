@@ -16,6 +16,11 @@
     <category>Calendar</category>
   </categories>
   <releases>
+    <release version="0.1.5" date="2026-08-27">
+      <description>
+        <p>Adapts category colours to the active theme across the calendar, filters, and settings.</p>
+      </description>
+    </release>
     <release version="0.1.4" date="2026-08-26">
       <description>
         <p>Opens preferences in a dedicated Settings window and uses a more compact title toolbar.</p>
