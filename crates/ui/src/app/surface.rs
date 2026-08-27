@@ -9,7 +9,7 @@ use jiff::civil::{Date, Time};
 use crate::{calendar::CalendarViewMode, domain::format_time};
 
 use super::{
-    grid,
+    actions, grid,
     presentation::{dates_in_range, local_date_time},
     state::CadenceView,
     style::{
@@ -187,6 +187,18 @@ pub(super) fn render(
         ));
     let header = render_header(view, mode, plane_width, column_width, scroll_offset, cx);
     let gutter = render_time_gutter(view, mode, scroll_offset, cx);
+    let week_focus = view.week_viewport_focus.clone();
+    let focus_week_surface = cx.listener(|view, _, window, cx| {
+        view.week_viewport_focus.focus(window, cx);
+    });
+    let slide_week_backward =
+        cx.listener(|view, _: &actions::SlideWeekBackward, _, cx| view.slide_week_window(-1, cx));
+    let slide_week_forward =
+        cx.listener(|view, _: &actions::SlideWeekForward, _, cx| view.slide_week_window(1, cx));
+    let scroll_week_down =
+        cx.listener(|view, _: &actions::ScrollWeekDown, _, cx| view.scroll_week_by_hours(1, cx));
+    let scroll_week_up =
+        cx.listener(|view, _: &actions::ScrollWeekUp, _, cx| view.scroll_week_by_hours(-1, cx));
     let corner = div()
         .absolute()
         .top(px(0.0))
@@ -217,6 +229,15 @@ pub(super) fn render(
         .min_h_0()
         .bg(cx.theme().background)
         .overflow_hidden()
+        .when(mode == SurfaceMode::Week, |this| {
+            this.key_context(actions::WEEK_VIEWPORT_CONTEXT)
+                .track_focus(&week_focus)
+                .on_click(focus_week_surface)
+                .on_action(slide_week_backward)
+                .on_action(slide_week_forward)
+                .on_action(scroll_week_down)
+                .on_action(scroll_week_up)
+        })
         .on_prepaint(move |bounds, _, app| {
             measure_view
                 .update(app, |view, cx| {

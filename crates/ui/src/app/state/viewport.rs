@@ -397,6 +397,41 @@ impl CadenceView {
             .max(0.0)
     }
 
+    /// Slides the rolling week viewport by one or more calendar days.
+    pub(in crate::app) fn slide_week_window(&mut self, days: i32, cx: &mut Context<'_, Self>) {
+        if days == 0 || !self.is_interactive() {
+            return;
+        }
+        let column_width = week_column_width(self.week_surface_width);
+        if !column_width.is_finite() || column_width <= 0.0 {
+            return;
+        }
+        let offset = self.week_viewport.handle.offset();
+        let day_delta = f32::from(i16::try_from(days).expect("week slide fits in i16"));
+        self.week_viewport.handle.set_offset(point(
+            px(column_width.mul_add(-day_delta, offset.x.as_f32())),
+            offset.y,
+        ));
+        self.sync_week_scroll(column_width, cx);
+        cx.notify();
+    }
+
+    /// Scrolls the week time grid by a number of whole hours.
+    pub(in crate::app) fn scroll_week_by_hours(&self, hours: i32, cx: &mut Context<'_, Self>) {
+        if hours == 0 || !self.is_interactive() {
+            return;
+        }
+        let hour_delta = f32::from(i16::try_from(hours).expect("week scroll fits in i16"))
+            * 60.0
+            * PIXELS_PER_MINUTE;
+        let offset = self.week_viewport.handle.offset();
+        let next_y = (offset.y.as_f32() - hour_delta).min(0.0);
+        self.week_viewport
+            .handle
+            .set_offset(point(offset.x, px(next_y)));
+        cx.notify();
+    }
+
     pub(in crate::app) const fn reset_scroll_initialization(&mut self) {
         self.day_viewport.initialization = ScrollInitialization::Pending;
         self.week_viewport.initialization = ScrollInitialization::Pending;

@@ -2,6 +2,8 @@ use gpui::{App, KeyBinding};
 
 /// Keyboard context used by the calendar surface actions.
 pub(super) const CALENDAR_CONTEXT: &str = "CadenceCalendar";
+/// Keyboard context active while the rolling week surface has focus.
+pub(super) const WEEK_VIEWPORT_CONTEXT: &str = "CadenceWeekViewport";
 
 macro_rules! cadence_actions {
     ($($name:ident),* $(,)?) => {
@@ -26,6 +28,10 @@ cadence_actions!(
     SelectAllEvents,
     DeleteSelectedEvents,
     CancelManipulation,
+    SlideWeekBackward,
+    SlideWeekForward,
+    ScrollWeekDown,
+    ScrollWeekUp,
 );
 
 pub(super) fn bind(cx: &mut App) {
@@ -50,5 +56,9 @@ pub(super) fn bind(cx: &mut App) {
         KeyBinding::new("delete", DeleteSelectedEvents, Some(CALENDAR_CONTEXT)),
         KeyBinding::new("backspace", DeleteSelectedEvents, Some(CALENDAR_CONTEXT)),
         KeyBinding::new("escape", CancelManipulation, Some(CALENDAR_CONTEXT)),
+        KeyBinding::new("h", SlideWeekBackward, Some(WEEK_VIEWPORT_CONTEXT)),
+        KeyBinding::new("l", SlideWeekForward, Some(WEEK_VIEWPORT_CONTEXT)),
+        KeyBinding::new("j", ScrollWeekDown, Some(WEEK_VIEWPORT_CONTEXT)),
+        KeyBinding::new("k", ScrollWeekUp, Some(WEEK_VIEWPORT_CONTEXT)),
     ]);
 }
