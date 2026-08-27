@@ -363,9 +363,7 @@ fn render_manipulation_preview(
         .categories
         .iter()
         .find(|category| category.id() == manipulation.event.category_id())?;
-    let dark = cx.theme().mode.is_dark();
-    let (background, foreground, border) =
-        super::style::category_palette(category.color_token(), dark);
+    let palette = super::style::category_palette(category.color_token(), cx.theme());
     let conflict = manipulation.conflict.is_some();
     let lane_count = f32::from(position.lane_count().max(1));
     let width = column_width * f32::from(position.lane_span()) / lane_count - 8.0;
@@ -396,13 +394,17 @@ fn render_manipulation_preview(
             .rounded_md()
             .border_2()
             .border_dashed()
-            .border_color(if conflict { cx.theme().warning } else { border })
+            .border_color(if conflict {
+                cx.theme().warning
+            } else {
+                palette.border
+            })
             .bg(if conflict {
                 cx.theme().warning.opacity(0.2)
             } else {
-                background.opacity(0.28)
+                palette.surface
             })
-            .text_color(foreground)
+            .text_color(palette.foreground)
             .px_2()
             .py_1()
             .overflow_hidden()

@@ -50,7 +50,8 @@ impl CadenceView {
                         let category_name =
                             category.map_or("Uncategorised", |category| category.name());
                         let dot = category.map(|category| {
-                            category_dot(Some(category.color_token())).into_any_element()
+                            category_dot(Some(category.color_token()), cx.theme())
+                                .into_any_element()
                         });
                         div()
                             .v_flex()

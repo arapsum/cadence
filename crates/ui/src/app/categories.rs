@@ -139,7 +139,6 @@ impl Render for CategoryEditor {
         }
 
         let owner = cx.entity().downgrade();
-        let dark = cx.theme().mode.is_dark();
         let selected_color = self.color;
         let visible_owner = owner.clone();
         div()
@@ -172,10 +171,11 @@ impl Render for CategoryEditor {
                                 .toggled(selected_color == color)
                                 .tooltip(label)
                                 .child(
-                                    div()
-                                        .size(px(16.0))
-                                        .rounded_full()
-                                        .bg(category_palette(color, dark).2),
+                                    div().size(px(16.0)).rounded_full().bg(category_palette(
+                                        color,
+                                        cx.theme(),
+                                    )
+                                    .indicator),
                                 )
                                 .on_click(move |_, _, app| {
                                     color_owner
@@ -239,12 +239,12 @@ impl SelectItem for CategoryOption {
         &self.id
     }
 
-    fn render(&self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(&self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         div()
             .flex()
             .items_center()
             .gap_2()
-            .child(category_dot(Some(self.category.color_token())))
+            .child(category_dot(Some(self.category.color_token()), cx.theme()))
             .child(self.category.name().to_owned())
     }
 }
@@ -461,7 +461,7 @@ impl CategoryManager {
             .border_1()
             .border_color(cx.theme().border)
             .p_2()
-            .child(category_dot(Some(color)))
+            .child(category_dot(Some(color), cx.theme()))
             .child(div().flex_1().min_w_0().text_sm().child(name.clone()))
             .child(
                 Switch::new(format!("settings-category-visible-{category_id}"))

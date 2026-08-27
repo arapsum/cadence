@@ -42,12 +42,12 @@ impl SelectItem for FilterOption {
         &self.filter
     }
 
-    fn render(&self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(&self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         div()
             .flex()
             .items_center()
             .gap_2()
-            .child(category_dot(self.color))
+            .child(category_dot(self.color, cx.theme()))
             .child(self.label.clone())
     }
 }
