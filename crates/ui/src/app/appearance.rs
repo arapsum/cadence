@@ -13,7 +13,7 @@ use crate::store::{AppearanceMode, AppearancePreferences};
 
 use super::state::CadenceView;
 
-const BUNDLED_THEMES: &[&str] = &[
+pub(super) const BUNDLED_THEMES: &[&str] = &[
     include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/assets/themes/adventure.json"

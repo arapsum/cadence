@@ -48,8 +48,7 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
     } else {
         view.state.selected_event() == Some(event.id())
     };
-    let dark = cx.theme().mode.is_dark();
-    let (background, foreground, border) = category_palette(category.color_token(), dark);
+    let palette = category_palette(category.color_token(), cx.theme());
     let lane_count = f32::from(position.lane_count().max(1));
     let width = column_width * f32::from(position.lane_span()) / lane_count - 8.0;
     let day_offset = f32::from(position.day_offset());
@@ -118,8 +117,8 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
     };
     let avatar_title = event.title().to_owned();
     let avatar_time = event_time.clone();
-    let avatar_background = background;
-    let avatar_foreground = foreground;
+    let avatar_background = palette.surface;
+    let avatar_foreground = palette.foreground;
     let active = state.manipulation.as_ref().is_some_and(|manipulation| {
         manipulation.occurrence_id() == occurrence_id
             && manipulation.surface() == mode.calendar_mode()
@@ -145,11 +144,11 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
         } else if selected {
             cx.theme().foreground
         } else {
-            border
+            palette.border
         })
         .when(selected, gpui::Styled::border_2)
-        .bg(background)
-        .text_color(foreground)
+        .bg(palette.surface)
+        .text_color(palette.foreground)
         .overflow_hidden()
         .when(bulk_mode, gpui::Styled::cursor_pointer)
         .when(!bulk_mode, gpui::Styled::cursor_grab)
@@ -245,8 +244,8 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
             payload: resize_start_payload,
             view: resize_start_view,
             start: true,
-            background,
-            foreground,
+            background: palette.surface,
+            foreground: palette.foreground,
             height: position.height(),
             event_title: event.title().to_owned(),
             event_time: event_time.clone(),
@@ -254,7 +253,7 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
         }))
         .child(render_category_header(
             category_name,
-            foreground,
+            palette.foreground,
             conflicted,
             cx,
         ))
@@ -264,8 +263,8 @@ pub(super) fn render(props: &EventCardProps<'_>) -> gpui::AnyElement {
             payload: resize_end_payload,
             view: resize_end_view,
             start: false,
-            background,
-            foreground,
+            background: palette.surface,
+            foreground: palette.foreground,
             height: position.height(),
             event_title: event.title().to_owned(),
             event_time,

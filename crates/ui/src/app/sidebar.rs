@@ -82,15 +82,14 @@ pub(super) fn render(
                 let edit_owner = owner.clone();
                 let delete_owner = owner.clone();
                 let filter = CategoryFilter::Only(category.id());
+                let indicator = category_palette(category.color_token(), cx.theme()).indicator;
                 let next_filter = if view.state.category_filter() == filter {
                     CategoryFilter::All
                 } else {
                     filter
                 };
                 SidebarMenuItem::new(category.name().to_owned())
-                    .icon(Icon::new(IconName::Minus).text_color(
-                        category_palette(category.color_token(), cx.theme().mode.is_dark()).2,
-                    ))
+                    .icon(Icon::new(IconName::Minus).text_color(indicator))
                     .active(view.state.category_filter() == filter)
                     .disable(!interactive)
                     .suffix(move |_, _| {
@@ -353,7 +352,7 @@ fn render_summary(
                     div()
                         .h_full()
                         .w(gpui::relative(f32::from(minutes) / f32::from(total)))
-                        .bg(category_palette(color, cx.theme().mode.is_dark()).2)
+                        .bg(category_palette(color, cx.theme()).indicator)
                         .into_any_element()
                 })),
         )

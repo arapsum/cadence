@@ -3,7 +3,7 @@ use gpui::{
     StatefulInteractiveElement as _, Subscription, Window, div, prelude::*, px,
 };
 use gpui_component::{
-    StyledExt as _,
+    ActiveTheme as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
     date_picker::{DatePicker, DatePickerEvent, DatePickerState},
     input::{Input, InputEvent, InputState, Textarea, TextareaState},
@@ -37,12 +37,12 @@ impl SelectItem for CategoryOption {
         &self.id
     }
 
-    fn render(&self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(&self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         div()
             .flex()
             .items_center()
             .gap_2()
-            .child(category_dot(Some(self.category.color_token())))
+            .child(category_dot(Some(self.category.color_token()), cx.theme()))
             .child(self.category.name().to_owned())
     }
 }
