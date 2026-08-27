@@ -125,7 +125,7 @@ mod tests {
     use std::rc::Rc;
 
     use gpui::hsla;
-    use gpui_component::{Theme, ThemeSet};
+    use gpui_component::{Theme, ThemeColor, ThemeSet};
 
     use super::{
         MIN_ACCENT_CONTRAST, MIN_TEXT_CONTRAST, category_palette, category_seed, contrast_ratio,
@@ -194,22 +194,23 @@ mod tests {
     }
 
     fn test_theme() -> Theme {
-        let mut theme = Theme::default();
-        theme.background = hsla(0.0, 0.0, 0.98, 1.0);
-        theme.foreground = hsla(0.0, 0.0, 0.08, 1.0);
-        theme.muted_foreground = hsla(0.58, 0.12, 0.38, 1.0);
-        theme.red = hsla(0.0, 0.72, 0.48, 1.0);
-        theme.red_light = hsla(0.02, 0.68, 0.58, 1.0);
-        theme.green = hsla(0.32, 0.62, 0.36, 1.0);
-        theme.green_light = hsla(0.28, 0.58, 0.5, 1.0);
-        theme.blue = hsla(0.6, 0.72, 0.48, 1.0);
-        theme.blue_light = hsla(0.65, 0.68, 0.58, 1.0);
-        theme.yellow = hsla(0.14, 0.76, 0.42, 1.0);
-        theme.yellow_light = hsla(0.09, 0.72, 0.54, 1.0);
-        theme.magenta = hsla(0.86, 0.64, 0.48, 1.0);
-        theme.magenta_light = hsla(0.77, 0.6, 0.58, 1.0);
-        theme.cyan = hsla(0.49, 0.62, 0.38, 1.0);
-        theme.cyan_light = hsla(0.53, 0.58, 0.52, 1.0);
-        theme
+        Theme::from(&ThemeColor {
+            background: hsla(0.0, 0.0, 0.98, 1.0),
+            foreground: hsla(0.0, 0.0, 0.08, 1.0),
+            muted_foreground: hsla(0.58, 0.12, 0.38, 1.0),
+            red: hsla(0.0, 0.72, 0.48, 1.0),
+            red_light: hsla(0.02, 0.68, 0.58, 1.0),
+            green: hsla(0.32, 0.62, 0.36, 1.0),
+            green_light: hsla(0.28, 0.58, 0.5, 1.0),
+            blue: hsla(0.6, 0.72, 0.48, 1.0),
+            blue_light: hsla(0.65, 0.68, 0.58, 1.0),
+            yellow: hsla(0.14, 0.76, 0.42, 1.0),
+            yellow_light: hsla(0.09, 0.72, 0.54, 1.0),
+            magenta: hsla(0.86, 0.64, 0.48, 1.0),
+            magenta_light: hsla(0.77, 0.6, 0.58, 1.0),
+            cyan: hsla(0.49, 0.62, 0.38, 1.0),
+            cyan_light: hsla(0.53, 0.58, 0.52, 1.0),
+            ..ThemeColor::default()
+        })
     }
 }
