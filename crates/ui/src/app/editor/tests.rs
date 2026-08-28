@@ -115,6 +115,61 @@ fn assert_inspector_actions_are_non_mutating(
 }
 
 #[gpui::test]
+fn dirty_event_form_discard_preserves_snapshot(cx: &mut TestAppContext) {
+    cx.update(gpui_component::init);
+
+    let calendar = Rc::new(RefCell::new(None::<Entity<CadenceView>>));
+    let captured_calendar = Rc::clone(&calendar);
+    let (_, cx) = cx.add_window_view(move |window, cx| {
+        let view = cx.new(|cx| CadenceView::new(window, cx));
+        captured_calendar.replace(Some(view.clone()));
+        Root::new(view, window, cx)
+    });
+    let calendar = calendar
+        .borrow()
+        .clone()
+        .expect("calendar view was captured while building the root");
+    cx.update(|window, app| window.draw(app).clear(app));
+    let new_event = cx
+        .debug_bounds("new-event")
+        .expect("new event button was rendered");
+    cx.simulate_click(new_event.center(), Modifiers::none());
+    assert!(cx.update(gpui_component::WindowExt::has_active_dialog));
+    cx.update(|window, app| window.draw(app).clear(app));
+    assert!(cx.debug_bounds("event-editor-form").is_some());
+
+    assert_dirty_event_form_can_be_discarded(&calendar, cx);
+}
+
+#[gpui::test]
+fn inspector_actions_preserve_snapshot_when_cancelled(cx: &mut TestAppContext) {
+    cx.update(gpui_component::init);
+
+    let calendar = Rc::new(RefCell::new(None::<Entity<CadenceView>>));
+    let captured_calendar = Rc::clone(&calendar);
+    let (_, cx) = cx.add_window_view(move |window, cx| {
+        let view = cx.new(|cx| CadenceView::new(window, cx));
+        captured_calendar.replace(Some(view.clone()));
+        Root::new(view, window, cx)
+    });
+    let calendar = calendar
+        .borrow()
+        .clone()
+        .expect("calendar view was captured while building the root");
+    cx.update(|window, app| window.draw(app).clear(app));
+
+    let (event_id, event_date) = calendar.read_with(cx, |view, _| {
+        let event = view
+            .snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.surface(view.state.view_mode()).events.first())
+            .expect("the seeded calendar contains an event");
+        (event.id(), event.date())
+    });
+    assert_inspector_actions_are_non_mutating(&calendar, event_id, event_date, cx);
+}
+
+#[gpui::test]
 fn event_entry_points_render_their_dialogs(cx: &mut TestAppContext) {
     cx.update(gpui_component::init);
 
@@ -139,7 +194,6 @@ fn event_entry_points_render_their_dialogs(cx: &mut TestAppContext) {
     assert!(cx.update(|window, app| Root::render_dialog_layer(window, app).is_some()));
     cx.update(|window, app| window.draw(app).clear(app));
     assert!(cx.debug_bounds("event-editor-form").is_some());
-    assert_dirty_event_form_can_be_discarded(&calendar, cx);
 
     cx.update(gpui_component::WindowExt::close_all_dialogs);
     calendar.update_in(cx, |_, window, app| {
@@ -158,7 +212,6 @@ fn event_entry_points_render_their_dialogs(cx: &mut TestAppContext) {
             .expect("the seeded calendar contains an event");
         (event.id(), event.date())
     });
-    assert_inspector_actions_are_non_mutating(&calendar, event_id, event_date, cx);
 
     let recurring_draft = calendar.read_with(cx, |view, _| {
         let event = view
