@@ -556,8 +556,8 @@ Done when:
 
 ### M10 — Rolling Week and appearance previews
 
-**Status (2026-08-27): implementation complete; visual Wayland verification
-remains part of the v0.1.6 release gate.**
+**Status (2026-08-28): implementation complete; Ubuntu 26.04 LTS x86_64 Wayland audit verification remains pending.**
+Wayland audit findings are tracked in #15.
 
 **Outcome:** Week behaves as a continuous seven-day viewport, and appearance
 choices are easy to compare before committing them.
@@ -592,8 +592,8 @@ Done when:
 
 ### M11 — Runtime integrations (v0.1.7)
 
-**Status (2026-08-27): implementation complete; desktop notification and tray
-behavior remain part of the Wayland smoke-test gate.**
+**Status (2026-08-28): implementation complete; Ubuntu 26.04 LTS x86_64 Wayland audit verification remains pending.**
+Wayland audit findings are tracked in #15.
 
 **Outcome:** reminders carry useful context, keyboard users can move through
 the rolling Week viewport without leaving the home row, and minimizing keeps

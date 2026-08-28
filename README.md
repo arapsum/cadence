@@ -253,6 +253,7 @@ On GNOME, a StatusNotifier/AppIndicator extension may be needed for the tray
 icon to be shown by the desktop shell. The application remains usable and
 notifications still follow the operating system permission when no tray host
 is available.
+> **Project status:** Cadence v0.1.7 is published; Ubuntu 26.04 LTS x86_64 Wayland audit findings remain open in #15.
 
 ## Project documents
 
