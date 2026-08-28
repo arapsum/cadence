@@ -77,21 +77,20 @@ fn sqlite_round_trip_preserves_entities_and_preferences() {
     let category_id = category.id();
     repository.create_category(category.clone()).unwrap();
     repository.create_event(event(101, category_id)).unwrap();
-    repository
-        .replace_preferences(AppPreferences {
-            view_mode: CalendarViewModePreference::Day,
-            category_filter: Some(category_id),
-            notifications_enabled: true,
-            reduce_motion: true,
-            appearance: cadence_core::store::AppearancePreferences {
-                mode: cadence_core::store::AppearanceMode::Dark,
-                light_theme: "Default Light".to_owned(),
-                dark_theme: "Tokyonight Dark".to_owned(),
-                font_family: ".SystemUIFont".to_owned(),
-                font_size: 18,
-            },
-        })
-        .unwrap();
+    let preferences = AppPreferences {
+        view_mode: CalendarViewModePreference::Day,
+        category_filter: Some(category_id),
+        notifications_enabled: true,
+        reduce_motion: true,
+        appearance: cadence_core::store::AppearancePreferences {
+            mode: cadence_core::store::AppearanceMode::Dark,
+            light_theme: "Default Light".to_owned(),
+            dark_theme: "Tokyonight Dark".to_owned(),
+            font_family: ".SystemUIFont".to_owned(),
+            font_size: 18,
+        },
+    };
+    repository.replace_preferences(preferences.clone()).unwrap();
     drop(repository);
 
     let repository = SqliteRepository::open(path).unwrap();
@@ -116,6 +115,7 @@ fn sqlite_round_trip_preserves_entities_and_preferences() {
     assert_eq!(appearance.mode, cadence_core::store::AppearanceMode::Dark);
     assert_eq!(appearance.dark_theme, "Tokyonight Dark");
     assert_eq!(appearance.font_size, 18);
+    assert_eq!(repository.preferences().unwrap(), preferences);
 }
 
 #[test]
@@ -231,11 +231,24 @@ fn sqlite_round_trip_preserves_recurring_series_and_exceptions() {
     repository
         .upsert_exception(RecurrenceException::cancelled(series.id(), start))
         .unwrap();
+    let preferences = AppPreferences {
+        view_mode: CalendarViewModePreference::Day,
+        category_filter: Some(category.id()),
+        notifications_enabled: true,
+        reduce_motion: true,
+        appearance: cadence_core::store::AppearancePreferences {
+            mode: cadence_core::store::AppearanceMode::Dark,
+            dark_theme: "Tokyonight Dark".to_owned(),
+            font_size: 18,
+            ..Default::default()
+        },
+    };
+    repository.replace_preferences(preferences.clone()).unwrap();
     drop(repository);
 
     let repository = SqliteRepository::open(path).unwrap();
     assert_eq!(repository.recurrence_series().unwrap(), vec![series]);
-    assert_eq!(repository.recurrence_exceptions().unwrap().len(), 1);
+    assert_eq!(repository.preferences().unwrap(), preferences);
     assert_eq!(
         repository
             .occurrences(DateRange::new(start, date(2026, 9, 30)).unwrap())
@@ -279,6 +292,44 @@ fn corrupt_database_is_rejected_without_replacement() {
         error,
         StorageError::Sqlite(_) | StorageError::Corrupt(_)
     ));
+}
+
+#[test]
+fn worker_archives_invalid_database_and_starts_with_default_snapshot() {
+    let directory = tempdir().unwrap();
+    let path = directory.path().join("cadence.sqlite3");
+    fs::write(&path, b"not a sqlite database").unwrap();
+
+    let client = StorageClient::spawn(path.clone());
+    let snapshot = client
+        .archive_and_start_fresh()
+        .recv_blocking()
+        .unwrap()
+        .unwrap();
+
+    assert!(snapshot.events.is_empty());
+    assert!(snapshot.recurrence_series.is_empty());
+    assert!(snapshot.recurrence_exceptions.is_empty());
+    assert_eq!(snapshot.categories.len(), 6);
+    assert_eq!(snapshot.preferences, AppPreferences::default());
+    assert!(path.exists());
+
+    let archives = fs::read_dir(directory.path())
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("cadence-recovery-")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(archives.len(), 1);
+    assert!(archives[0].path().is_dir());
+    assert_eq!(
+        fs::read(archives[0].path().join("cadence.sqlite3")).unwrap(),
+        b"not a sqlite database"
+    );
 }
 
 #[test]

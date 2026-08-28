@@ -2,7 +2,10 @@ use std::collections::BTreeSet;
 
 use gpui::Context;
 
-use crate::{calendar::CalendarViewMode, domain::OccurrenceId};
+use crate::{
+    calendar::CalendarViewMode,
+    domain::{DateRange, OccurrenceId},
+};
 
 use super::CadenceView;
 
@@ -63,8 +66,7 @@ impl CadenceView {
     /// Returns the number of visible occurrences eligible for bulk selection.
     pub(in crate::app) fn bulk_selectable_count(&self) -> usize {
         self.bulk_selection_surface()
-            .and_then(|surface| self.surface_snapshot(surface))
-            .map_or(0, |snapshot| snapshot.events.len())
+            .map_or(0, |surface| self.bulk_selectable_count_for(surface))
     }
 
     /// Returns the number of visible occurrences on the active surface.
@@ -80,10 +82,14 @@ impl CadenceView {
         let Some(snapshot) = self.surface_snapshot(surface) else {
             return false;
         };
-        !snapshot.events.is_empty()
+        let Some(range) = self.visible_surface_range(surface) else {
+            return false;
+        };
+        self.bulk_selectable_count_for(surface) > 0
             && snapshot
                 .events
                 .iter()
+                .filter(|event| range.contains(event.date()))
                 .all(|event| self.is_bulk_selected(event.id()))
     }
 
@@ -134,6 +140,9 @@ impl CadenceView {
         occurrence_id: OccurrenceId,
         cx: &mut Context<'_, Self>,
     ) {
+        let Some(range) = self.visible_surface_range(surface) else {
+            return;
+        };
         if !self.is_interactive()
             || self.bulk_selection_surface() != Some(surface)
             || self.state.view_mode() != surface
@@ -141,7 +150,7 @@ impl CadenceView {
                 snapshot
                     .events
                     .iter()
-                    .any(|event| event.id() == occurrence_id)
+                    .any(|event| event.id() == occurrence_id && range.contains(event.date()))
             })
         {
             return;
@@ -180,9 +189,13 @@ impl CadenceView {
         let Some(snapshot) = self.surface_snapshot(surface) else {
             return;
         };
+        let Some(range) = self.visible_surface_range(surface) else {
+            return;
+        };
         let ids = snapshot
             .events
             .iter()
+            .filter(|event| range.contains(event.date()))
             .map(cadence_core::domain::EventOccurrence::id)
             .collect::<BTreeSet<_>>();
         if let Some(selected) = self.event_selection.selected_mut() {
@@ -196,8 +209,47 @@ impl CadenceView {
     }
 
     fn bulk_selectable_count_for(&self, surface: CalendarViewMode) -> usize {
-        self.surface_snapshot(surface)
-            .map_or(0, |snapshot| snapshot.events.len())
+        let Some(snapshot) = self.surface_snapshot(surface) else {
+            return 0;
+        };
+        let Some(range) = self.visible_surface_range(surface) else {
+            return 0;
+        };
+        snapshot
+            .events
+            .iter()
+            .filter(|event| range.contains(event.date()))
+            .count()
+    }
+
+    pub(in crate::app) fn visible_surface_range(
+        &self,
+        surface: CalendarViewMode,
+    ) -> Option<DateRange> {
+        match surface {
+            CalendarViewMode::Day => self
+                .surface_snapshot(surface)
+                .map(|snapshot| snapshot.range),
+            CalendarViewMode::Week => self.visible_week_range(),
+        }
+    }
+
+    pub(in crate::app) fn visible_surface_events(
+        &self,
+        surface: CalendarViewMode,
+    ) -> Vec<cadence_core::domain::EventOccurrence> {
+        let Some(snapshot) = self.surface_snapshot(surface) else {
+            return Vec::new();
+        };
+        let Some(range) = self.visible_surface_range(surface) else {
+            return Vec::new();
+        };
+        snapshot
+            .events
+            .iter()
+            .filter(|event| range.contains(event.date()))
+            .cloned()
+            .collect()
     }
 }
 

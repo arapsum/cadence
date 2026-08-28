@@ -36,6 +36,7 @@ pub(super) struct CadenceView {
     pub(super) persistence_state: PersistenceState,
     pending_write: Option<PendingWrite>,
     storage_task: Option<Task<()>>,
+    #[cfg_attr(test, allow(dead_code))]
     pending_write_task: Option<Task<()>>,
     export_task: Option<Task<()>>,
     clock_task: Option<Task<()>>,

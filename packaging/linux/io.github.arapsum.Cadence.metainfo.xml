@@ -16,6 +16,11 @@
     <category>Calendar</category>
   </categories>
   <releases>
+    <release version="0.1.8" date="2026-08-28">
+      <description>
+        <p>Remediates the Wayland audit with deterministic tray shutdown, release-contract validation, and completed regression coverage.</p>
+      </description>
+    </release>
     <release version="0.1.7" date="2026-08-27">
       <description>
         <p>Adds actionable reminders, Vim-style Week viewport navigation, and a Linux tray lifecycle for minimized Cadence windows.</p>

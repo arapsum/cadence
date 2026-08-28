@@ -445,10 +445,19 @@ fn start_clock(view: &mut CadenceView, cx: &Context<'_, CadenceView>) {
 
 #[cfg(test)]
 mod tests {
+    use std::{cell::RefCell, rc::Rc};
+
+    use gpui::{AppContext as _, Entity, TestAppContext};
+    use gpui_component::Root;
     use jiff::civil::{Date, Time};
 
     use super::CadenceView;
-    use crate::domain::ClockFormat;
+    use crate::{
+        app::presentation::local_date_time,
+        calendar::{CalendarViewMode, CategoryFilter},
+        domain::ClockFormat,
+        store::TimetableRepository,
+    };
 
     #[test]
     fn reminder_body_uses_human_readable_context() {
@@ -478,5 +487,45 @@ mod tests {
             ),
             "Focus · Tomorrow at 09:00 · Starting now"
         );
+    }
+
+    #[gpui::test]
+    fn apply_loaded_restores_filter_and_starts_week_on_today(cx: &mut TestAppContext) {
+        cx.update(gpui_component::init);
+
+        let calendar = Rc::new(RefCell::new(None::<Entity<CadenceView>>));
+        let captured_calendar = Rc::clone(&calendar);
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            let view = cx.new(|cx| CadenceView::new(window, cx));
+            captured_calendar.borrow_mut().replace(view.clone());
+            Root::new(view, window, cx)
+        });
+        let calendar = calendar.borrow().clone().expect("calendar view");
+
+        let (persisted, expected_filter) = calendar.read_with(cx, |view, _| {
+            let mut snapshot = view.repository.snapshot().unwrap();
+            let category_id = snapshot.categories.first().expect("seed category").id();
+            snapshot.preferences.view_mode = crate::store::CalendarViewModePreference::Day;
+            snapshot.preferences.category_filter = Some(category_id);
+            (snapshot, category_id)
+        });
+
+        calendar.update_in(cx, |view, window, app| {
+            view.apply_loaded(Ok(persisted), window, app);
+        });
+
+        calendar.read_with(cx, |view, _| {
+            let (today, _) = local_date_time(view.now, &view.settings);
+            assert_eq!(view.state.view_mode(), CalendarViewMode::Week);
+            assert_eq!(view.state.selected_date(), today);
+            assert_eq!(
+                view.state.category_filter(),
+                CategoryFilter::Only(expected_filter)
+            );
+            assert_eq!(
+                view.visible_week_range().unwrap().start(),
+                crate::domain::start_of_week(today, view.settings.week_starts_on()).unwrap()
+            );
+        });
     }
 }
