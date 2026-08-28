@@ -63,6 +63,73 @@ struct InspectorDialogData {
     duplicate: FormDraft,
 }
 
+fn inspector_footer(
+    owner: gpui::WeakEntity<CadenceView>,
+    event_id: OccurrenceId,
+    duplicate: FormDraft,
+) -> DialogFooter {
+    let edit_owner = owner.clone();
+    let duplicate_owner = owner.clone();
+    let delete_owner = owner;
+
+    DialogFooter::new()
+        .w_full()
+        .px_4()
+        .child(
+            Button::new("delete-event")
+                .debug_selector(|| "delete-event".into())
+                .ghost()
+                .danger()
+                .label("Delete")
+                .on_click(move |_, window, app| {
+                    delete_owner
+                        .update(app, |view, cx| {
+                            view.confirm_delete(event_id, window, cx);
+                        })
+                        .ok();
+                }),
+        )
+        .child(div().flex_1())
+        .child(
+            Button::new("duplicate-event")
+                .debug_selector(|| "duplicate-event".into())
+                .outline()
+                .label("Duplicate")
+                .on_click({
+                    let duplicate = duplicate.clone();
+                    move |_, window, app| {
+                        duplicate_owner
+                            .update(app, |view, cx| {
+                                window.close_dialog(cx);
+                                view.open_editor(EditorMode::Create, &duplicate, window, cx);
+                            })
+                            .ok();
+                    }
+                }),
+        )
+        .child(
+            Button::new("edit-event")
+                .debug_selector(|| "edit-event".into())
+                .primary()
+                .label("Edit")
+                .on_click({
+                    move |_, window, app| {
+                        edit_owner
+                            .update(app, |view, cx| {
+                                window.close_dialog(cx);
+                                view.open_editor(
+                                    EditorMode::Edit(event_id),
+                                    &duplicate,
+                                    window,
+                                    cx,
+                                );
+                            })
+                            .ok();
+                    }
+                }),
+        )
+}
+
 fn open_inspector_dialog(
     data: InspectorDialogData,
     window: &mut Window,
@@ -85,10 +152,6 @@ fn open_inspector_dialog(
         let dialog_height = px(420.0);
         let margin_top = dialog_margin_top(available_height, dialog_height);
 
-        let edit_owner = owner.clone();
-        let duplicate_owner = owner.clone();
-        let delete_owner = owner.clone();
-
         dialog
             .margin_top(margin_top)
             .w(px(420.0))
@@ -109,62 +172,7 @@ fn open_inspector_dialog(
                     ))
                 }
             })
-            .footer(
-                DialogFooter::new()
-                    .w_full()
-                    .px_4()
-                    .child(
-                        Button::new("delete-event")
-                            .ghost()
-                            .danger()
-                            .label("Delete")
-                            .on_click(move |_, window, app| {
-                                delete_owner
-                                    .update(app, |view, cx| {
-                                        view.confirm_delete(event_id, window, cx);
-                                    })
-                                    .ok();
-                            }),
-                    )
-                    .child(div().flex_1())
-                    .child(
-                        Button::new("duplicate-event")
-                            .outline()
-                            .label("Duplicate")
-                            .on_click({
-                                let duplicate = duplicate.clone();
-                                move |_, window, app| {
-                                    duplicate_owner
-                                        .update(app, |view, cx| {
-                                            window.close_dialog(cx);
-                                            view.open_editor(
-                                                EditorMode::Create,
-                                                &duplicate,
-                                                window,
-                                                cx,
-                                            );
-                                        })
-                                        .ok();
-                                }
-                            }),
-                    )
-                    .child(Button::new("edit-event").primary().label("Edit").on_click({
-                        let duplicate = duplicate.clone();
-                        move |_, window, app| {
-                            edit_owner
-                                .update(app, |view, cx| {
-                                    window.close_dialog(cx);
-                                    view.open_editor(
-                                        EditorMode::Edit(event_id),
-                                        &duplicate,
-                                        window,
-                                        cx,
-                                    );
-                                })
-                                .ok();
-                        }
-                    })),
-            )
+            .footer(inspector_footer(owner.clone(), event_id, duplicate.clone()))
     });
 }
 

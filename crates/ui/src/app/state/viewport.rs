@@ -42,7 +42,7 @@ pub(in crate::app) fn logical_week_start(
     if !column_width.is_finite() || column_width <= 0.0 || !scroll_left.is_finite() {
         return None;
     }
-    let index = (scroll_left.max(0.0) / column_width).floor();
+    let index = stable_floor(scroll_left.max(0.0) / column_width);
     let index = floor_to_i32(index)?;
     shift_date(buffer_start, index)
 }
@@ -61,7 +61,8 @@ pub(in crate::app) fn week_rebase_delta(
     {
         return None;
     }
-    let first_visible = floor_to_usize(scroll_left.max(0.0) / column_width)?;
+    let first_visible = stable_floor(scroll_left.max(0.0) / column_width);
+    let first_visible = floor_to_usize(first_visible)?;
     let trailing_edge = first_visible
         .saturating_add(WEEK_VISIBLE_DAYS)
         .saturating_add(WEEK_REBASE_GUARD_DAYS);
@@ -485,6 +486,15 @@ fn week_visible_days_i32() -> i32 {
     i32::try_from(WEEK_VISIBLE_DAYS).expect("visible week days fit in i32")
 }
 
+fn stable_floor(value: f32) -> f32 {
+    let nearest = value.round();
+    if (value - nearest).abs() <= 0.0001 {
+        nearest
+    } else {
+        value.floor()
+    }
+}
+
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
@@ -513,14 +523,26 @@ fn floor_to_usize(value: f32) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-    use jiff::civil::Date;
+    use std::{cell::RefCell, rc::Rc};
+
+    use gpui::{AppContext as _, Entity, TestAppContext};
+    use gpui_component::Root;
+    use jiff::{
+        Timestamp,
+        civil::{Date, Time},
+    };
+    use uuid::Uuid;
 
     use super::{
-        WEEK_BUFFER_DAYS, WEEK_REBASE_GUARD_DAYS, WEEK_VISIBLE_DAYS, logical_week_start,
-        rolling_week_range, shift_date, week_rebase_delta,
+        CadenceView, WEEK_BUFFER_DAYS, WEEK_REBASE_GUARD_DAYS, WEEK_VISIBLE_DAYS,
+        logical_week_start, rolling_week_range, shift_date, week_rebase_delta,
     };
-    use crate::app::presentation::dates_in_range;
-
+    use crate::{
+        app::presentation::dates_in_range,
+        calendar::CalendarViewMode,
+        domain::{DateRange, Event, EventDraft, EventId, OccurrenceId},
+        store::{InMemoryRepository, TimetableRepository, default_categories},
+    };
     #[test]
     fn rolling_range_keeps_a_week_of_buffer_on_each_side() {
         let visible_start = Date::constant(2026, 8, 23);
@@ -575,5 +597,122 @@ mod tests {
             week_rebase_delta(buffer_start, 0.0, 120.0, column_count, false),
             None
         );
+    }
+    fn setup_viewport_fixture(view: &mut CadenceView) -> (DateRange, OccurrenceId, OccurrenceId) {
+        view.repository = InMemoryRepository::new(view.settings.clone());
+        for category in default_categories() {
+            view.repository.create_category(category).unwrap();
+        }
+        let category_id = view
+            .repository
+            .categories()
+            .unwrap()
+            .first()
+            .expect("default category")
+            .id();
+        let visible_start = view.week_visible_start;
+        let sentinel_date = view.week_buffer_start;
+        let timestamp = Timestamp::from_second(1_700_000_100).unwrap();
+        let sentinel_id = EventId::from_uuid(Uuid::from_u128(0x200));
+        let visible_id = EventId::from_uuid(Uuid::from_u128(0x201));
+        for (id, title, date) in [
+            (sentinel_id, "Buffer sentinel", sentinel_date),
+            (visible_id, "Visible event", visible_start),
+        ] {
+            view.repository
+                .create_event(
+                    Event::new(
+                        id,
+                        EventDraft::new(
+                            title,
+                            date,
+                            Time::constant(9, 0, 0, 0),
+                            Time::constant(10, 0, 0, 0),
+                            category_id,
+                            None,
+                        ),
+                        timestamp,
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+        }
+        view.refresh_snapshot();
+        let column_width = super::week_column_width(view.week_surface_width);
+        let initial_offset = view.initial_scroll_offset(CalendarViewMode::Week, column_width);
+        view.initialize_scroll(CalendarViewMode::Week, initial_offset);
+        (
+            view.visible_week_range().unwrap(),
+            OccurrenceId::Standalone(sentinel_id),
+            OccurrenceId::Standalone(visible_id),
+        )
+    }
+
+    #[gpui::test]
+    fn keyboard_viewport_round_trip_excludes_buffer_events_and_preserves_selection(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(gpui_component::init);
+
+        let calendar = Rc::new(RefCell::new(None::<Entity<CadenceView>>));
+        let captured_calendar = Rc::clone(&calendar);
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            let view = cx.new(|cx| CadenceView::new(window, cx));
+            captured_calendar.borrow_mut().replace(view.clone());
+            Root::new(view, window, cx)
+        });
+        let calendar = calendar.borrow().clone().expect("calendar view");
+
+        let (original_range, sentinel_id, visible_id) =
+            calendar.update_in(cx, |view, _, _| setup_viewport_fixture(view));
+
+        calendar.read_with(cx, |view, _| {
+            assert!(
+                view.snapshot
+                    .as_ref()
+                    .unwrap()
+                    .week
+                    .events
+                    .iter()
+                    .any(|event| event.id() == sentinel_id)
+            );
+            assert_eq!(
+                view.visible_surface_events(CalendarViewMode::Week)
+                    .into_iter()
+                    .map(|event| event.id())
+                    .collect::<Vec<_>>(),
+                vec![visible_id]
+            );
+        });
+
+        calendar.update_in(cx, |view, _, app| {
+            for _ in 0..8 {
+                view.slide_week_window(1, app);
+            }
+            for _ in 0..16 {
+                view.slide_week_window(-1, app);
+            }
+            for _ in 0..8 {
+                view.slide_week_window(1, app);
+            }
+        });
+
+        calendar.read_with(cx, |view, _| {
+            assert_eq!(view.visible_week_range(), Some(original_range));
+        });
+
+        calendar.update_in(cx, |view, _, app| {
+            view.begin_event_selection(app);
+            assert_eq!(view.bulk_selectable_count(), 1);
+            view.select_all_visible_events(app);
+            assert!(view.is_bulk_selected(visible_id));
+            assert!(!view.is_bulk_selected(sentinel_id));
+            view.scroll_week_by_hours(16, app);
+            view.scroll_week_by_hours(-16, app);
+        });
+
+        calendar.read_with(cx, |view, _| {
+            assert_eq!(view.selected_occurrences(), vec![visible_id]);
+        });
     }
 }

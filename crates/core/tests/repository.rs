@@ -1,8 +1,8 @@
 use cadence_core::{
     domain::{
-        Category, CategoryColor, CategoryId, DateRange, Event, EventDraft, EventId, OccurrenceId,
-        RecurrenceException, RecurrenceRule, RecurrenceSeries, RecurrenceSeriesId, Settings,
-        WeekStart, WeekdaySet,
+        Category, CategoryColor, CategoryId, ClockFormat, DateRange, Event, EventDraft, EventId,
+        OccurrenceId, RecurrenceException, RecurrenceRule, RecurrenceSeries, RecurrenceSeriesId,
+        Settings, SnapInterval, TimeZoneId, WeekStart, WeekdaySet,
     },
     store::{
         AppPreferences, InMemoryRepository, PersistenceSnapshot, TimetableRepository,
@@ -439,6 +439,65 @@ fn recurring_occurrences_are_range_bounded_and_exceptions_are_persisted_in_memor
     assert_eq!(
         repository.occurrence(moved_id).unwrap().unwrap().date(),
         moved_date
+    );
+}
+
+#[test]
+fn new_york_daily_occurrences_keep_wall_clock_time_across_march_dst_transition() {
+    let settings = Settings::new(
+        WeekStart::Sunday,
+        ClockFormat::TwentyFourHour,
+        TimeZoneId::new("America/New_York").unwrap(),
+        SnapInterval::default(),
+        time(6, 0),
+        time(22, 0),
+    )
+    .unwrap();
+    let mut repository = InMemoryRepository::new(settings);
+    let category = category(530, "DST");
+    let category_id = category.id();
+    repository.create_category(category).unwrap();
+
+    let series = RecurrenceSeries::new(
+        RecurrenceSeriesId::from_uuid(Uuid::from_u128(531)),
+        EventDraft::new(
+            "Daily stand-up",
+            date(2026, 3, 7),
+            time(8, 0),
+            time(9, 0),
+            category_id,
+            None,
+        ),
+        RecurrenceRule::Daily,
+        Some(date(2026, 3, 11)),
+        Timestamp::from_second(0).unwrap(),
+    )
+    .unwrap();
+    repository.create_series(series).unwrap();
+
+    let occurrences = repository
+        .occurrences(DateRange::new(date(2026, 3, 7), date(2026, 3, 11)).unwrap())
+        .unwrap();
+    assert_eq!(
+        occurrences
+            .iter()
+            .map(cadence_core::domain::EventOccurrence::date)
+            .collect::<Vec<_>>(),
+        vec![
+            date(2026, 3, 7),
+            date(2026, 3, 8),
+            date(2026, 3, 9),
+            date(2026, 3, 10),
+        ]
+    );
+    assert!(
+        occurrences
+            .iter()
+            .all(|occurrence| occurrence.start_time() == time(8, 0))
+    );
+    assert_eq!(
+        repository.settings().unwrap().time_zone().as_str(),
+        "America/New_York"
     );
 }
 

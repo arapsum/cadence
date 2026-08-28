@@ -30,11 +30,12 @@ jobs:
       - name: Verify release version
         run: scripts/check-release-version.sh "$GITHUB_REF_NAME"
 
-      - name: Verify tagged commit belongs to main
+      - name: Verify tagged commit is exact main tip
         run: |
           git fetch --no-tags origin main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "Release tag must reference a commit on main." >&2
+          main_sha=$(git rev-parse --verify origin/main)
+          if [[ "$main_sha" != "$GITHUB_SHA" ]]; then
+            echo "Release tag commit $GITHUB_SHA is not the fetched origin/main tip $main_sha." >&2
             exit 1
           fi
 

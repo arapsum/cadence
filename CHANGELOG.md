@@ -7,6 +7,20 @@ All notable Cadence releases are documented here. The format follows
 ## [Unreleased]
 
 No unreleased changes yet.
+## [0.1.8] - 2026-08-28
+
+### Fixed
+
+- Make Linux tray shutdown deterministic while preserving orderly application
+  lifecycle and local data safety.
+
+### Changed
+
+- Align release validation, tagged-binary identity, and documented package
+  verification with the reproducible release contract.
+- Add regression coverage for audited editor, viewport, persistence, recovery,
+  recurrence, appearance, and startup behavior.
+
 
 ## [0.1.7] - 2026-08-27
 

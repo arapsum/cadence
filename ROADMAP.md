@@ -383,9 +383,11 @@ Implementation notes:
   and an explicitly confirmed Archive and start fresh action; unreadable files
   are moved into a timestamped recovery directory before a new database is
   created.
-- Startup restores the Day/Week mode and category filter, then anchors the
-  calendar on today with a fresh scroll position. Scroll, selection, dialogs,
-  and undo state remain transient.
+- Startup restores the category filter and opens Week on Today with a fresh
+  scroll position. The serialized `AppPreferences::view_mode` remains for
+  backup compatibility; `CadenceView::apply_loaded` intentionally does not use
+  it to select the startup mode. Scroll, selection, dialogs, and undo state
+  remain transient.
 
 **MVP release gate:** M0–M5 are complete, the acceptance journey below passes,
 and no known issue can silently lose or shift an event.

@@ -3,16 +3,14 @@ use std::path::{Path, PathBuf};
 use gpui::{Context, Window};
 use gpui_component::WindowExt as _;
 
+use super::{CadenceView, RollbackViewState};
+#[cfg(not(test))]
+use crate::store::{InMemoryRepository, TimetableRepository};
 use crate::{
     app::history::CalendarChange,
     calendar::{CalendarViewMode, CategoryFilter},
-    store::{
-        AppPreferences, CalendarViewModePreference, InMemoryRepository, StorageError,
-        TimetableRepository,
-    },
+    store::{AppPreferences, CalendarViewModePreference, StorageError},
 };
-
-use super::{CadenceView, RollbackViewState};
 
 #[derive(Debug, Clone)]
 pub(in crate::app) enum HistoryEffect {
@@ -24,7 +22,9 @@ pub(in crate::app) enum HistoryEffect {
 
 #[derive(Debug, Clone)]
 pub(super) struct PendingWrite {
+    #[cfg_attr(test, allow(dead_code))]
     rollback: crate::store::PersistenceSnapshot,
+    #[cfg_attr(test, allow(dead_code))]
     view_state: RollbackViewState,
     effect: HistoryEffect,
 }
@@ -167,53 +167,75 @@ impl CadenceView {
         before: crate::store::PersistenceSnapshot,
         view_state: RollbackViewState,
         effect: HistoryEffect,
-        cx: &Context<'_, Self>,
+        #[cfg(test)] cx: &mut Context<'_, Self>,
+        #[cfg(not(test))] cx: &Context<'_, Self>,
     ) {
-        if matches!(self.persistence_state, PersistenceState::Writing) {
-            return;
-        }
-        let Ok(after) = self.repository.snapshot() else {
-            return;
-        };
-        self.persistence_state = PersistenceState::Writing;
-        self.pending_write = Some(PendingWrite {
-            rollback: before,
-            view_state,
-            effect,
-        });
-        let storage = self.storage.clone();
-        let weak_view = cx.entity().downgrade();
-        self.pending_write_task = Some(cx.spawn(async move |_, cx| {
-            let result = storage
-                .replace(after)
-                .recv()
-                .await
-                .map_err(|_| StorageError::Io("storage worker stopped unexpectedly".to_owned()))
-                .and_then(std::convert::identity);
-            let _ = weak_view.update(cx, |view, cx| {
-                view.finish_persist(result, cx);
+        #[cfg(test)]
+        {
+            if matches!(self.persistence_state, PersistenceState::Writing) {
+                return;
+            }
+            self.persistence_state = PersistenceState::Writing;
+            self.pending_write = Some(PendingWrite {
+                rollback: before,
+                view_state,
+                effect,
             });
-        }));
+            self.complete_persist_success();
+            cx.notify();
+        }
+
+        #[cfg(not(test))]
+        {
+            if matches!(self.persistence_state, PersistenceState::Writing) {
+                return;
+            }
+            let Ok(after) = self.repository.snapshot() else {
+                return;
+            };
+            self.persistence_state = PersistenceState::Writing;
+            self.pending_write = Some(PendingWrite {
+                rollback: before,
+                view_state,
+                effect,
+            });
+            let storage = self.storage.clone();
+            let weak_view = cx.entity().downgrade();
+            self.pending_write_task = Some(cx.spawn(async move |_, cx| {
+                let result = storage
+                    .replace(after)
+                    .recv()
+                    .await
+                    .map_err(|_| StorageError::Io("storage worker stopped unexpectedly".to_owned()))
+                    .and_then(std::convert::identity);
+                let _ = weak_view.update(cx, |view, cx| {
+                    view.finish_persist(result, cx);
+                });
+            }));
+        }
     }
 
+    fn complete_persist_success(&mut self) {
+        if let Some(pending) = self.pending_write.take() {
+            match pending.effect {
+                HistoryEffect::None => {}
+                HistoryEffect::Record(change) => self.history.record(change),
+                HistoryEffect::Undo(change) => {
+                    let _ = self.history.finish_undo(&change);
+                }
+                HistoryEffect::Redo(change) => {
+                    let _ = self.history.finish_redo(&change);
+                }
+            }
+        }
+        self.persistence_state = PersistenceState::Ready;
+        self.error = None;
+    }
+
+    #[cfg(not(test))]
     fn finish_persist(&mut self, result: Result<(), StorageError>, cx: &mut Context<'_, Self>) {
         match result {
-            Ok(()) => {
-                if let Some(pending) = self.pending_write.take() {
-                    match pending.effect {
-                        HistoryEffect::None => {}
-                        HistoryEffect::Record(change) => self.history.record(change),
-                        HistoryEffect::Undo(change) => {
-                            let _ = self.history.finish_undo(&change);
-                        }
-                        HistoryEffect::Redo(change) => {
-                            let _ = self.history.finish_redo(&change);
-                        }
-                    }
-                }
-                self.persistence_state = PersistenceState::Ready;
-                self.error = None;
-            }
+            Ok(()) => self.complete_persist_success(),
             Err(error) => {
                 if let Some(pending) = self.pending_write.take()
                     && let Ok(repository) = InMemoryRepository::from_snapshot(&pending.rollback)
