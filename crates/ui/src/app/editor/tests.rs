@@ -69,6 +69,13 @@ fn assert_dirty_event_form_can_be_discarded(
     );
 }
 
+fn assert_event_editor_dialog_is_rendered(cx: &mut gpui::VisualTestContext) {
+    assert!(cx.update(gpui_component::WindowExt::has_active_dialog));
+    assert!(cx.update(|window, app| Root::render_dialog_layer(window, app).is_some()));
+    cx.update(|window, app| window.draw(app).clear(app));
+    assert!(cx.debug_bounds("event-editor-form").is_some());
+}
+
 fn assert_inspector_actions_are_non_mutating(
     calendar: &Entity<CadenceView>,
     event_id: OccurrenceId,
@@ -86,8 +93,7 @@ fn assert_inspector_actions_are_non_mutating(
         .debug_bounds("duplicate-event")
         .expect("duplicate action was rendered");
     cx.simulate_click(duplicate.center(), Modifiers::none());
-    cx.update(|window, app| window.draw(app).clear(app));
-    assert!(cx.debug_bounds("event-editor-form").is_some());
+    assert_event_editor_dialog_is_rendered(cx);
     assert_eq!(
         calendar.read_with(cx, |view, _| view.repository.snapshot().unwrap()),
         before
