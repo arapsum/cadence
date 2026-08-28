@@ -204,15 +204,6 @@ fn event_entry_points_render_their_dialogs(cx: &mut TestAppContext) {
 
     cx.update(gpui_component::WindowExt::close_all_dialogs);
 
-    let (event_id, event_date) = calendar.read_with(cx, |view, _| {
-        let event = view
-            .snapshot
-            .as_ref()
-            .and_then(|snapshot| snapshot.surface(view.state.view_mode()).events.first())
-            .expect("the seeded calendar contains an event");
-        (event.id(), event.date())
-    });
-
     let recurring_draft = calendar.read_with(cx, |view, _| {
         let event = view
             .snapshot
