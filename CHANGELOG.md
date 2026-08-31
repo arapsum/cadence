@@ -8,7 +8,7 @@ All notable Cadence releases are documented here. The format follows
 
 No unreleased changes yet.
 
-## [0.1.9] - 2026-08-31
+## [0.1.9] - 2026-09-01
 
 ### Changed
 
