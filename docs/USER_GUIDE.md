@@ -31,7 +31,9 @@ release environment is Ubuntu 26.04 LTS on x86_64 with a Wayland session.
 - When the Week surface has focus, press `h` or `l` to slide the seven-day
   window by one day. Press `j` or `k` to scroll the time grid by one hour.
 - Use the category menu to focus on one type of work.
-- Select an empty time slot or choose **New event** to open the editor.
+- Select an empty 30-minute time slot, or choose **New event**, to open the
+  editor at the selected start time. Slot-created events begin with the
+  existing one-hour duration and can be adjusted in the form.
 - Choose **Select events** from the overflow menu, or hold Cmd/Ctrl while
   clicking an event card, to enter bulk-selection mode. Click event cards, or
   focus a card and press Enter/Space, to select them.

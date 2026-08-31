@@ -5,7 +5,7 @@ use crate::calendar::CalendarViewMode;
 
 use super::super::{
     presentation::{SurfaceSnapshot, day_index, local_date_time},
-    style::{MIN_COLUMN_WIDTH, PIXELS_PER_MINUTE, TIME_GUTTER_WIDTH},
+    style::{MIN_COLUMN_WIDTH, MINUTES_PER_HOUR, PIXELS_PER_MINUTE, TIME_GUTTER_WIDTH},
 };
 
 use super::{CadenceView, EventSelection};
@@ -343,18 +343,26 @@ impl CadenceView {
             let (today, current_time) = local_date_time(self.now, &self.settings);
             if snapshot.range.contains(today) {
                 f32::from(current_time.hour())
-                    .mul_add(60.0, f32::from(current_time.minute()) - 90.0)
+                    .mul_add(
+                        f32::from(MINUTES_PER_HOUR),
+                        f32::from(current_time.minute()) - 90.0,
+                    )
                     .max(0.0)
             } else {
                 snapshot
                     .events
                     .iter()
                     .map(|event| {
-                        f32::from(event.start_time().hour())
-                            .mul_add(60.0, f32::from(event.start_time().minute()))
+                        f32::from(event.start_time().hour()).mul_add(
+                            f32::from(MINUTES_PER_HOUR),
+                            f32::from(event.start_time().minute()),
+                        )
                     })
                     .min_by(f32::total_cmp)
-                    .map_or(5.0 * 60.0, |minutes| (minutes - 60.0).max(0.0))
+                    .map_or_else(
+                        || 5.0 * f32::from(MINUTES_PER_HOUR),
+                        |minutes| (minutes - f32::from(MINUTES_PER_HOUR)).max(0.0),
+                    )
             }
         });
         let horizontal = if mode == CalendarViewMode::Day {
@@ -423,7 +431,7 @@ impl CadenceView {
             return;
         }
         let hour_delta = f32::from(i16::try_from(hours).expect("week scroll fits in i16"))
-            * 60.0
+            * f32::from(MINUTES_PER_HOUR)
             * PIXELS_PER_MINUTE;
         let offset = self.week_viewport.handle.offset();
         let next_y = (offset.y.as_f32() - hour_delta).min(0.0);

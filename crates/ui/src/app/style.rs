@@ -6,7 +6,12 @@ use crate::domain::CategoryColor;
 pub(super) const DAY_HEADER_HEIGHT: f32 = 68.0;
 pub(super) const TIME_GUTTER_WIDTH: f32 = 78.0;
 pub(super) const MIN_COLUMN_WIDTH: f32 = 92.0;
-pub(super) const PIXELS_PER_MINUTE: f32 = 1.5;
+pub(super) const MINUTES_PER_HOUR: u16 = 60;
+pub(super) const MINUTES_PER_DAY: u16 = 24 * MINUTES_PER_HOUR;
+pub(super) const TIME_SLOT_MINUTES: u16 = 30;
+pub(super) const FIRST_SLOT_MINUTE: u16 = 6 * MINUTES_PER_HOUR;
+pub(super) const LAST_SLOT_MINUTE: u16 = 22 * MINUTES_PER_HOUR;
+pub(super) const PIXELS_PER_MINUTE: f32 = 2.0;
 pub(super) const PLANE_HEIGHT: f32 = 24.0 * 60.0 * PIXELS_PER_MINUTE;
 
 const DIALOG_CENTER_NUDGE: Pixels = px(20.0);

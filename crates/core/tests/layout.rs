@@ -117,6 +117,11 @@ fn short_events_keep_minimum_occupancy_and_visual_height() {
 }
 
 #[test]
+fn default_layout_scale_matches_the_calendar_half_hour_grid() {
+    assert!((LayoutMetrics::default().pixels_per_minute() - 2.0).abs() < f32::EPSILON);
+}
+
+#[test]
 fn day_layout_ignores_events_outside_the_selected_date() {
     let monday = date(2024, 3, 4);
     let range = DateRange::day(monday).unwrap();

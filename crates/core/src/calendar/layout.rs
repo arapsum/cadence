@@ -84,7 +84,7 @@ impl LayoutMetrics {
 impl Default for LayoutMetrics {
     fn default() -> Self {
         Self {
-            pixels_per_minute: 1.5,
+            pixels_per_minute: 2.0,
             minimum_event_height: 22.0,
             minimum_occupancy_minutes: 15.0,
         }
