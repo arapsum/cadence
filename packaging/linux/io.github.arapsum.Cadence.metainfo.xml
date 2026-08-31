@@ -16,6 +16,11 @@
     <category>Calendar</category>
   </categories>
   <releases>
+    <release version="0.1.9" date="2026-08-31">
+      <description>
+        <p>Adds a half-hour Week grid with correctly aligned events and a rolling seven-day window anchored on today.</p>
+      </description>
+    </release>
     <release version="0.1.8" date="2026-08-28">
       <description>
         <p>Remediates the Wayland audit with deterministic tray shutdown, release-contract validation, and completed regression coverage.</p>

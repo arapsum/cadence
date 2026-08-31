@@ -7,6 +7,23 @@ All notable Cadence releases are documented here. The format follows
 ## [Unreleased]
 
 No unreleased changes yet.
+
+## [0.1.9] - 2026-08-31
+
+### Changed
+
+- Render the Week timetable on a true half-hour grid: full-hour boundaries stay
+  prominent, while subtle half-hour dividers improve time placement without
+  adding visual noise.
+- Start Week with today in the leftmost column and keep the following six days
+  visible. Previous and Next now advance the rolling window by exactly seven
+  days, preserving the selected day’s relative position.
+
+### Fixed
+
+- Align event cards with the half-hour grid so event start times and durations
+  render at their correct positions.
+
 ## [0.1.8] - 2026-08-28
 
 ### Fixed
