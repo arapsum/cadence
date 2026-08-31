@@ -253,6 +253,37 @@ fn event_entry_points_render_their_dialogs(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+fn half_hour_slot_opens_editor(cx: &mut TestAppContext) {
+    cx.update(gpui_component::init);
+
+    let calendar = Rc::new(RefCell::new(None::<Entity<CadenceView>>));
+    let captured_calendar = Rc::clone(&calendar);
+    let (_, cx) = cx.add_window_view(move |window, cx| {
+        let view = cx.new(|cx| CadenceView::new(window, cx));
+        captured_calendar.replace(Some(view.clone()));
+        Root::new(view, window, cx)
+    });
+    let calendar = calendar
+        .borrow()
+        .clone()
+        .expect("calendar view was captured while building the root");
+
+    calendar.update_in(cx, |view, _, _| {
+        view.initialize_scroll(CalendarViewMode::Week, (0.0, 0.0));
+    });
+    cx.update(|window, app| window.draw(app).clear(app));
+    let slot = cx
+        .debug_bounds("week-half-hour-slot")
+        .expect("the first buffered date should expose a free half-hour slot");
+    cx.simulate_click(slot.center(), Modifiers::none());
+    assert!(cx.update(gpui_component::WindowExt::has_active_dialog));
+    cx.update(|window, app| window.draw(app).clear(app));
+    assert!(cx.debug_bounds("event-editor-form").is_some());
+
+    cx.update(gpui_component::WindowExt::close_all_dialogs);
+}
+
+#[gpui::test]
 fn settings_entry_point_opens_one_separate_window(cx: &mut TestAppContext) {
     cx.update(gpui_component::init);
     cx.update(settings_window::init);

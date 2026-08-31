@@ -13,7 +13,8 @@ use super::{
     presentation::{dates_in_range, local_date_time},
     state::CadenceView,
     style::{
-        DAY_HEADER_HEIGHT, MIN_COLUMN_WIDTH, PIXELS_PER_MINUTE, PLANE_HEIGHT, TIME_GUTTER_WIDTH,
+        DAY_HEADER_HEIGHT, MIN_COLUMN_WIDTH, MINUTES_PER_DAY, MINUTES_PER_HOUR, PIXELS_PER_MINUTE,
+        PLANE_HEIGHT, TIME_GUTTER_WIDTH,
     },
 };
 
@@ -435,8 +436,8 @@ fn render_time_gutter(
     scroll_offset: gpui::Point<gpui::Pixels>,
     cx: &Context<'_, CadenceView>,
 ) -> gpui::AnyElement {
-    let labels = (0_u8..=24).map(|hour| {
-        let y = f32::from(hour) * 60.0 * PIXELS_PER_MINUTE;
+    let labels = (0_u16..=MINUTES_PER_DAY / MINUTES_PER_HOUR).map(|hour| {
+        let y = f32::from(hour * MINUTES_PER_HOUR) * PIXELS_PER_MINUTE;
         let time = Time::constant(i8::try_from(hour % 24).expect("hour fits in i8"), 0, 0, 0);
         div()
             .id(format!("{}-time-label-{hour}", mode.key()))
