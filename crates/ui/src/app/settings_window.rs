@@ -112,22 +112,16 @@ impl SettingsWindow {
     }
 
     fn pages(&self, cx: &App) -> [SettingPage; 5] {
-        let (week_start, clock_format) = self
+        let clock_format = self
             .owner
-            .read_with(cx, |view, _| {
-                let clock_format = match view.settings.clock_format() {
-                    ClockFormat::TwelveHour => "12-hour",
-                    ClockFormat::TwentyFourHour => "24-hour",
-                };
-                (
-                    format!("{:?}", view.settings.week_starts_on()),
-                    clock_format,
-                )
+            .read_with(cx, |view, _| match view.settings.clock_format() {
+                ClockFormat::TwelveHour => "12-hour",
+                ClockFormat::TwentyFourHour => "24-hour",
             })
-            .unwrap_or_else(|_| ("Monday".to_owned(), "24-hour"));
+            .unwrap_or("24-hour");
 
         [
-            general_settings_page(&self.owner, week_start, clock_format),
+            general_settings_page(&self.owner, clock_format),
             themes_settings_page(self.theme_browser.clone()),
             typography_settings_page(self.typography_browser.clone()),
             notifications_settings_page(&self.owner),
@@ -231,7 +225,6 @@ fn open_settings_window(
 
 fn general_settings_page(
     owner: &WeakEntity<CadenceView>,
-    week_start: String,
     clock_format: &'static str,
 ) -> SettingPage {
     let motion_reader = owner.clone();
@@ -242,18 +235,9 @@ fn general_settings_page(
         .resettable(false)
         .description("Calendar display and accessibility preferences.")
         .groups([
-            SettingGroup::new().title("Calendar").items([
-                SettingItem::new(
-                    "Week starts on",
-                    SettingField::render(move |_, _, cx| {
-                        div()
-                            .text_sm()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(week_start.clone())
-                    }),
-                )
-                .description("The first column shown in week view."),
-                SettingItem::new(
+            SettingGroup::new()
+                .title("Calendar")
+                .items([SettingItem::new(
                     "Clock format",
                     SettingField::render(move |_, _, cx| {
                         div()
@@ -262,8 +246,7 @@ fn general_settings_page(
                             .child(clock_format)
                     }),
                 )
-                .description("How event and time-grid labels are displayed."),
-            ]),
+                .description("How event and time-grid labels are displayed.")]),
             SettingGroup::new().title("Accessibility").item(
                 SettingItem::new(
                     "Reduce motion",

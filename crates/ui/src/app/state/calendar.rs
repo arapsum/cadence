@@ -8,7 +8,10 @@ use super::super::presentation::{
 };
 use crate::domain::find_occurrence_conflicts;
 
-use super::{CadenceView, PersistenceState};
+use super::{
+    CadenceView, PersistenceState,
+    viewport::{WEEK_VISIBLE_DAYS, shift_date},
+};
 
 impl CadenceView {
     pub(in crate::app) fn refresh_snapshot(&mut self) {
@@ -121,10 +124,7 @@ impl CadenceView {
         self.now = Timestamp::now();
         let (today, _) = local_date_time(self.now, &self.settings);
         self.state.go_to_today(today);
-        if let Ok(week_start) = crate::domain::start_of_week(today, self.settings.week_starts_on())
-        {
-            self.set_week_window_start(week_start);
-        }
+        self.set_week_window_start(today);
         self.pending_scroll_minutes = None;
         self.reset_scroll_initialization();
         self.refresh_snapshot();
@@ -136,26 +136,22 @@ impl CadenceView {
             return;
         }
         self.event_selection = super::EventSelection::Single;
-        let surface = self.state.view_mode();
-        self.state.set_view_mode(CalendarViewMode::Week);
-        let result = if next {
-            self.state.next_period()
-        } else {
-            self.state.previous_period()
-        };
-        self.state.set_view_mode(surface);
-        if let Err(error) = result {
-            self.error = Some(error.to_string());
-        } else {
-            if let Ok(week_start) = crate::domain::start_of_week(
-                self.state.selected_date(),
-                self.settings.week_starts_on(),
-            ) {
-                self.set_week_window_start(week_start);
+        let period_days = i32::try_from(WEEK_VISIBLE_DAYS).expect("week visible days fit in i32");
+        let delta = if next { period_days } else { -period_days };
+        let result = shift_date(self.week_visible_start, delta)
+            .zip(shift_date(self.state.selected_date(), delta))
+            .ok_or(crate::domain::CalendarError::DateArithmetic);
+        match result {
+            Ok((visible_start, selected_date)) => {
+                self.state.select_date(selected_date);
+                self.set_week_window_start(visible_start);
+                self.pending_scroll_minutes = None;
+                self.reset_scroll_initialization();
+                self.refresh_snapshot();
             }
-            self.pending_scroll_minutes = None;
-            self.reset_scroll_initialization();
-            self.refresh_snapshot();
+            Err(error) => {
+                self.error = Some(error.to_string());
+            }
         }
         cx.notify();
     }
