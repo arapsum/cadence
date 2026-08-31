@@ -11,8 +11,9 @@ as a quiet, spatially honest time grid rather than a dashboard.
 
 ## What it does
 
-- Keep a seven-day Week viewport visible, scroll continuously through adjacent
-  dates, and open any focused Day plan from its weekday header.
+- Open the seven-day Week viewport with today in its leftmost column, scroll
+  continuously through adjacent dates, and open any focused Day plan from its
+  weekday header.
 - Navigate by rolling date range, jump to today, and filter by category.
 - Keep one event per time interval across every category, with a fixed time
   gutter, sticky day headers, current-time treatment, and horizontal or
@@ -159,8 +160,9 @@ continues to launch the desktop application from the repository root.
 | Undo the latest change | Cmd/Ctrl+Z |
 | Redo the latest change | Cmd/Ctrl+Shift+Z or Ctrl+Y |
 
-Previous and next always move one week. Vim bindings are active when the Week
-surface has focus; they move the viewport without changing the selected event.
+Previous and next shift the rolling seven-day window by seven dates. Vim
+bindings are active when the Week surface has focus; they move the viewport
+without changing the selected event.
 
 ## Local data
 
@@ -227,8 +229,8 @@ After running the application, verify the following on the supported baseline:
 8. Keyboard focus begins in the editor title, follows the form in order, and
    returns to the invoking card or slot when the dialog closes.
 9. Restart the app and confirm events, categories, settings, and filter
-   survive while Week opens on today's seven-day window with a fresh scroll
-   position.
+   survive while Week opens with today in its leftmost column and a fresh
+   scroll position.
 10. Open Settings and confirm Themes and Typography are separate pages. Hover
     or focus themes and fonts to preview them across the app; click or press
     Enter/Space to commit, and leave or close Settings to restore the committed

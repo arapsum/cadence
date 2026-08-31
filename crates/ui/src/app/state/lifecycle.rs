@@ -10,7 +10,7 @@ use jiff::{SignedDuration, Timestamp, tz::TimeZone};
 use crate::{
     calendar::{CalendarState, CalendarViewMode, CategoryFilter},
     domain::Settings,
-    domain::{DateRange, format_time, start_of_week},
+    domain::{DateRange, format_time},
     store::{
         AppearancePreferences, InMemoryRepository, StorageClient, StorageError,
         TimetableRepository, database_path, default_categories,
@@ -31,7 +31,7 @@ impl CadenceView {
         let settings = Settings::default();
         let now = Timestamp::now();
         let (today, _) = local_date_time(now, &settings);
-        let week_visible_start = start_of_week(today, settings.week_starts_on()).unwrap_or(today);
+        let week_visible_start = today;
         let week_buffer_start = super::viewport::shift_date(
             week_visible_start,
             -i32::try_from(super::viewport::WEEK_BUFFER_DAYS).expect("week buffer fits in i32"),
@@ -361,9 +361,7 @@ impl CadenceView {
                     self.settings.week_starts_on(),
                     CalendarViewMode::Week,
                 );
-                self.set_week_window_start(
-                    start_of_week(today, self.settings.week_starts_on()).unwrap_or(today),
-                );
+                self.set_week_window_start(today);
                 let filter = snapshot
                     .preferences
                     .category_filter
@@ -454,6 +452,7 @@ mod tests {
     use super::CadenceView;
     use crate::{
         app::presentation::local_date_time,
+        app::state::viewport::{WEEK_BUFFER_DAYS, WEEK_VISIBLE_DAYS, shift_date},
         calendar::{CalendarViewMode, CategoryFilter},
         domain::ClockFormat,
         store::TimetableRepository,
@@ -490,7 +489,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn apply_loaded_restores_filter_and_starts_week_on_today(cx: &mut TestAppContext) {
+    fn apply_loaded_restores_filter_and_anchors_the_week_on_today(cx: &mut TestAppContext) {
         cx.update(gpui_component::init);
 
         let calendar = Rc::new(RefCell::new(None::<Entity<CadenceView>>));
@@ -522,10 +521,93 @@ mod tests {
                 view.state.category_filter(),
                 CategoryFilter::Only(expected_filter)
             );
+            assert_eq!(view.visible_week_range().unwrap().start(), today);
             assert_eq!(
-                view.visible_week_range().unwrap().start(),
-                crate::domain::start_of_week(today, view.settings.week_starts_on()).unwrap()
+                view.visible_week_range().unwrap().end(),
+                shift_date(
+                    today,
+                    i32::try_from(WEEK_VISIBLE_DAYS).expect("visible days fit in i32"),
+                )
+                .expect("visible range end"),
             );
+            assert_eq!(
+                view.week_buffer_start,
+                shift_date(
+                    today,
+                    -i32::try_from(WEEK_BUFFER_DAYS).expect("buffer days fit in i32"),
+                )
+                .expect("buffer start"),
+            );
+            let expected_horizontal =
+                f32::from(u16::try_from(WEEK_BUFFER_DAYS).expect("buffer days fit in u16")) * 120.0;
+            assert!(
+                (view.initial_scroll_offset(CalendarViewMode::Week, 120.0).0 - expected_horizontal)
+                    .abs()
+                    < f32::EPSILON
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn period_navigation_moves_the_today_first_window_by_seven_days(cx: &mut TestAppContext) {
+        cx.update(gpui_component::init);
+
+        let calendar = Rc::new(RefCell::new(None::<Entity<CadenceView>>));
+        let captured_calendar = Rc::clone(&calendar);
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            let view = cx.new(|cx| CadenceView::new(window, cx));
+            captured_calendar.borrow_mut().replace(view.clone());
+            Root::new(view, window, cx)
+        });
+        let calendar = calendar.borrow().clone().expect("calendar view");
+
+        let window_start = Date::constant(2026, 8, 27);
+        let selected_date = Date::constant(2026, 8, 30);
+        calendar.update_in(cx, |view, _, app| {
+            view.set_week_window_start(window_start);
+            view.state.select_date(selected_date);
+            view.state.set_view_mode(CalendarViewMode::Day);
+            view.refresh_snapshot();
+            view.shift_period(true, app);
+        });
+
+        calendar.read_with(cx, |view, _| {
+            assert_eq!(view.week_visible_start, Date::constant(2026, 9, 3));
+            assert_eq!(view.state.selected_date(), Date::constant(2026, 9, 6));
+            assert_eq!(view.state.view_mode(), CalendarViewMode::Day);
+        });
+
+        calendar.update_in(cx, |view, _, app| view.shift_period(false, app));
+        calendar.read_with(cx, |view, _| {
+            assert_eq!(view.week_visible_start, window_start);
+            assert_eq!(view.state.selected_date(), selected_date);
+        });
+    }
+
+    #[gpui::test]
+    fn go_to_today_reanchors_the_week_on_today(cx: &mut TestAppContext) {
+        cx.update(gpui_component::init);
+
+        let calendar = Rc::new(RefCell::new(None::<Entity<CadenceView>>));
+        let captured_calendar = Rc::clone(&calendar);
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            let view = cx.new(|cx| CadenceView::new(window, cx));
+            captured_calendar.borrow_mut().replace(view.clone());
+            Root::new(view, window, cx)
+        });
+        let calendar = calendar.borrow().clone().expect("calendar view");
+
+        calendar.update_in(cx, |view, _, app| {
+            view.set_week_window_start(Date::constant(2026, 8, 27));
+            view.state.select_date(Date::constant(2026, 8, 30));
+            view.refresh_snapshot();
+            view.go_to_today(app);
+        });
+
+        calendar.read_with(cx, |view, _| {
+            let (today, _) = local_date_time(view.now, &view.settings);
+            assert_eq!(view.week_visible_start, today);
+            assert_eq!(view.state.selected_date(), today);
         });
     }
 }

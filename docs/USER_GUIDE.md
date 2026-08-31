@@ -19,7 +19,8 @@ release environment is Ubuntu 26.04 LTS on x86_64 with a Wayland session.
 ## Plan your week
 
 - **Week** is the main calendar, so you can compare seven days and spot the
-  shape of the week at a glance. Scroll horizontally to slide the seven-day
+  shape of the week at a glance. It opens with today in the leftmost column and
+  shows the following six dates. Scroll horizontally to slide the seven-day
   viewport through adjacent dates; the range label follows the window instead
   of stopping at one fixed calendar week.
 - Click a weekday header, or focus it and press Enter/Space, to open that
@@ -27,7 +28,8 @@ release environment is Ubuntu 26.04 LTS on x86_64 with a Wayland session.
   including event creation, editing, drag-and-resize, and scrolling.
 - Close the Day plan with its close button, Escape, or a click outside the
   sheet. The selected date remains highlighted in Week.
-- Use the date controls or **Today** to navigate.
+- Use the date controls to shift the window by seven dates, or **Today** to
+  return to a window whose leftmost date is today.
 - When the Week surface has focus, press `h` or `l` to slide the seven-day
   window by one day. Press `j` or `k` to scroll the time grid by one hour.
 - Use the category menu to focus on one type of work.
