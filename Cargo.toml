@@ -4,7 +4,7 @@ members = ["crates/core", "crates/ui", "crates/desktop"]
 default-members = ["crates/desktop"]
 
 [workspace.package]
-version = "0.1.9"
+version = "0.1.10"
 edition = "2024"
 rust-version = "1.97.1"
 authors = ["Kibet arap Sum <kibetarapsum@gmail.com>"]

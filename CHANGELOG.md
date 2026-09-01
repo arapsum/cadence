@@ -6,6 +6,10 @@ All notable Cadence releases are documented here. The format follows
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+## [0.1.10] - 2026-09-01
+
 ### Added
 
 - Keep the main Week window available from the Linux tray after its close
