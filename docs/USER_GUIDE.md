@@ -69,18 +69,21 @@ Choose a reminder in the editor, then enable desktop notifications in
 subject to the operating system's notification permission. Each reminder
 identifies its category, date, and start time; click the notification body or
 **View event** to restore Cadence and open the matching Day plan and event.
-Minimizing the window keeps Cadence running, with **Show Cadence** and
-**Quit Cadence** available from the Linux tray menu.
+Closing the main window keeps Cadence running in the Linux tray, while
+Minimize continues to minimize to the dock. Use **Show Cadence** to restore the
+window or **Quit Cadence** to exit from the tray menu.
 
 ## Organize and recover
 
 Create and edit categories in **Settings**. Category assignments are preserved
 when you change themes, while their event surfaces, borders, indicators, and
 filter dots adapt to the active palette. **Themes** and **Typography** are
-separate settings pages. Hover or keyboard-focus a theme or font to preview it
-across the application; click it or press Enter/Space to commit. Leaving the
-option or closing Settings restores the last committed appearance. The pages
-also provide light, dark, or system mode and font-size controls.
+separate settings pages. The Themes catalog uses three columns at normal
+Settings widths and collapses for smaller windows. Hover or keyboard-focus a
+theme or font to preview it across the application; click it or press
+Enter/Space to commit. Leaving the option or closing Settings restores the last
+committed appearance. The pages also provide light, dark, or system mode and
+font-size controls.
 
 Undo and redo apply to committed changes in the current session. **Export**
 creates a versioned, human-readable JSON backup. If a database cannot be opened,

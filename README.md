@@ -41,9 +41,10 @@ as a quiet, spatially honest time grid rather than a dashboard.
 - Category colours adapt to the active light or dark theme, including event
   surfaces, borders, indicators, filters, and summaries.
 - Set per-event reminders and opt into desktop notifications while Cadence is
-  running; notification actions open the exact event, and minimizing to the
-  Linux tray keeps delivery active. Operating-system notification permissions
-  still apply.
+  running; notification actions open the exact event. Closing the main window
+  keeps Cadence in the Linux tray, while Minimize continues to minimize to the
+  dock; **Show Cadence** restores the window and **Quit Cadence** exits.
+  Operating-system notification permissions still apply.
 - Choose a light, dark, or system appearance mode, a bundled GPUI theme, and
   the application font family and size from separate Themes and Typography
   settings pages. Hover or focus an option to preview it globally; click or
@@ -211,7 +212,9 @@ Rust 1.97.1 toolchain.
 
 After running the application, verify the following on the supported baseline:
 
-1. The window can be moved, resized, minimized, maximized/restored, and closed.
+1. The window can be moved, resized, minimized, maximized/restored, and sent
+   to the tray with its close control; **Show Cadence** restores it and
+   **Quit Cadence** exits.
 2. The category filter, weekday-header Day plan sheet, rolling date navigation,
    and appearance controls work; the selected date and filter remain visible
    after the sheet closes.
@@ -243,8 +246,9 @@ After running the application, verify the following on the supported baseline:
 13. Enable notifications, create a near-future reminder, and verify the
     operating system delivers it while Cadence is running. Click the reminder
     body or **View event** action and confirm Cadence opens the matching Day
-    plan and event. Minimize the window and verify delivery continues; use the
-    tray menu to restore and quit.
+    plan and event. Minimize the window and verify delivery continues; close
+    the main window to the tray, then use **Show Cadence** to restore and
+    **Quit Cadence** to exit.
 14. Install the generated `.deb` on a clean Ubuntu 26.04 machine, upgrade from
     a prior package, remove Cadence, and confirm the local data directory is
     retained.

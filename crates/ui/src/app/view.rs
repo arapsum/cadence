@@ -74,6 +74,7 @@ impl Render for CadenceView {
             .text_color(cx.theme().foreground)
             .child(
                 CadenceTitleBar::new("Cadence")
+                    .close_to_tray()
                     .leading(toolbar::render_titlebar_history(self, cx))
                     .controls(toolbar::render_titlebar_actions(self, window, cx)),
             )

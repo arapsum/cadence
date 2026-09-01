@@ -8,7 +8,17 @@ use gpui_component::{
     h_flex,
 };
 
-const TITLE_BAR_HEIGHT: gpui::Pixels = px(48.);
+const TITLE_BAR_HEIGHT: gpui::Pixels = px(32.);
+
+/// Determines what the title-bar close control does for a window.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum WindowCloseBehavior {
+    /// Remove only the window represented by this title bar.
+    #[default]
+    CloseWindow,
+    /// Remove the main window while leaving the application and tray service alive.
+    HideToTray,
+}
 
 /// Cadence's custom title bar and native-style window controls.
 #[derive(IntoElement)]
@@ -17,6 +27,7 @@ pub struct CadenceTitleBar {
     leading: Option<AnyElement>,
     controls: Option<AnyElement>,
     brand_width: gpui::Pixels,
+    close_behavior: WindowCloseBehavior,
 }
 
 impl CadenceTitleBar {
@@ -35,6 +46,7 @@ impl CadenceTitleBar {
             leading: None,
             controls: None,
             brand_width: px(252.0),
+            close_behavior: WindowCloseBehavior::CloseWindow,
         }
     }
 
@@ -65,6 +77,13 @@ impl CadenceTitleBar {
     #[must_use]
     pub fn controls(mut self, controls: impl IntoElement) -> Self {
         self.controls = Some(controls.into_any_element());
+        self
+    }
+
+    /// Makes the close control remove the main window while keeping Cadence in the tray.
+    #[must_use]
+    pub const fn close_to_tray(mut self) -> Self {
+        self.close_behavior = WindowCloseBehavior::HideToTray;
         self
     }
 }
@@ -131,17 +150,22 @@ impl ControlKind {
 #[derive(IntoElement)]
 struct WindowControl {
     kind: ControlKind,
+    close_behavior: WindowCloseBehavior,
 }
 
 impl WindowControl {
-    const fn new(kind: ControlKind) -> Self {
-        Self { kind }
+    const fn new(kind: ControlKind, close_behavior: WindowCloseBehavior) -> Self {
+        Self {
+            kind,
+            close_behavior,
+        }
     }
 }
 
 impl RenderOnce for WindowControl {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let kind = self.kind;
+        let close_behavior = self.close_behavior;
         let is_close = kind.is_close();
         let hover_background = if is_close {
             cx.theme().danger
@@ -189,7 +213,12 @@ impl RenderOnce for WindowControl {
                     match kind {
                         ControlKind::Minimize => window.minimize_window(),
                         ControlKind::Restore | ControlKind::Maximize => window.zoom_window(),
-                        ControlKind::Close => window.remove_window(),
+                        ControlKind::Close => match close_behavior {
+                            WindowCloseBehavior::CloseWindow => window.remove_window(),
+                            WindowCloseBehavior::HideToTray => {
+                                crate::app::close_main_window(window, cx);
+                            }
+                        },
                     }
                 })
             })
@@ -198,7 +227,9 @@ impl RenderOnce for WindowControl {
 }
 
 #[derive(IntoElement)]
-struct WindowControls;
+struct WindowControls {
+    close_behavior: WindowCloseBehavior,
+}
 
 impl RenderOnce for WindowControls {
     fn render(self, window: &mut Window, _: &mut App) -> impl IntoElement {
@@ -222,16 +253,22 @@ impl RenderOnce for WindowControls {
             .flex_shrink_0()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .when(supported.minimize && window.is_minimizable(), |this| {
-                this.child(WindowControl::new(ControlKind::Minimize))
+                this.child(WindowControl::new(
+                    ControlKind::Minimize,
+                    self.close_behavior,
+                ))
             })
             .when(supported.maximize && window.is_resizable(), |this| {
-                this.child(WindowControl::new(if window.is_maximized() {
-                    ControlKind::Restore
-                } else {
-                    ControlKind::Maximize
-                }))
+                this.child(WindowControl::new(
+                    if window.is_maximized() {
+                        ControlKind::Restore
+                    } else {
+                        ControlKind::Maximize
+                    },
+                    self.close_behavior,
+                ))
             })
-            .child(WindowControl::new(ControlKind::Close))
+            .child(WindowControl::new(ControlKind::Close, self.close_behavior))
     }
 }
 
@@ -346,7 +383,9 @@ impl RenderOnce for CadenceTitleBar {
                 )
             })
             .when(!has_controls, |this| this.child(div().flex_1()))
-            .child(WindowControls)
+            .child(WindowControls {
+                close_behavior: self.close_behavior,
+            })
     }
 }
 

@@ -1,22 +1,150 @@
-use gpui::{AnyWindowHandle, App, AppContext, WeakEntity};
+use gpui::{AnyWindowHandle, App, AppContext, BorrowAppContext, Global, Subscription, Window};
+use gpui_component::WindowExt as _;
 
 use super::state::CadenceView;
 
-/// Installs application-level integrations that need to outlive a single view
-/// render, including notification activation routing and the Linux tray.
-pub(super) fn install(window: AnyWindowHandle, view: WeakEntity<CadenceView>, cx: &App) {
-    cx.on_system_notification_response(move |response, app| {
+const SAVE_IN_PROGRESS_MESSAGE: &str =
+    "Cadence is still saving. Try closing again when the save finishes.";
+
+#[derive(Default)]
+struct MainWindowRegistry {
+    handle: Option<AnyWindowHandle>,
+    view: Option<gpui::Entity<CadenceView>>,
+    #[allow(dead_code)]
+    close_subscription: Option<Subscription>,
+}
+
+impl Global for MainWindowRegistry {}
+
+/// Installs integrations that belong to the application lifetime rather than a
+/// particular main-window entity.
+pub(super) fn init(cx: &mut App) {
+    if cx.has_global::<MainWindowRegistry>() {
+        return;
+    }
+
+    cx.set_global(MainWindowRegistry::default());
+    cx.on_system_notification_response(|response, app| {
         let tag = response.tag.to_string();
-        let _ = window.update(app, |_, window, app| {
-            window.activate_window();
-            let _ = view.update(app, |view, cx| {
-                view.handle_notification_response(&tag, window, cx);
-            });
+        route_notification_response(&tag, app);
+    });
+
+    let close_subscription = cx.on_window_closed(|cx, closed_window_id| {
+        cx.update_global::<MainWindowRegistry, _>(|registry, _| {
+            if registry
+                .handle
+                .is_some_and(|handle| handle.window_id() == closed_window_id)
+            {
+                registry.handle = None;
+            }
         });
+    });
+    cx.update_global::<MainWindowRegistry, _>(|registry, _| {
+        registry.close_subscription = Some(close_subscription);
     });
 
     #[cfg(all(target_os = "linux", not(test)))]
-    install_tray(window, cx);
+    install_tray(cx);
+}
+
+/// Installs application-level integrations that need to outlive a single view
+/// render by registering the current main window with the application registry.
+pub(super) fn install(window: AnyWindowHandle, view: gpui::Entity<CadenceView>, cx: &mut App) {
+    cx.update_global::<MainWindowRegistry, _>(|registry, _| {
+        registry.handle = Some(window);
+        registry.view = Some(view);
+    });
+}
+
+pub(super) fn existing_main_view(cx: &App) -> Option<gpui::Entity<CadenceView>> {
+    cx.try_global::<MainWindowRegistry>()
+        .and_then(|registry| registry.view.clone())
+}
+
+fn current_main_window<C: AppContext>(
+    cx: &C,
+) -> Option<(AnyWindowHandle, gpui::Entity<CadenceView>)> {
+    cx.read_global(|registry: &MainWindowRegistry, _| registry.handle.zip(registry.view.clone()))
+}
+
+fn route_notification_response(tag: &str, cx: &mut App) {
+    if cx
+        .try_global::<MainWindowRegistry>()
+        .is_none_or(|registry| registry.handle.is_none())
+    {
+        let _ = super::open_main_window_with_app(cx);
+    }
+
+    let Some((window, view)) = current_main_window(cx) else {
+        return;
+    };
+    if deliver_notification_response(tag, window, &view, cx) {
+        return;
+    }
+
+    cx.update_global::<MainWindowRegistry, _>(|registry, _| {
+        if registry
+            .handle
+            .is_some_and(|handle| handle.window_id() == window.window_id())
+        {
+            registry.handle = None;
+        }
+    });
+
+    if super::open_main_window_with_app(cx).is_ok()
+        && let Some((window, view)) = current_main_window(cx)
+    {
+        let _ = deliver_notification_response(tag, window, &view, cx);
+    }
+}
+
+fn deliver_notification_response(
+    tag: &str,
+    window: AnyWindowHandle,
+    view: &gpui::Entity<CadenceView>,
+    cx: &mut App,
+) -> bool {
+    window
+        .update(cx, |_, window, cx| {
+            window.activate_window();
+            view.update(cx, |view, cx| {
+                view.handle_notification_response(tag, window, cx);
+            });
+            true
+        })
+        .unwrap_or(false)
+}
+
+fn persistence_allows_close(cx: &mut App) -> bool {
+    let view = cx
+        .try_global::<MainWindowRegistry>()
+        .and_then(|registry| registry.view.clone());
+    view.is_none_or(|view| {
+        view.update(cx, |view, _| {
+            !matches!(
+                view.persistence_state,
+                super::state::PersistenceState::Writing
+            )
+        })
+    })
+}
+
+/// Handles the main title-bar close control without terminating the tray task.
+pub(super) fn close_main_window(window: &mut Window, cx: &mut App) {
+    if persistence_allows_close(cx) {
+        window.remove_window();
+    } else {
+        window.push_notification(SAVE_IN_PROGRESS_MESSAGE, cx);
+    }
+}
+
+/// Handles native window-manager close requests for the main window.
+pub(super) fn should_close_main_window(window: &mut Window, cx: &mut App) -> bool {
+    let can_close = persistence_allows_close(cx);
+    if !can_close {
+        window.push_notification(SAVE_IN_PROGRESS_MESSAGE, cx);
+    }
+    can_close
 }
 
 #[cfg(target_os = "linux")]
@@ -75,7 +203,7 @@ impl ksni::Tray for CadenceTray {
 }
 
 #[cfg(all(target_os = "linux", not(test)))]
-fn install_tray(window: AnyWindowHandle, cx: &App) {
+fn install_tray(cx: &App) {
     use ksni::TrayMethods as _;
 
     let (sender, receiver) = async_channel::unbounded();
@@ -98,7 +226,7 @@ fn install_tray(window: AnyWindowHandle, cx: &App) {
         });
 
         while let Ok(command) = receiver.recv().await {
-            if !dispatch_tray_command(command, window, cx) {
+            if !dispatch_tray_command_async(command, cx) {
                 break;
             }
         }
@@ -106,7 +234,43 @@ fn install_tray(window: AnyWindowHandle, cx: &App) {
     .detach();
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(test)))]
+fn dispatch_tray_command_async(command: TrayCommand, cx: &mut gpui::AsyncApp) -> bool {
+    match command {
+        TrayCommand::Show => {
+            if let Some((window, _)) = current_main_window(cx) {
+                if window
+                    .update(cx, |_, window, _| window.activate_window())
+                    .is_ok()
+                {
+                    return true;
+                }
+                cx.update_global::<MainWindowRegistry, _>(|registry, _| {
+                    if registry
+                        .handle
+                        .is_some_and(|handle| handle.window_id() == window.window_id())
+                    {
+                        registry.handle = None;
+                    }
+                });
+            }
+
+            if let Err(error) = super::open_main_window(cx) {
+                eprintln!("Cadence could not reopen the main window: {error:#}");
+            }
+            true
+        }
+        TrayCommand::Quit => {
+            if let Some((window, _)) = current_main_window(cx) {
+                let _ = window.update(cx, |_, window, _| window.remove_window());
+            }
+            cx.update(|cx| cx.quit());
+            false
+        }
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
 fn dispatch_tray_command<C: AppContext>(
     command: TrayCommand,
     window: AnyWindowHandle,

@@ -6,7 +6,23 @@ All notable Cadence releases are documented here. The format follows
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### Added
+
+- Keep the main Week window available from the Linux tray after its close
+  control is pressed, with a fresh window restored by **Show Cadence**.
+
+### Changed
+
+- Use a responsive three-column Themes catalog at normal Settings widths,
+  collapsing to two or one column for smaller windows.
+- Reduce the shared main and Settings title toolbar to 32 px. Minimize still
+  minimizes to the dock, while Settings close only removes the Settings
+  window.
+
+### Fixed
+
+- Route native and title-bar main-window close requests through the same
+  save-aware lifecycle so an in-progress persistence write cannot be lost.
 
 ## [0.1.9] - 2026-09-01
 
