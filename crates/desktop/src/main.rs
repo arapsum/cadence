@@ -1,33 +1,22 @@
 use std::env;
 
-use gpui::{App, WindowBounds, WindowDecorations, WindowOptions, px, size};
-use gpui_component::TitleBar;
+use gpui::{App, QuitMode};
 
 fn main() {
     if handle_cli() {
         return;
     }
 
-    let app = gpui_platform::application().with_assets(gpui_component_assets::Assets);
+    let app = gpui_platform::application()
+        .with_assets(gpui_component_assets::Assets)
+        .with_quit_mode(QuitMode::Explicit);
 
     app.run(|cx: &mut App| {
         cx.set_app_identity(cadence_ui::APPLICATION_ID, cadence_ui::APPLICATION_NAME);
         cadence_ui::init(cx);
 
-        let window_options = WindowOptions {
-            window_bounds: Some(WindowBounds::centered(size(px(1480.), px(880.)), cx)),
-            window_min_size: Some(size(px(640.), px(480.))),
-            window_decorations: Some(WindowDecorations::Client),
-            app_id: Some(cadence_ui::APPLICATION_ID.to_owned()),
-            ..TitleBar::window_options()
-        };
-
         cx.spawn(async move |cx| {
-            cx.open_window(window_options, |window, cx| {
-                window.set_window_title("Cadence");
-                cadence_ui::mount(window, cx)
-            })
-            .expect("Failed to open Cadence window");
+            cadence_ui::open_main_window(cx).expect("Failed to open Cadence window");
         })
         .detach();
     });

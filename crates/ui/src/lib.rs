@@ -1,4 +1,4 @@
-use gpui::{App, Entity, Window};
+use gpui::{App, AsyncApp, Entity, Window, WindowHandle};
 use gpui_component::Root;
 
 pub(crate) use cadence_core::{calendar, domain, editor, store};
@@ -60,6 +60,16 @@ pub fn init(cx: &mut App) {
 /// The `gpui_component` root that renders the Cadence workspace.
 pub fn mount(window: &mut Window, cx: &mut App) -> Entity<Root> {
     app::mount(window, cx)
+}
+
+/// Opens a fresh primary window, used by the tray after the main window has
+/// been closed to the background.
+///
+/// # Errors
+///
+/// Returns an error when the platform cannot create a new primary window.
+pub fn open_main_window(cx: &AsyncApp) -> gpui::Result<WindowHandle<Root>> {
+    app::open_main_window(cx)
 }
 
 #[cfg(test)]

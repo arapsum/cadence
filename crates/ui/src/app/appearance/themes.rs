@@ -16,6 +16,20 @@ use crate::{
 
 use super::AppearancePreviewState;
 
+const THEME_GRID_THREE_COLUMN_MIN_WIDTH: f32 = 820.0;
+const THEME_GRID_TWO_COLUMN_MIN_WIDTH: f32 = 600.0;
+
+#[must_use]
+fn theme_grid_columns(viewport_width: f32) -> u16 {
+    if viewport_width >= THEME_GRID_THREE_COLUMN_MIN_WIDTH {
+        3
+    } else if viewport_width >= THEME_GRID_TWO_COLUMN_MIN_WIDTH {
+        2
+    } else {
+        1
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum ThemeFilter {
     All,
@@ -259,9 +273,10 @@ impl Render for ThemeBrowser {
             )
             .child(
                 div()
-                    .flex()
-                    .flex_wrap()
+                    .grid()
+                    .grid_cols(theme_grid_columns(window.viewport_size().width.as_f32()))
                     .gap_3()
+                    .w_full()
                     .children(visible.into_iter().map(|(index, theme)| {
                         render_theme_card(
                             index,
@@ -350,12 +365,11 @@ fn render_theme_card(
     let click_name = name.clone();
     let key_name = name;
     let swatches = theme.swatches.clone();
-    let card_width = px(248.0);
     div()
         .id(format!("theme-card-{}", theme.name))
         .track_focus(focus)
         .tab_index(0)
-        .w(card_width)
+        .w_full()
         .min_h(px(154.0))
         .v_flex()
         .gap_2()
@@ -456,4 +470,20 @@ fn render_theme_card(
 
 fn mode_label(mode: ThemeMode) -> &'static str {
     if mode.is_dark() { "Dark" } else { "Light" }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::theme_grid_columns;
+
+    #[test]
+    fn theme_grid_uses_three_columns_at_the_default_width() {
+        assert_eq!(theme_grid_columns(900.0), 3);
+    }
+
+    #[test]
+    fn theme_grid_collapses_for_narrow_settings_windows() {
+        assert_eq!(theme_grid_columns(640.0), 2);
+        assert_eq!(theme_grid_columns(480.0), 1);
+    }
 }

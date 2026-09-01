@@ -21,32 +21,59 @@ pub mod view;
 pub mod week;
 pub mod workspace;
 
-use gpui::{App, AppContext as _, Entity, Window};
-use gpui_component::{Root, WindowExt as _};
+use gpui::{
+    App, AppContext as _, AsyncApp, Entity, Window, WindowBounds, WindowDecorations, WindowHandle,
+    WindowOptions, px, size,
+};
+use gpui_component::{Root, TitleBar};
 
 pub fn init(cx: &mut App) {
     appearance::register_themes(cx);
+    runtime::init(cx);
     settings_window::init(cx);
     actions::bind(cx);
 }
 
+pub fn open_main_window(cx: &AsyncApp) -> gpui::Result<WindowHandle<Root>> {
+    let options = cx.update(|cx| main_window_options(cx));
+    cx.open_window(options, mount_main_window)
+}
+
+pub fn open_main_window_with_app(cx: &mut App) -> gpui::Result<WindowHandle<Root>> {
+    let options = main_window_options(cx);
+    cx.open_window(options, mount_main_window)
+}
+
+pub fn close_main_window(window: &mut Window, cx: &mut App) {
+    runtime::close_main_window(window, cx);
+}
+
+fn mount_main_window(window: &mut Window, cx: &mut App) -> Entity<Root> {
+    window.set_window_title("Cadence");
+    if let Some(view) = runtime::existing_main_view(cx) {
+        mount_view(view, window, cx)
+    } else {
+        mount(window, cx)
+    }
+}
+
+fn main_window_options(cx: &App) -> WindowOptions {
+    WindowOptions {
+        window_bounds: Some(WindowBounds::centered(size(px(1480.), px(880.)), cx)),
+        window_min_size: Some(size(px(640.), px(480.))),
+        window_decorations: Some(WindowDecorations::Client),
+        app_id: Some(crate::APPLICATION_ID.to_owned()),
+        ..TitleBar::window_options()
+    }
+}
+
 pub fn mount(window: &mut Window, cx: &mut App) -> Entity<Root> {
     let view = cx.new(|cx| state::CadenceView::new(window, cx));
-    runtime::install(window.window_handle(), view.downgrade(), cx);
-    let close_view = view.downgrade();
-    window.on_window_should_close(cx, move |window, cx| {
-        let can_close = close_view
-            .update(cx, |view, _| {
-                !matches!(view.persistence_state, state::PersistenceState::Writing)
-            })
-            .unwrap_or(true);
-        if !can_close {
-            window.push_notification(
-                "Cadence is still saving. Try closing again when the save finishes.",
-                cx,
-            );
-        }
-        can_close
-    });
+    mount_view(view, window, cx)
+}
+
+fn mount_view(view: Entity<state::CadenceView>, window: &mut Window, cx: &mut App) -> Entity<Root> {
+    runtime::install(window.window_handle(), view.clone(), cx);
+    window.on_window_should_close(cx, runtime::should_close_main_window);
     cx.new(|cx| Root::new(view, window, cx))
 }

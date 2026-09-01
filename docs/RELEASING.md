@@ -114,8 +114,9 @@ assertions), along with the supported scaling and DST journeys.
 Install and exercise the exact draft package on a clean supported Ubuntu 26.04
 Wayland machine. Publish it only after the host acceptance matrix passes,
 including the actual GNOME/AppIndicator panel and the direct dbusmenu `Event`
-route: Show restores a minimized window and Quit terminates Cadence. Record
-failures against the individual audit item instead of treating package
+route: closing the main window leaves Cadence in the tray, Show restores a
+minimized or closed window, and Quit terminates Cadence. Record failures against
+the individual audit item instead of treating package
 lifecycle checks as GUI evidence.
 
 If a release is withdrawn, mark the GitHub release as a draft again or delete
